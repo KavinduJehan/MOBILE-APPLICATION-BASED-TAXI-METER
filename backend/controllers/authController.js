@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const { v4: uuidv4 } = require('uuid');
 const Driver = require('../models/Driver');
 
 const signToken = (payload) =>
@@ -16,7 +17,7 @@ const register = async (req, res) => {
     const exists = await Driver.findOne({ $or: [{ email }, { licenseNumber }] });
     if (exists) return res.status(409).json({ message: 'Driver already registered' });
 
-    const driver = await Driver.create({ name, email, phone, password, licenseNumber, vehicleNumber, area });
+    const driver = await Driver.create({ name, email, phone, password, licenseNumber, vehicleNumber, area, qrToken: uuidv4() });
     const token = signToken({ id: driver._id, role: driver.role });
     res.status(201).json({ token, driver: { id: driver._id, name, email, role: driver.role } });
   } catch (err) {

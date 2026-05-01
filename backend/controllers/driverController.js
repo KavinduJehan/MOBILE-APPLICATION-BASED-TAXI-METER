@@ -18,7 +18,7 @@ const updateQRCode = async (req, res) => {
     if (!driver) return res.status(404).json({ message: 'Driver not found' });
 
     const qrPayload = JSON.stringify({
-      driverId: driver._id,
+      token: driver.qrToken,
       name: driver.name,
       licenseNumber: driver.licenseNumber,
       vehicleNumber: driver.vehicleNumber,
@@ -48,11 +48,11 @@ const getNearbyDrivers = async (req, res) => {
   }
 };
 
-// Looks up a driver by the data embedded in their QR code (driverId)
+// Looks up a driver by the opaque qrToken embedded in their QR code
 const getDriverByQR = async (req, res) => {
   const { qrToken } = req.params;
   try {
-    const driver = await Driver.findById(qrToken).select('-password');
+    const driver = await Driver.findOne({ qrToken }).select('-password');
     if (!driver) return res.status(404).json({ message: 'Driver not found' });
     res.json(driver);
   } catch (err) {
