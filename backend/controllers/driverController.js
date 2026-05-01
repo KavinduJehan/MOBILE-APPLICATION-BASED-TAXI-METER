@@ -60,4 +60,22 @@ const getDriverByQR = async (req, res) => {
   }
 };
 
-module.exports = { getDriverProfile, updateQRCode, getNearbyDrivers, getDriverByQR };
+// Updates driver's current GPS location — called periodically by Flutter app
+const updateLocation = async (req, res) => {
+  const { lat, lng } = req.body;
+  if (lat == null || lng == null) {
+    return res.status(400).json({ message: 'lat and lng are required' });
+  }
+  try {
+    const driver = await Driver.findByIdAndUpdate(
+      req.user.id,
+      { location: { lat, lng, updatedAt: new Date() } },
+      { new: true }
+    ).select('-password');
+    res.json(driver);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+module.exports = { getDriverProfile, updateQRCode, getNearbyDrivers, getDriverByQR, updateLocation };

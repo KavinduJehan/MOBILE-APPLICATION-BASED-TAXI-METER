@@ -15,6 +15,11 @@ const driverSchema = new mongoose.Schema(
     qrCode: { type: String },                 // Base64 or URL to QR image
     ratePerKm: { type: Number, default: 0 },  // Per-km rate in LKR
     area: { type: String, default: '' },
+    location: {
+      lat: { type: Number, default: null },
+      lng: { type: Number, default: null },
+      updatedAt: { type: Date, default: null },
+    },
   },
   { timestamps: true }
 );
