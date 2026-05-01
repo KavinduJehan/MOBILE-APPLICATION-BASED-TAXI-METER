@@ -12,13 +12,13 @@
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 const mongoose = require('mongoose');
 const Driver = require('../models/Driver');
-const connectDB = require('../config/db');
 
 const {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
   ADMIN_NAME = 'Admin',
   ADMIN_PHONE = '0000000000',
+  MONGO_URI,
 } = process.env;
 
 if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
@@ -26,8 +26,21 @@ if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
   process.exit(1);
 }
 
+if (!MONGO_URI) {
+  console.error('ERROR: MONGO_URI must be set in .env');
+  process.exit(1);
+}
+
 (async () => {
-  await connectDB();
+  console.log('Connecting to MongoDB...');
+  try {
+    await mongoose.connect(MONGO_URI, { serverSelectionTimeoutMS: 10000 });
+    console.log('Connected.');
+  } catch (err) {
+    console.error('ERROR: Could not connect to MongoDB:', err.message);
+    console.error('Check that MONGO_URI in .env is correct and the database is reachable.');
+    process.exit(1);
+  }
 
   const existing = await Driver.findOne({ email: ADMIN_EMAIL });
   if (existing) {
