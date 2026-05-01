@@ -1,5 +1,6 @@
 const request = require('supertest');
 const app = require('../app');
+const Driver = require('../models/Driver');
 const validDriver = {
   name: 'Rate Driver',
   email: 'rate@test.com',
@@ -64,6 +65,30 @@ describe('GET /api/rates/area', () => {
     // Driver is not verified so average may be null — just confirm shape
     expect(res.body).toHaveProperty('averageRate');
     expect(Array.isArray(res.body.drivers)).toBe(true);
+  });
+
+  it('does not include unverified drivers in the area rate results', async () => {
+    await registerAndLogin(); // registers but isVerified stays false
+    const res = await request(app).get('/api/rates/area?area=Galle');
+    expect(res.statusCode).toBe(200);
+    expect(res.body.drivers).toEqual([]);
+    expect(res.body.averageRate).toBeNull();
+  });
+
+  it('includes verified drivers in the area rate results', async () => {
+    const token = await registerAndLogin();
+    await request(app)
+      .patch('/api/rates/my-rate')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ ratePerKm: 90 });
+
+    // Verify the driver directly via the model (as an admin would via the API)
+    await Driver.findOneAndUpdate({ email: validDriver.email }, { isVerified: true });
+
+    const res = await request(app).get('/api/rates/area?area=Galle');
+    expect(res.statusCode).toBe(200);
+    expect(res.body.drivers.length).toBe(1);
+    expect(res.body.averageRate).toBe(90);
   });
 
   it('returns 400 when area query param is missing', async () => {

@@ -59,3 +59,25 @@ describe('GET /api/drivers/nearby', () => {
     expect(Array.isArray(res.body)).toBe(true);
   });
 });
+
+describe('GET /api/drivers/qr/:qrToken', () => {
+  it('returns driver info for a valid qrToken', async () => {
+    const token = await registerAndLogin();
+    // Fetch the profile to get the opaque qrToken assigned at registration
+    const profileRes = await request(app)
+      .get('/api/drivers/profile')
+      .set('Authorization', `Bearer ${token}`);
+    const { qrToken } = profileRes.body;
+    expect(qrToken).toBeDefined();
+
+    const res = await request(app).get(`/api/drivers/qr/${qrToken}`);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.email).toBe(validDriver.email);
+    expect(res.body).not.toHaveProperty('password');
+  });
+
+  it('returns 404 for an unknown qrToken', async () => {
+    const res = await request(app).get('/api/drivers/qr/totally-unknown-token-xyz');
+    expect(res.statusCode).toBe(404);
+  });
+});

@@ -36,6 +36,16 @@ describe('POST /api/trips', () => {
     expect(res.body.status).toBe('ongoing');
   });
 
+  it('does not set endTime when a trip is created', async () => {
+    const token = await registerAndLogin();
+    const res = await request(app)
+      .post('/api/trips')
+      .set('Authorization', `Bearer ${token}`)
+      .send(tripPayload);
+    expect(res.statusCode).toBe(201);
+    expect(res.body.endTime).toBeUndefined();
+  });
+
   it('returns 400 when required fields are missing', async () => {
     const token = await registerAndLogin();
     const res = await request(app)
@@ -67,6 +77,21 @@ describe('PATCH /api/trips/:id/end', () => {
     expect(endRes.body.trip.status).toBe('completed');
     expect(endRes.body.receipt).toHaveProperty('receiptNumber');
     expect(endRes.body.receipt.totalFare).toBe(38 * 75);
+  });
+
+  it('sets endTime when a trip is ended', async () => {
+    const token = await registerAndLogin();
+    const createRes = await request(app)
+      .post('/api/trips')
+      .set('Authorization', `Bearer ${token}`)
+      .send(tripPayload);
+    const tripId = createRes.body._id;
+
+    const endRes = await request(app)
+      .patch(`/api/trips/${tripId}/end`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(endRes.statusCode).toBe(200);
+    expect(endRes.body.trip.endTime).toBeDefined();
   });
 
   it('returns 404 for a non-existent trip', async () => {
