@@ -6,6 +6,7 @@ const authRoutes = require('./routes/auth');
 const driverRoutes = require('./routes/drivers');
 const tripRoutes = require('./routes/trips');
 const rateRoutes = require('./routes/rates');
+const adminRoutes = require('./routes/admin');
 
 const app = express();
 
@@ -16,6 +17,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/drivers', driverRoutes);
 app.use('/api/trips', tripRoutes);
 app.use('/api/rates', rateRoutes);
+app.use('/api/admin', adminRoutes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
