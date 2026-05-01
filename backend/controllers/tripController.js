@@ -19,7 +19,6 @@ const createTrip = async (req, res) => {
       ratePerKm,
       totalFare,
       startTime: startTime || new Date(),
-      endTime: new Date(),
       status: 'ongoing',
     });
     res.status(201).json(trip);

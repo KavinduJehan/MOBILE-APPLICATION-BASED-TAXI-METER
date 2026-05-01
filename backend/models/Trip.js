@@ -10,7 +10,7 @@ const tripSchema = new mongoose.Schema(
     ratePerKm: { type: Number, required: true },
     totalFare: { type: Number, required: true },
     startTime: { type: Date, required: true },
-    endTime: { type: Date, required: true },
+    endTime: { type: Date },
     status: {
       type: String,
       enum: ['pending', 'ongoing', 'completed', 'cancelled'],
