@@ -124,3 +124,56 @@ describe('GET /api/trips/my', () => {
     expect(res.statusCode).toBe(401);
   });
 });
+
+// ─── GET /api/trips/income ────────────────────────────────────────────────────
+
+describe('GET /api/trips/income', () => {
+  it('returns zero earnings when driver has no completed trips', async () => {
+    const token = await registerAndLogin();
+    const res = await request(app)
+      .get('/api/trips/income')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.totalEarnings).toBe(0);
+    expect(res.body.totalTrips).toBe(0);
+    expect(res.body.byDay).toEqual({});
+  });
+
+  it('returns correct earnings after completing a trip', async () => {
+    const token = await registerAndLogin();
+    const createRes = await request(app)
+      .post('/api/trips')
+      .set('Authorization', `Bearer ${token}`)
+      .send(tripPayload);
+    await request(app)
+      .patch(`/api/trips/${createRes.body._id}/end`)
+      .set('Authorization', `Bearer ${token}`);
+
+    const res = await request(app)
+      .get('/api/trips/income')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.totalEarnings).toBe(38 * 75);
+    expect(res.body.totalTrips).toBe(1);
+    expect(Object.keys(res.body.byDay).length).toBe(1);
+  });
+
+  it('does not include ongoing trips in income', async () => {
+    const token = await registerAndLogin();
+    await request(app)
+      .post('/api/trips')
+      .set('Authorization', `Bearer ${token}`)
+      .send(tripPayload); // not ended — status = 'ongoing'
+
+    const res = await request(app)
+      .get('/api/trips/income')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.totalEarnings).toBe(0);
+  });
+
+  it('returns 401 without a token', async () => {
+    const res = await request(app).get('/api/trips/income');
+    expect(res.statusCode).toBe(401);
+  });
+});

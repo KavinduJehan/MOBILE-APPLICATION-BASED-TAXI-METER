@@ -63,4 +63,30 @@ const getMyTrips = async (req, res) => {
   }
 };
 
-module.exports = { createTrip, endTrip, getMyTrips };
+// GET /api/trips/income
+// Returns the logged-in driver's earnings summary
+const getIncome = async (req, res) => {
+  try {
+    const trips = await Trip.find({ driver: req.user.id, status: 'completed' });
+
+    const totalEarnings = parseFloat(
+      trips.reduce((sum, t) => sum + t.totalFare, 0).toFixed(2)
+    );
+    const totalTrips = trips.length;
+
+    // Group earnings by calendar date (YYYY-MM-DD)
+    const byDay = {};
+    for (const t of trips) {
+      const day = t.endTime
+        ? t.endTime.toISOString().slice(0, 10)
+        : t.createdAt.toISOString().slice(0, 10);
+      byDay[day] = parseFloat(((byDay[day] || 0) + t.totalFare).toFixed(2));
+    }
+
+    res.json({ totalEarnings, totalTrips, byDay });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+module.exports = { createTrip, endTrip, getMyTrips, getIncome };
