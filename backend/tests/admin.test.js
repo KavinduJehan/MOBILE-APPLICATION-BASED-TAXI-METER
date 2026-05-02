@@ -226,3 +226,56 @@ describe('GET /api/admin/trips', () => {
     expect(res.body).toEqual([]);
   });
 });
+
+// ─── GET /api/admin/stats ────────────────────────────────────────────────────
+
+describe('GET /api/admin/stats', () => {
+  it('returns correct driver counts', async () => {
+    await registerDriver();
+    const adminToken = await createRegulatorAndLogin();
+    const res = await request(app)
+      .get('/api/admin/stats')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toHaveProperty('totalDrivers');
+    expect(res.body).toHaveProperty('verifiedDrivers');
+    expect(res.body).toHaveProperty('pendingDrivers');
+    expect(res.body.totalDrivers).toBeGreaterThanOrEqual(1);
+    expect(res.body.pendingDrivers).toBe(
+      res.body.totalDrivers - res.body.verifiedDrivers
+    );
+  });
+
+  it('includes trip and revenue stats', async () => {
+    const { token } = await registerDriver();
+    const createRes = await request(app)
+      .post('/api/trips')
+      .set('Authorization', `Bearer ${token}`)
+      .send(tripPayload);
+    await request(app)
+      .patch(`/api/trips/${createRes.body._id}/end`)
+      .set('Authorization', `Bearer ${token}`);
+
+    const adminToken = await createRegulatorAndLogin();
+    const res = await request(app)
+      .get('/api/admin/stats')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.totalTrips).toBeGreaterThanOrEqual(1);
+    expect(res.body.completedTrips).toBeGreaterThanOrEqual(1);
+    expect(res.body.totalRevenue).toBeGreaterThan(0);
+  });
+
+  it('returns 401 without a token', async () => {
+    const res = await request(app).get('/api/admin/stats');
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('returns 403 with a driver token', async () => {
+    const { token } = await registerDriver();
+    const res = await request(app)
+      .get('/api/admin/stats')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.statusCode).toBe(403);
+  });
+});

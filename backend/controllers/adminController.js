@@ -1,5 +1,6 @@
 const Driver = require('../models/Driver');
 const Trip = require('../models/Trip');
+const RideRequest = require('../models/RideRequest');
 
 // GET /api/admin/drivers?verified=false|true|all
 const listDrivers = async (req, res) => {
@@ -50,4 +51,45 @@ const getAllTrips = async (req, res) => {
   }
 };
 
-module.exports = { listDrivers, setDriverVerification, getAllTrips };
+// GET /api/admin/stats
+// System-wide summary for regulators
+const getStats = async (req, res) => {
+  try {
+    const [
+      totalDrivers,
+      verifiedDrivers,
+      totalTrips,
+      completedTrips,
+      pendingRequests,
+    ] = await Promise.all([
+      Driver.countDocuments({ role: 'driver' }),
+      Driver.countDocuments({ role: 'driver', isVerified: true }),
+      Trip.countDocuments(),
+      Trip.countDocuments({ status: 'completed' }),
+      RideRequest.countDocuments({ status: 'pending' }),
+    ]);
+
+    // Total revenue across all completed trips
+    const revenueResult = await Trip.aggregate([
+      { $match: { status: 'completed' } },
+      { $group: { _id: null, total: { $sum: '$totalFare' } } },
+    ]);
+    const totalRevenue = revenueResult.length > 0
+      ? parseFloat(revenueResult[0].total.toFixed(2))
+      : 0;
+
+    res.json({
+      totalDrivers,
+      verifiedDrivers,
+      pendingDrivers: totalDrivers - verifiedDrivers,
+      totalTrips,
+      completedTrips,
+      pendingRideRequests: pendingRequests,
+      totalRevenue,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+module.exports = { listDrivers, setDriverVerification, getAllTrips, getStats };
