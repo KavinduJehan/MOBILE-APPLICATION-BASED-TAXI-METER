@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Single entry point for all backend HTTP calls.
 ///
@@ -9,8 +8,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 ///   - Physical device   → replace with your machine's LAN IP, e.g. http://192.168.x.x:5000/api
 const String _baseUrl = 'http://10.0.2.2:5000/api';
 
-const _storage = FlutterSecureStorage();
-const _tokenKey = 'adminToken';
+// Token held in memory for the session.
+// Replace with flutter_secure_storage when deploying to production.
+String? _inMemoryToken;
 
 class ApiService {
   static final Dio _dio = _buildDio();
@@ -29,7 +29,7 @@ class ApiService {
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
-          final token = await _storage.read(key: _tokenKey);
+          final token = _inMemoryToken;
           if (token != null) {
             options.headers['Authorization'] = 'Bearer $token';
           }
@@ -57,12 +57,11 @@ class ApiService {
 
   // ── Token helpers ─────────────────────────────────────────────────────────
 
-  static Future<void> saveToken(String token) =>
-      _storage.write(key: _tokenKey, value: token);
+  static Future<void> saveToken(String token) async => _inMemoryToken = token;
 
-  static Future<void> clearToken() => _storage.delete(key: _tokenKey);
+  static Future<void> clearToken() async => _inMemoryToken = null;
 
-  static Future<String?> getToken() => _storage.read(key: _tokenKey);
+  static Future<String?> getToken() async => _inMemoryToken;
 
   // ── Auth ──────────────────────────────────────────────────────────────────
 
@@ -74,21 +73,8 @@ class ApiService {
   static Future<Response> login(String email, String password) =>
       _dio.post('/auth/login', data: {'email': email, 'password': password});
 
-  /// POST /api/auth/phone-login  — Firebase ID token after OTP
-  static Future<Response> phoneLogin(
-    String idToken, {
-    String? name,
-    String? licenseNumber,
-    String? vehicleNumber,
-    String? area,
-  }) =>
-      _dio.post('/auth/phone-login', data: {
-        'idToken': idToken,
-        if (name != null) 'name': name,
-        if (licenseNumber != null) 'licenseNumber': licenseNumber,
-        if (vehicleNumber != null) 'vehicleNumber': vehicleNumber,
-        if (area != null) 'area': area,
-      });
+  // Phone login via Firebase OTP — skipped for now, uncomment when ready:
+  // static Future<Response> phoneLogin(String idToken, ...) => ...
 
   // ── Driver ────────────────────────────────────────────────────────────────
 
@@ -103,8 +89,10 @@ class ApiService {
       _dio.patch('/drivers/location', data: {'lat': lat, 'lng': lng});
 
   /// GET /api/drivers/nearby?area=
-  static Future<Response> getNearbyDrivers({String? area}) =>
-      _dio.get('/drivers/nearby', queryParameters: if (area != null) {'area': area} else {});
+  static Future<Response> getNearbyDrivers({String? area}) => _dio.get(
+    '/drivers/nearby',
+    queryParameters: area != null ? {'area': area} : {},
+  );
 
   /// GET /api/drivers/qr/:qrToken
   static Future<Response> getDriverByQR(String qrToken) =>
@@ -151,10 +139,15 @@ class ApiService {
       _dio.get('/ride-requests/$requestId/status');
 
   /// PATCH /api/ride-requests/:id/respond  (driver)
-  static Future<Response> respondToRequest(String requestId, bool accept,
-          {double? agreedRate}) =>
-      _dio.patch('/ride-requests/$requestId/respond', data: {
-        'accept': accept,
-        if (agreedRate != null) 'agreedRatePerKm': agreedRate,
-      });
+  static Future<Response> respondToRequest(
+    String requestId,
+    bool accept, {
+    double? agreedRate,
+  }) => _dio.patch(
+    '/ride-requests/$requestId/respond',
+    data: {
+      'accept': accept,
+      if (agreedRate != null) 'agreedRatePerKm': agreedRate,
+    },
+  );
 }

@@ -37,22 +37,9 @@ class AuthProvider extends ChangeNotifier {
   bool get loading => _loading;
   String? get error => _error;
 
-  // ── Restore session on cold start ─────────────────────────────────────────
-
-  Future<void> tryRestoreSession() async {
-    final saved = await ApiService.getToken();
-    if (saved == null) return;
-    _token = saved;
-    try {
-      final res = await ApiService.getProfile();
-      _driver = DriverModel.fromJson(res.data as Map<String, dynamic>);
-    } catch (_) {
-      // Token expired or invalid — clear it
-      await ApiService.clearToken();
-      _token = null;
-    }
-    notifyListeners();
-  }
+  // Session restore is in-memory only for now (no persistence across app restarts).
+  // Re-add flutter_secure_storage + tryRestoreSession when deploying to production.
+  Future<void> tryRestoreSession() async {}
 
   // ── Email + password login ────────────────────────────────────────────────
 
@@ -72,35 +59,7 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  // ── Firebase phone OTP login ──────────────────────────────────────────────
-
-  Future<bool> loginWithPhone(
-    String firebaseIdToken, {
-    String? name,
-    String? licenseNumber,
-    String? vehicleNumber,
-    String? area,
-  }) async {
-    _setLoading(true);
-    try {
-      final res = await ApiService.phoneLogin(
-        firebaseIdToken,
-        name: name,
-        licenseNumber: licenseNumber,
-        vehicleNumber: vehicleNumber,
-        area: area,
-      );
-      final data = res.data as Map<String, dynamic>;
-      await _persistSession(data);
-      return true;
-    } on DioException catch (e) {
-      _error = e.error?.toString() ?? 'Phone login failed';
-      notifyListeners();
-      return false;
-    } finally {
-      _setLoading(false);
-    }
-  }
+  // Phone OTP login skipped for now — add back when Firebase is configured.
 
   // ── Registration ──────────────────────────────────────────────────────────
 
@@ -123,7 +82,7 @@ class AuthProvider extends ChangeNotifier {
   // ── Logout ────────────────────────────────────────────────────────────────
 
   Future<void> logout() async {
-    await ApiService.clearToken();
+    ApiService.clearToken();
     _token = null;
     _driver = null;
     _error = null;

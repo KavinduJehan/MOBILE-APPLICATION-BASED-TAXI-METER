@@ -123,7 +123,7 @@ classDiagram
     Driver "1" --> "0..*" Trip          : has
     Driver "1" --> "0..*" RideRequest   : receives
     Driver "1" --> "0..*" Receipt       : issues
-    Trip   "1" --> "0..1" RideRequest   : created from
+    Trip   "1" --> "0..1" RideRequest   : createdFrom
     Trip   "1" --> "1"    Receipt       : generates
 
     AuthController      ..> Driver          : uses
@@ -142,7 +142,7 @@ classDiagram
     AuthMiddleware      ..> AuthController       : guards
     AuthMiddleware      ..> DriverController      : guards
     AuthMiddleware      ..> TripController        : guards
-    AuthMiddleware      ..> RideRequestController : guards (partial)
+    AuthMiddleware      ..> RideRequestController : guards
     AuthMiddleware      ..> RateController        : guards
     AuthMiddleware      ..> AdminController       : guards
 ```

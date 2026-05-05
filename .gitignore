@@ -5,3 +5,4 @@ build/
 .env
 recoverplan.md
 sqlitesetupplan.md
+frontbackconnectplan.md

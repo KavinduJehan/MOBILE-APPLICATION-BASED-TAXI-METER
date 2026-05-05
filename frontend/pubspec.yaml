@@ -36,15 +36,15 @@ dependencies:
   # HTTP client
   dio: ^5.8.0+1
 
-  # Secure JWT storage
-  flutter_secure_storage: ^9.2.4
+  # Secure storage skipped for now (causes Gradle network issues on first build).
+  # Re-add flutter_secure_storage: ^9.x when deploying to production.
 
   # State management
   provider: ^6.1.5
 
-  # Firebase
-  firebase_core: ^3.13.0
-  firebase_auth: ^5.5.2
+  # Firebase — skipped for now, add when OTP login is needed
+  # firebase_core: ^3.13.0
+  # firebase_auth: ^5.5.2
 
 dev_dependencies:
   flutter_test:
