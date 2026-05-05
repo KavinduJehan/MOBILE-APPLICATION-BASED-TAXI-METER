@@ -4,9 +4,11 @@ const bcrypt = require('bcryptjs');
 const driverSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
-    email: { type: String, required: true, unique: true, lowercase: true },
+    // Optional for OTP-only drivers — sparse so null values don't conflict on the unique index
+    email: { type: String, unique: true, sparse: true, lowercase: true },
     phone: { type: String, required: true, unique: true },
-    password: { type: String, required: true },
+    // Optional for OTP-only drivers
+    password: { type: String },
     licenseNumber: { type: String, required: true, unique: true },
     vehicleNumber: { type: String, required: true },
     role: { type: String, enum: ['driver', 'regulator'], default: 'driver' },
@@ -25,7 +27,7 @@ const driverSchema = new mongoose.Schema(
 );
 
 driverSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next();
+  if (!this.password || !this.isModified('password')) return next();
   this.password = await bcrypt.hash(this.password, 12);
   next();
 });
