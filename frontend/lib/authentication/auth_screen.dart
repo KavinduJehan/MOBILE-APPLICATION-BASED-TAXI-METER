@@ -115,8 +115,10 @@ class _AuthScreenState extends State<AuthScreen> {
                           : _EmailInput(controller: _emailController),
                     ),
                     const SizedBox(height: 28),
-                    const Text(
-                      "We'll send a short verification code. No password needed.",
+                    Text(
+                      isPhone
+                          ? "We'll send a short verification code to your number."
+                          : "You'll enter your password on the next screen.",
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Color(0xFF9A9A9A),
