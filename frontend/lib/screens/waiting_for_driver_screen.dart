@@ -58,6 +58,12 @@ class _WaitingForDriverScreenState extends State<WaitingForDriverScreen> {
       if (newStatus == 'accepted') {
         _timer?.cancel();
         if (!mounted) return;
+
+        // Extract totalFare from the populated trip in the status response
+        final tripObj = data['trip'] as Map<String, dynamic>?;
+        final totalFare = (tripObj?['totalFare'] as num?)?.toDouble();
+        final effectiveRate = agreedRate ?? widget.ratePerKm;
+
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -65,7 +71,8 @@ class _WaitingForDriverScreenState extends State<WaitingForDriverScreen> {
               requestId: widget.requestId,
               driver: widget.driver,
               distanceKm: widget.distanceKm,
-              ratePerKm: agreedRate ?? widget.ratePerKm,
+              ratePerKm: effectiveRate,
+              totalFare: totalFare ?? widget.distanceKm * effectiveRate,
             ),
           ),
         );
