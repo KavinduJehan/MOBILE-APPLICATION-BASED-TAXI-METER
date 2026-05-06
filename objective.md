@@ -170,3 +170,7 @@ Fare = Distance (km) × Agreed Rate (Rs/km)
 | Separate Flutter apps for customer and driver | Different UX needs, different team members, cleaner separation of concerns |
 | Admin web only (no mobile) | Regulators work at desks — no need for mobile admin app |
 | City dropdowns (MVP) | Pragmatic for demo — replaced by Google Maps in next sprint |
+
+# Map Solution 
+
+flutter_map (open source, OSM tiles). You can pre-bundle tiles for the operating region (e.g. Sri Lanka) so the map works even with no signal. This fits the use case — taxi drivers operate in known cities, not random global locations.
