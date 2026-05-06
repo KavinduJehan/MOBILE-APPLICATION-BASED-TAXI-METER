@@ -5,11 +5,10 @@ const Trip = require('../models/Trip');
 const Receipt = require('../models/Receipt');
 
 // POST /api/ride-requests
-// Customer creates a ride request — no auth required
+// Customer creates a ride request — requires customer JWT (name pulled from token)
 const createRideRequest = async (req, res) => {
   const {
     driverId,
-    customerName,
     pickupLat,
     pickupLng,
     pickupAddress,
@@ -19,6 +18,9 @@ const createRideRequest = async (req, res) => {
     estimatedDistanceKm,
     suggestedRatePerKm,
   } = req.body;
+
+  // Customer name comes from the verified JWT — not from the request body
+  const customerName = req.user.name;
 
   if (!driverId || pickupLat == null || pickupLng == null ||
       destLat == null || destLng == null || !estimatedDistanceKm) {
@@ -43,7 +45,7 @@ const createRideRequest = async (req, res) => {
 
     const rideRequest = await RideRequest.create({
       driver: driverId,
-      customerName: customerName || 'Anonymous',
+      customerName,
       pickupLat,
       pickupLng,
       pickupAddress: pickupAddress || '',

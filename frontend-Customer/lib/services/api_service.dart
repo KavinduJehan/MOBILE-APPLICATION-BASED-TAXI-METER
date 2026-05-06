@@ -146,7 +146,7 @@ class ApiService {
   }) => _dio.patch(
     '/ride-requests/$requestId/respond',
     data: {
-      'accept': accept,
+      'action': accept ? 'accept' : 'reject',
       if (agreedRate != null) 'agreedRatePerKm': agreedRate,
     },
   );

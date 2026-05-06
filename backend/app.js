@@ -8,6 +8,7 @@ const tripRoutes = require('./routes/trips');
 const rateRoutes = require('./routes/rates');
 const adminRoutes = require('./routes/admin');
 const rideRequestRoutes = require('./routes/rideRequests');
+const customerRoutes = require('./routes/customers');
 
 const app = express();
 
@@ -20,6 +21,7 @@ app.use('/api/trips', tripRoutes);
 app.use('/api/rates', rateRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/ride-requests', rideRequestRoutes);
+app.use('/api/customers', customerRoutes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
