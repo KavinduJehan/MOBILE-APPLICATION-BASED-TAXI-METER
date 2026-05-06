@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'qr_scan.dart';
 import 'profile.dart';
+import '../providers/auth_provider.dart';
 import '../theme.dart';
 
 class Home extends StatelessWidget {
@@ -44,6 +46,9 @@ class Home extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    final displayName = auth.driver?.name ?? 'there';
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -67,19 +72,19 @@ class Home extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: const Color(0xFF1D4ED8)),
               ),
-              child: const Column(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Ready for your next ride?',
-                    style: TextStyle(
+                    'Hello, $displayName!',
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 22,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
-                  SizedBox(height: 8),
-                  Text(
+                  const SizedBox(height: 8),
+                  const Text(
                     'Scan a driver QR or find nearby drivers to start with a verified trip.',
                     style: TextStyle(
                       color: Color(0xFF9CA3AF),

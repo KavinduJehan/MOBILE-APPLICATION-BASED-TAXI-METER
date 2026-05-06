@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 class RateComparison extends StatelessWidget {
-  const RateComparison({super.key});
+  final String? area;
+
+  const RateComparison({super.key, this.area});
 
   @override
   Widget build(BuildContext context) {

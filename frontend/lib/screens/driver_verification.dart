@@ -4,17 +4,29 @@ import 'negotiate_screen.dart';
 import 'ride_request_screen.dart';
 
 class DriverVerificationScreen extends StatelessWidget {
-  const DriverVerificationScreen({super.key});
+  /// Full driver document returned by GET /api/drivers/qr/:qrToken
+  final Map<String, dynamic> driver;
+
+  const DriverVerificationScreen({super.key, required this.driver});
 
   @override
   Widget build(BuildContext context) {
+    final name = driver['name'] as String? ?? '—';
+    final vehicleNumber = driver['vehicleNumber'] as String? ?? '—';
+    final licenseNumber = driver['licenseNumber'] as String? ?? '—';
+    final area = driver['area'] as String? ?? '—';
+    final rate = (driver['ratePerKm'] as num?)?.toDouble() ?? 0.0;
+    final isVerified = driver['isVerified'] as bool? ?? false;
+
     return Scaffold(
-      appBar: AppBar(title: const Text("Driver Details")),
+      appBar: AppBar(title: const Text('Driver Details')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Card(
           elevation: 3,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(18),
             child: Column(
@@ -25,52 +37,81 @@ class DriverVerificationScreen extends StatelessWidget {
                   child: Icon(Icons.person, size: 40),
                 ),
                 const SizedBox(height: 10),
-                const Text(
-                  "Kasun Perera",
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                Text(
+                  name,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
+                const SizedBox(height: 6),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 5,
+                  ),
                   decoration: BoxDecoration(
-                    color: Color(0xFFDCFCE7),
+                    color: isVerified
+                        ? const Color(0xFFDCFCE7)
+                        : const Color(0xFFFEE2E2),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: const Text(
-                    "Verified Driver",
-                    style: TextStyle(color: Colors.green),
+                  child: Text(
+                    isVerified ? 'Verified Driver' : 'Unverified',
+                    style: TextStyle(
+                      color: isVerified ? Colors.green : Colors.red,
+                    ),
                   ),
                 ),
                 const Divider(height: 30),
 
-                infoRow(Icons.directions_car, "Vehicle No", "WP CAB 1234"),
-                infoRow(Icons.badge, "Driver ID", "DRV20240056"),
-                infoRow(Icons.location_on, "Area", "Galle"),
-                infoRow(Icons.payments, "Rate per km", "Rs. 150 / km"),
+                _infoRow(Icons.directions_car, 'Vehicle No', vehicleNumber),
+                _infoRow(Icons.badge, 'License No', licenseNumber),
+                _infoRow(Icons.location_on, 'Area', area),
+                _infoRow(
+                  Icons.payments,
+                  'Rate per km',
+                  'Rs. ${rate.toStringAsFixed(0)} / km',
+                ),
 
                 const SizedBox(height: 20),
 
                 ElevatedButton(
-                  child: const Text("Compare Rate"),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const RateComparison(),
-                      ),
-                    );
-                  },
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => RateComparison(area: area),
+                    ),
+                  ),
+                  child: const Text('Compare Rate'),
                 ),
                 const SizedBox(height: 10),
 
                 ElevatedButton(
-                  child: const Text("Negotiate Rate"),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const NegotiateScreen()),
-                    );
-                  },
+                  onPressed: isVerified
+                      ? () async {
+                          // NegotiateScreen returns the suggested rate the user entered
+                          final suggestedRate = await Navigator.push<double>(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => NegotiateScreen(driver: driver),
+                            ),
+                          );
+                          if (!context.mounted) return;
+                          if (suggestedRate != null) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => RideRequestScreen(
+                                  driver: driver,
+                                  suggestedRatePerKm: suggestedRate,
+                                ),
+                              ),
+                            );
+                          }
+                        }
+                      : null,
+                  child: const Text('Negotiate Rate'),
                 ),
                 const SizedBox(height: 10),
 
@@ -78,15 +119,15 @@ class DriverVerificationScreen extends StatelessWidget {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
                   ),
-                  child: const Text("Start Ride"),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const RideRequestScreen(),
-                      ),
-                    );
-                  },
+                  onPressed: isVerified
+                      ? () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => RideRequestScreen(driver: driver),
+                          ),
+                        )
+                      : null,
+                  child: const Text('Start Ride'),
                 ),
               ],
             ),
@@ -96,7 +137,7 @@ class DriverVerificationScreen extends StatelessWidget {
     );
   }
 
-  Widget infoRow(IconData icon, String label, String value) {
+  Widget _infoRow(IconData icon, String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 7),
       child: Row(

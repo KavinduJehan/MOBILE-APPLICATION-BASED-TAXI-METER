@@ -1,0 +1,160 @@
+import 'dart:async';
+import 'package:flutter/material.dart';
+import '../services/api_service.dart';
+import '../theme.dart';
+import 'trip_progress_screen.dart';
+
+class WaitingForDriverScreen extends StatefulWidget {
+  final String requestId;
+  final Map<String, dynamic> driver;
+  final double distanceKm;
+  final double ratePerKm;
+
+  const WaitingForDriverScreen({
+    super.key,
+    required this.requestId,
+    required this.driver,
+    required this.distanceKm,
+    required this.ratePerKm,
+  });
+
+  @override
+  State<WaitingForDriverScreen> createState() => _WaitingForDriverScreenState();
+}
+
+class _WaitingForDriverScreenState extends State<WaitingForDriverScreen> {
+  Timer? _timer;
+  String _status = 'pending';
+  String? _error;
+  double? _agreedRate;
+
+  @override
+  void initState() {
+    super.initState();
+    _poll(); // immediate first check
+    _timer = Timer.periodic(const Duration(seconds: 3), (_) => _poll());
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _poll() async {
+    try {
+      final resp = await ApiService.getRequestStatus(widget.requestId);
+      final data = resp.data as Map<String, dynamic>;
+      final newStatus = data['status'] as String? ?? 'pending';
+      final agreedRate = (data['agreedRatePerKm'] as num?)?.toDouble();
+
+      if (!mounted) return;
+      setState(() {
+        _status = newStatus;
+        _agreedRate = agreedRate;
+        _error = null;
+      });
+
+      if (newStatus == 'accepted') {
+        _timer?.cancel();
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => TripProgressScreen(
+              requestId: widget.requestId,
+              driver: widget.driver,
+              distanceKm: widget.distanceKm,
+              ratePerKm: agreedRate ?? widget.ratePerKm,
+            ),
+          ),
+        );
+      } else if (newStatus == 'rejected') {
+        _timer?.cancel();
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Connection error — retrying…');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final driverName = widget.driver['name'] as String? ?? 'Driver';
+    final isRejected = _status == 'rejected';
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(title: const Text('Waiting for Driver')),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // ── Status icon ────────────────────────────────────────────────
+              Icon(
+                isRejected ? Icons.cancel_rounded : Icons.hourglass_top_rounded,
+                size: 80,
+                color: isRejected ? Colors.redAccent : AppTheme.primaryBlue,
+              ),
+              const SizedBox(height: 28),
+
+              // ── Driver name ────────────────────────────────────────────────
+              Text(
+                driverName,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // ── Status text ────────────────────────────────────────────────
+              Text(
+                isRejected
+                    ? 'Your ride request was declined.'
+                    : 'Waiting for driver to accept your request…',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: isRejected ? Colors.redAccent : Colors.white70,
+                  fontSize: 16,
+                ),
+              ),
+
+              if (_agreedRate != null && !isRejected) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Agreed rate: Rs. ${_agreedRate!.toStringAsFixed(0)} / km',
+                  style: const TextStyle(color: Colors.white60, fontSize: 14),
+                ),
+              ],
+
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  _error!,
+                  style: const TextStyle(color: Colors.orange, fontSize: 13),
+                ),
+              ],
+
+              const SizedBox(height: 40),
+
+              // ── Loading spinner or rejection button ────────────────────────
+              if (!isRejected)
+                const CircularProgressIndicator(color: AppTheme.primaryBlue)
+              else
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryBlue,
+                  ),
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Go Back'),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

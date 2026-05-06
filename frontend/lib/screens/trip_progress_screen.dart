@@ -2,38 +2,52 @@ import 'package:flutter/material.dart';
 import 'trip_summary_screen.dart';
 
 class TripProgressScreen extends StatelessWidget {
-  const TripProgressScreen({super.key});
+  final String requestId;
+  final Map<String, dynamic> driver;
+  final double distanceKm;
+  final double ratePerKm;
+
+  const TripProgressScreen({
+    super.key,
+    required this.requestId,
+    required this.driver,
+    required this.distanceKm,
+    required this.ratePerKm,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final driverName = driver['name'] as String? ?? 'Driver';
+    final fare = distanceKm * ratePerKm;
+
     return Scaffold(
-      appBar: AppBar(title: const Text("Trip In Progress")),
+      appBar: AppBar(title: const Text('Trip In Progress')),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            const Card(
+            Card(
               child: ListTile(
-                title: Text("Trip Started"),
-                subtitle: Text("Enjoy your ride"),
+                title: Text('Trip with $driverName'),
+                subtitle: const Text('Enjoy your ride'),
               ),
             ),
-            const Card(
+            Card(
               child: ListTile(
-                title: Text("Distance"),
-                trailing: Text("2.3 km"),
+                title: const Text('Distance'),
+                trailing: Text('${distanceKm.toStringAsFixed(1)} km'),
               ),
             ),
-            const Card(
+            Card(
               child: ListTile(
-                title: Text("Current Fare"),
-                trailing: Text("Rs. 345"),
+                title: const Text('Estimated Fare'),
+                trailing: Text('Rs. ${fare.toStringAsFixed(0)}'),
               ),
             ),
             const Spacer(),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text("End Trip"),
+              child: const Text('End Trip'),
               onPressed: () {
                 Navigator.push(
                   context,
