@@ -41,8 +41,9 @@ class _QRScanState extends State<QRScan> {
       final Map<String, dynamic> payload =
           jsonDecode(raw) as Map<String, dynamic>;
       final String? qrToken = payload['token'] as String?;
-      if (qrToken == null || qrToken.isEmpty)
+      if (qrToken == null || qrToken.isEmpty) {
         throw 'QR code has no token field';
+      }
 
       final resp = await ApiService.getDriverByQR(qrToken);
       final driver = resp.data as Map<String, dynamic>;

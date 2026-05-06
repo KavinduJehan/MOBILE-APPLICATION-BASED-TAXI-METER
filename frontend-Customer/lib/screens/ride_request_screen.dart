@@ -45,7 +45,6 @@ class RideRequestScreen extends StatefulWidget {
 }
 
 class _RideRequestScreenState extends State<RideRequestScreen> {
-  final _nameController = TextEditingController();
   String _pickup = 'Colombo';
   String _dest = 'Galle';
   bool _loading = false;
@@ -64,12 +63,6 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
 
   double get _estimatedFare => _distanceKm * _rate;
 
-  @override
-  void dispose() {
-    _nameController.dispose();
-    super.dispose();
-  }
-
   Future<void> _sendRequest() async {
     if (_pickup == _dest) {
       setState(() => _error = 'Pickup and destination must be different.');
@@ -87,9 +80,6 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
 
       final resp = await ApiService.createRideRequest({
         'driverId': driverId,
-        'customerName': _nameController.text.trim().isNotEmpty
-            ? _nameController.text.trim()
-            : 'Anonymous',
         'pickupLat': pLat,
         'pickupLng': pLng,
         'pickupAddress': _pickup,
@@ -135,19 +125,9 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // ── Name ────────────────────────────────────────────────────────
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: 'Your Name (optional)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-
             // ── Pickup ──────────────────────────────────────────────────────
             DropdownButtonFormField<String>(
-              value: _pickup,
+              initialValue: _pickup,
               decoration: const InputDecoration(
                 labelText: 'Pickup Location',
                 border: OutlineInputBorder(),
@@ -161,7 +141,7 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
 
             // ── Destination ─────────────────────────────────────────────────
             DropdownButtonFormField<String>(
-              value: _dest,
+              initialValue: _dest,
               decoration: const InputDecoration(
                 labelText: 'Destination',
                 border: OutlineInputBorder(),

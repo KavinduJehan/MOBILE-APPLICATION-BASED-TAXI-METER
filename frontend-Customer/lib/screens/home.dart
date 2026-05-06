@@ -47,7 +47,7 @@ class Home extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
-    final displayName = auth.driver?.name ?? 'there';
+    final displayName = auth.customer?.name ?? 'there';
 
     return Scaffold(
       backgroundColor: Colors.black,

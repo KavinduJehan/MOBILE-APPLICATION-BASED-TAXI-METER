@@ -63,30 +63,21 @@ class ApiService {
 
   static Future<String?> getToken() async => _inMemoryToken;
 
-  // ── Auth ──────────────────────────────────────────────────────────────────
+  // ── Customer Auth ─────────────────────────────────────────────────────────
 
-  /// POST /api/auth/register
-  static Future<Response> register(Map<String, dynamic> body) =>
-      _dio.post('/auth/register', data: body);
+  /// POST /api/customers/register  — first-time signup
+  static Future<Response> customerRegister(String name, String phone) =>
+      _dio.post('/customers/register', data: {'name': name, 'phone': phone});
 
-  /// POST /api/auth/login  — email + password
-  static Future<Response> login(String email, String password) =>
-      _dio.post('/auth/login', data: {'email': email, 'password': password});
+  /// POST /api/customers/request-otp  — send OTP to existing account
+  static Future<Response> customerRequestOtp(String phone) =>
+      _dio.post('/customers/request-otp', data: {'phone': phone});
 
-  // Phone login via Firebase OTP — skipped for now, uncomment when ready:
-  // static Future<Response> phoneLogin(String idToken, ...) => ...
+  /// POST /api/customers/verify-otp  — validate OTP, returns JWT + customer
+  static Future<Response> customerVerifyOtp(String phone, String otp) =>
+      _dio.post('/customers/verify-otp', data: {'phone': phone, 'otp': otp});
 
-  // ── Driver ────────────────────────────────────────────────────────────────
-
-  /// GET /api/drivers/profile
-  static Future<Response> getProfile() => _dio.get('/drivers/profile');
-
-  /// POST /api/drivers/generate-qr
-  static Future<Response> generateQR() => _dio.post('/drivers/generate-qr');
-
-  /// PATCH /api/drivers/location
-  static Future<Response> updateLocation(double lat, double lng) =>
-      _dio.patch('/drivers/location', data: {'lat': lat, 'lng': lng});
+  // ── Drivers (read-only — customer looks up driver info) ──────────────────
 
   /// GET /api/drivers/nearby?area=
   static Future<Response> getNearbyDrivers({String? area}) => _dio.get(
@@ -98,56 +89,19 @@ class ApiService {
   static Future<Response> getDriverByQR(String qrToken) =>
       _dio.get('/drivers/qr/$qrToken');
 
-  // ── Rates ─────────────────────────────────────────────────────────────────
-
-  /// PATCH /api/rates
-  static Future<Response> updateRate(double ratePerKm) =>
-      _dio.patch('/rates', data: {'ratePerKm': ratePerKm});
+  // ── Rates (read-only — customer compares rates) ───────────────────────────
 
   /// GET /api/rates?area=
   static Future<Response> getAreaRates(String area) =>
       _dio.get('/rates', queryParameters: {'area': area});
 
-  // ── Trips ─────────────────────────────────────────────────────────────────
-
-  /// POST /api/trips
-  static Future<Response> createTrip(Map<String, dynamic> body) =>
-      _dio.post('/trips', data: body);
-
-  /// PATCH /api/trips/:id/end
-  static Future<Response> endTrip(String tripId) =>
-      _dio.patch('/trips/$tripId/end');
-
-  /// GET /api/trips/my
-  static Future<Response> getMyTrips() => _dio.get('/trips/my');
-
-  /// GET /api/trips/income
-  static Future<Response> getIncome() => _dio.get('/trips/income');
-
   // ── Ride Requests ─────────────────────────────────────────────────────────
 
-  /// POST /api/ride-requests  (no auth — customer)
+  /// POST /api/ride-requests  — customer JWT required
   static Future<Response> createRideRequest(Map<String, dynamic> body) =>
       _dio.post('/ride-requests', data: body);
 
-  /// GET /api/ride-requests/incoming  (driver)
-  static Future<Response> getIncomingRequests() =>
-      _dio.get('/ride-requests/incoming');
-
-  /// GET /api/ride-requests/:id/status  (customer polls)
+  /// GET /api/ride-requests/:id/status  — customer polls
   static Future<Response> getRequestStatus(String requestId) =>
       _dio.get('/ride-requests/$requestId/status');
-
-  /// PATCH /api/ride-requests/:id/respond  (driver)
-  static Future<Response> respondToRequest(
-    String requestId,
-    bool accept, {
-    double? agreedRate,
-  }) => _dio.patch(
-    '/ride-requests/$requestId/respond',
-    data: {
-      'action': accept ? 'accept' : 'reject',
-      if (agreedRate != null) 'agreedRatePerKm': agreedRate,
-    },
-  );
 }

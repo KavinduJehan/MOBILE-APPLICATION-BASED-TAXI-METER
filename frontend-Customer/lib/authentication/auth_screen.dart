@@ -1,10 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
-import 'email_verification_screen.dart';
 import 'phone_verification_screen.dart';
 import '../theme.dart';
-
-enum _AuthMethod { phone, email }
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -15,65 +12,34 @@ class AuthScreen extends StatefulWidget {
 
 class _AuthScreenState extends State<AuthScreen> {
   final _phoneController = TextEditingController();
-  final _emailController = TextEditingController();
-  _AuthMethod _method = _AuthMethod.phone;
 
-  bool get _canContinue {
-    final text = _activeController.text.trim();
-    return text.isNotEmpty;
-  }
-
-  TextEditingController get _activeController {
-    return _method == _AuthMethod.phone ? _phoneController : _emailController;
-  }
+  bool get _canContinue => _phoneController.text.trim().isNotEmpty;
 
   @override
   void initState() {
     super.initState();
-    _phoneController.addListener(_refresh);
-    _emailController.addListener(_refresh);
+    _phoneController.addListener(() => setState(() {}));
   }
 
   @override
   void dispose() {
     _phoneController.dispose();
-    _emailController.dispose();
     super.dispose();
   }
 
-  void _refresh() {
-    setState(() {});
-  }
-
-  void _toggleMethod() {
-    setState(() {
-      _method = _method == _AuthMethod.phone
-          ? _AuthMethod.email
-          : _AuthMethod.phone;
-    });
-  }
-
   void _continue() {
-    if (!_canContinue) {
-      return;
-    }
-
-    final value = _activeController.text.trim();
-
+    if (!_canContinue) return;
+    final phone = '+94${_phoneController.text.trim()}';
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => _method == _AuthMethod.phone
-            ? PhoneVerificationScreen(phoneNumber: '+94 $value')
-            : EmailVerificationScreen(emailAddress: value),
+        builder: (_) => PhoneVerificationScreen(phoneNumber: phone),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final isPhone = _method == _AuthMethod.phone;
-
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
@@ -97,48 +63,68 @@ class _AuthScreenState extends State<AuthScreen> {
                     ),
                     const SizedBox(height: 16),
                     const Text(
-                      'Verify with your phone number or email to continue safely',
+                      'Enter your mobile number to sign in or create an account',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Color(0xFF9A9A9A),
-                        fontSize: 20,
+                        fontSize: 18,
                         height: 1.25,
                         fontWeight: FontWeight.w500,
-                        letterSpacing: 0,
                       ),
                     ),
-                    const SizedBox(height: 34),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 180),
-                      child: isPhone
-                          ? _PhoneInput(controller: _phoneController)
-                          : _EmailInput(controller: _emailController),
+                    const SizedBox(height: 40),
+                    // Phone input
+                    Row(
+                      children: [
+                        const Text(
+                          '\u{1F1F1}\u{1F1F0}',
+                          style: TextStyle(fontSize: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          '+94',
+                          style: TextStyle(
+                            color: Color(0xFF9A9A9A),
+                            fontSize: 22,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: _phoneController,
+                            autofocus: true,
+                            keyboardType: TextInputType.phone,
+                            cursorColor: AppTheme.primaryBlue,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            decoration: const InputDecoration(
+                              hintText: '71 234 5678',
+                              hintStyle: TextStyle(
+                                color: Color(0xFF5F5F62),
+                                fontSize: 22,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                            onSubmitted: (_) => _continue(),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 28),
-                    Text(
-                      isPhone
-                          ? "We'll send a short verification code to your number."
-                          : "You'll enter your password on the next screen.",
+                    const SizedBox(height: 20),
+                    const Text(
+                      "We'll send a 6-digit code to verify your number.",
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Color(0xFF9A9A9A),
                         fontSize: 15,
                         height: 1.3,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: 0,
-                      ),
-                    ),
-                    const SizedBox(height: 26),
-                    TextButton(
-                      onPressed: _toggleMethod,
-                      child: Text(
-                        isPhone ? 'Use email instead' : 'Use phone instead',
-                        style: const TextStyle(
-                          color: AppTheme.primaryBlue,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0,
-                        ),
                       ),
                     ),
                     const Spacer(),
@@ -163,7 +149,6 @@ class _AuthScreenState extends State<AuthScreen> {
                           style: TextStyle(
                             fontSize: 19,
                             fontWeight: FontWeight.w800,
-                            letterSpacing: 0,
                           ),
                         ),
                       ),
@@ -174,96 +159,6 @@ class _AuthScreenState extends State<AuthScreen> {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PhoneInput extends StatelessWidget {
-  final TextEditingController controller;
-
-  const _PhoneInput({required this.controller});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      key: const ValueKey('phone-input'),
-      children: [
-        const Text('\u{1F1F1}\u{1F1F0}', style: TextStyle(fontSize: 20)),
-        const SizedBox(width: 12),
-        const Text(
-          '+94',
-          style: TextStyle(
-            color: Color(0xFF9A9A9A),
-            fontSize: 22,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: TextField(
-            controller: controller,
-            keyboardType: TextInputType.phone,
-            cursorColor: AppTheme.primaryBlue,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.w500,
-            ),
-            decoration: const InputDecoration(
-              hintText: '71 234 5678',
-              hintStyle: TextStyle(
-                color: Color(0xFF5F5F62),
-                fontSize: 22,
-                fontWeight: FontWeight.w500,
-              ),
-              border: InputBorder.none,
-              isDense: true,
-              contentPadding: EdgeInsets.zero,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _EmailInput extends StatelessWidget {
-  final TextEditingController controller;
-
-  const _EmailInput({required this.controller});
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      key: const ValueKey('email-input'),
-      controller: controller,
-      keyboardType: TextInputType.emailAddress,
-      cursorColor: AppTheme.primaryBlue,
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 20,
-        fontWeight: FontWeight.w500,
-      ),
-      decoration: InputDecoration(
-        hintText: 'email@gmail.com',
-        hintStyle: const TextStyle(
-          color: Color(0xFF5F5F62),
-          fontSize: 20,
-          fontWeight: FontWeight.w500,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(4),
-          borderSide: const BorderSide(color: Color(0xFF1A1A1C)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(4),
-          borderSide: const BorderSide(color: AppTheme.primaryBlue),
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 10,
-          vertical: 13,
         ),
       ),
     );

@@ -9,8 +9,8 @@ class Profile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
-    final name = auth.driver?.name ?? 'Guest';
-    final email = auth.driver?.email ?? '—';
+    final name = auth.customer?.name ?? 'Guest';
+    final phone = auth.customer?.phone ?? '—';
 
     return Scaffold(
       appBar: AppBar(title: const Text("Profile")),
@@ -18,21 +18,33 @@ class Profile extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            const CircleAvatar(
-              radius: 40,
-              child: Icon(Icons.person, size: 45),
-            ),
+            const CircleAvatar(radius: 40, child: Icon(Icons.person, size: 45)),
             const SizedBox(height: 10),
             Text(
               name,
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
-            Text(email),
+            Text(phone),
             const SizedBox(height: 30),
-            const Card(child: ListTile(leading: Icon(Icons.edit), title: Text("Edit Profile"))),
-            const Card(child: ListTile(leading: Icon(Icons.help), title: Text("Help & Support"))),
-            const Card(child: ListTile(leading: Icon(Icons.info), title: Text("About Us"))),
-            if (auth.isLoggedIn) ...[  
+            const Card(
+              child: ListTile(
+                leading: Icon(Icons.edit),
+                title: Text("Edit Profile"),
+              ),
+            ),
+            const Card(
+              child: ListTile(
+                leading: Icon(Icons.help),
+                title: Text("Help & Support"),
+              ),
+            ),
+            const Card(
+              child: ListTile(
+                leading: Icon(Icons.info),
+                title: Text("About Us"),
+              ),
+            ),
+            if (auth.isLoggedIn) ...[
               const SizedBox(height: 16),
               TextButton.icon(
                 onPressed: () {
