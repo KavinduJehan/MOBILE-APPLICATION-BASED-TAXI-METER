@@ -43,7 +43,9 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text(auth.errorMessage ?? 'Login failed')));
+      messenger.showSnackBar(
+        SnackBar(content: Text(auth.errorMessage ?? 'Login failed')),
+      );
     }
   }
 
@@ -59,12 +61,20 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(height: 24),
             const DriverLogo(size: 92),
             const SizedBox(height: 24),
-            Text('Welcome back', textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700)),
+            Text(
+              'Welcome back',
+              textAlign: TextAlign.center,
+              style: Theme.of(
+                context,
+              ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 8),
             Text(
               'Sign in to manage incoming requests, trips, and earnings.',
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.white60),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.white60),
             ),
             const SizedBox(height: 28),
             Container(
@@ -82,14 +92,19 @@ class _LoginScreenState extends State<LoginScreen> {
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
                       decoration: const InputDecoration(labelText: 'Email'),
-                      validator: (value) => value == null || value.trim().isEmpty ? 'Email is required' : null,
+                      validator: (value) =>
+                          value == null || value.trim().isEmpty
+                          ? 'Email is required'
+                          : null,
                     ),
                     const SizedBox(height: 14),
                     TextFormField(
                       controller: _passwordController,
                       obscureText: true,
                       decoration: const InputDecoration(labelText: 'Password'),
-                      validator: (value) => value == null || value.isEmpty ? 'Password is required' : null,
+                      validator: (value) => value == null || value.isEmpty
+                          ? 'Password is required'
+                          : null,
                     ),
                     const SizedBox(height: 20),
                     PrimaryActionButton(
@@ -102,11 +117,16 @@ class _LoginScreenState extends State<LoginScreen> {
                       label: 'Create Account',
                       onPressed: () async {
                         final messenger = ScaffoldMessenger.of(context);
-                        final message = await Navigator.of(context).push<String>(
-                          MaterialPageRoute(builder: (_) => const RegisterScreen()),
-                        );
+                        final message = await Navigator.of(context)
+                            .push<String>(
+                              MaterialPageRoute(
+                                builder: (_) => const RegisterScreen(),
+                              ),
+                            );
                         if (message != null && mounted) {
-                          messenger.showSnackBar(SnackBar(content: Text(message)));
+                          messenger.showSnackBar(
+                            SnackBar(content: Text(message)),
+                          );
                         }
                       },
                     ),
@@ -114,6 +134,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     TextButton(
                       onPressed: () async {
                         final messenger = ScaffoldMessenger.of(context);
+                        final navigator = Navigator.of(context);
                         // Save a fake token so the session looks authenticated locally
                         await SessionStore.saveToken('offline-demo-token');
                         // Also save a minimal mock DriverProfile so the app behaves as authenticated
@@ -130,9 +151,13 @@ class _LoginScreenState extends State<LoginScreen> {
                         );
                         await SessionStore.saveProfile(mock);
                         if (!mounted) return;
-                        messenger.showSnackBar(const SnackBar(content: Text('Offline mode enabled')));
-                        Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute(builder: (_) => const DriverHomeScreen()),
+                        messenger.showSnackBar(
+                          const SnackBar(content: Text('Offline mode enabled')),
+                        );
+                        navigator.pushAndRemoveUntil(
+                          MaterialPageRoute(
+                            builder: (_) => const DriverHomeScreen(),
+                          ),
                           (route) => false,
                         );
                       },
