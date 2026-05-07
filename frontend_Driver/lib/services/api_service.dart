@@ -1,0 +1,231 @@
+import 'package:dio/dio.dart';
+
+import '../config/app_config.dart';
+import '../models/api_exception.dart';
+import '../models/auth_result.dart';
+import '../models/driver_profile.dart';
+import '../models/income_summary.dart';
+import '../models/qr_result.dart';
+import '../models/ride_request.dart';
+import '../models/trip_completion.dart';
+import '../models/trip_record.dart';
+import 'session_store.dart';
+
+class ApiService {
+  ApiService({String? baseUrl}) : _dio = Dio(BaseOptions(baseUrl: baseUrl ?? AppConfig.baseUrl, connectTimeout: const Duration(seconds: 20), receiveTimeout: const Duration(seconds: 20)));
+
+  final Dio _dio;
+
+  Future<AuthResult> login({required String email, required String password}) async {
+    final response = await _request('POST', '/auth/login', auth: false, data: {'email': email, 'password': password});
+    final data = _asMap(response.data);
+    final token = _readString(data, ['token', 'jwt', 'accessToken']);
+    if (token.isEmpty) {
+      throw ApiException('Login succeeded but no token was returned.');
+    }
+    final profileMap = _readMap(data, ['driver', 'user', 'profile']);
+    return AuthResult(
+      token: token,
+      profile: profileMap == null ? null : DriverProfile.fromJson(profileMap),
+      message: _readString(data, ['message']),
+    );
+  }
+
+  Future<String> register({
+    required String name,
+    required String phone,
+    required String email,
+    required String password,
+    required String licenseNumber,
+    required String vehicleNumber,
+    required String area,
+  }) async {
+    final response = await _request(
+      'POST',
+      '/auth/register',
+      auth: false,
+      data: {
+        'name': name,
+        'phone': phone,
+        'email': email,
+        'password': password,
+        'licenseNumber': licenseNumber,
+        'vehicleNumber': vehicleNumber,
+        'area': area,
+        'role': 'driver',
+      },
+    );
+    final data = _asMap(response.data);
+    return _readString(data, ['message'], fallback: 'Account created.');
+  }
+
+  Future<DriverProfile> getProfile() async {
+    final response = await _request('GET', '/drivers/profile');
+    return DriverProfile.fromJson(_asMap(response.data));
+  }
+
+  Future<QrResult> generateQr() async {
+    final response = await _request('POST', '/drivers/generate-qr');
+    final data = _asMap(response.data);
+    return QrResult(qrCode: _readString(data, ['qrCode', 'qr_code', 'image']), token: _readString(data, ['token'], fallback: ''));
+  }
+
+  Future<void> updateRate(double ratePerKm) async {
+    await _request('PATCH', '/rates/my-rate', data: {'ratePerKm': ratePerKm});
+  }
+
+  Future<double> getAreaRate(String area) async {
+    final response = await _request('GET', '/rates/area', auth: false, queryParameters: {'area': area});
+    final data = _asMap(response.data);
+    return _readDouble(data, ['ratePerKm', 'averageRate', 'rate', 'value']);
+  }
+
+  Future<List<RideRequest>> getIncomingRequests() async {
+    final response = await _request('GET', '/ride-requests/incoming');
+    return _readMapList(_asMap(response.data), ['requests', 'data', 'items']).map(RideRequest.fromJson).toList();
+  }
+
+  Future<Map<String, dynamic>> respondToRequest({
+    required String requestId,
+    required String action,
+    double? agreedRatePerKm,
+  }) async {
+    final data = <String, dynamic>{'action': action};
+    if (agreedRatePerKm != null) {
+      data['agreedRatePerKm'] = agreedRatePerKm;
+    }
+    final response = await _request('PATCH', '/ride-requests/$requestId/respond', data: data);
+    return _asMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> createTrip({required String requestId}) async {
+    final response = await _request('POST', '/trips', data: {'requestId': requestId});
+    return _asMap(response.data);
+  }
+
+  Future<TripCompletionResult> endTrip(String tripId) async {
+    final response = await _request('PATCH', '/trips/$tripId/end');
+    final data = _asMap(response.data);
+    final tripMap = _readMap(data, ['trip']) ?? data;
+    return TripCompletionResult(
+      trip: TripRecord.fromJson(tripMap),
+      receiptNumber: _readString(data, ['receipt', 'receiptNumber', 'receiptId'], fallback: ''),
+    );
+  }
+
+  Future<List<TripRecord>> getMyTrips() async {
+    final response = await _request('GET', '/trips/my');
+    return _readMapList(_asMap(response.data), ['trips', 'data', 'items']).map(TripRecord.fromJson).toList();
+  }
+
+  Future<IncomeSummary> getIncomeSummary() async {
+    final response = await _request('GET', '/trips/income');
+    return IncomeSummary.fromJson(_asMap(response.data));
+  }
+
+  Future<Response<dynamic>> _request(
+    String method,
+    String path, {
+    bool auth = true,
+    Map<String, dynamic>? queryParameters,
+    Object? data,
+  }) async {
+    final options = Options(method: method);
+    if (auth) {
+      final token = await SessionStore.readToken();
+      if (token == null || token.isEmpty) {
+        throw ApiException('Please sign in again.');
+      }
+      options.headers = {'Authorization': 'Bearer $token'};
+    }
+
+    try {
+      return await _dio.request<dynamic>(
+        path,
+        data: data,
+        queryParameters: queryParameters,
+        options: options,
+      );
+    } on DioException catch (error) {
+      throw ApiException(_extractMessage(error));
+    } catch (error) {
+      throw ApiException(error.toString());
+    }
+  }
+
+  Map<String, dynamic> _asMap(dynamic data) {
+    if (data is Map<String, dynamic>) {
+      return data;
+    }
+    if (data is Map) {
+      return Map<String, dynamic>.from(data);
+    }
+    return <String, dynamic>{};
+  }
+
+  String _readString(Map<String, dynamic> data, List<String> keys, {String fallback = ''}) {
+    for (final key in keys) {
+      final value = data[key];
+      if (value is String && value.trim().isNotEmpty) {
+        return value;
+      }
+      if (value != null) {
+        return value.toString();
+      }
+    }
+    return fallback;
+  }
+
+  double _readDouble(Map<String, dynamic> data, List<String> keys, {double fallback = 0}) {
+    for (final key in keys) {
+      final value = data[key];
+      if (value is num) {
+        return value.toDouble();
+      }
+      if (value is String) {
+        final parsed = double.tryParse(value);
+        if (parsed != null) {
+          return parsed;
+        }
+      }
+    }
+    return fallback;
+  }
+
+  Map<String, dynamic>? _readMap(Map<String, dynamic> data, List<String> keys) {
+    for (final key in keys) {
+      final value = data[key];
+      if (value is Map<String, dynamic>) {
+        return value;
+      }
+      if (value is Map) {
+        return Map<String, dynamic>.from(value);
+      }
+    }
+    return null;
+  }
+
+  List<Map<String, dynamic>> _readMapList(Map<String, dynamic> data, List<String> keys) {
+    for (final key in keys) {
+      final value = data[key];
+      if (value is List) {
+        return value.whereType<Map>().map((entry) => Map<String, dynamic>.from(entry)).toList();
+      }
+    }
+    if (data.isNotEmpty) {
+      return [data];
+    }
+    return const [];
+  }
+
+  String _extractMessage(DioException error) {
+    final responseData = error.response?.data;
+    if (responseData is Map<String, dynamic>) {
+      final message = responseData['message'];
+      if (message is String && message.trim().isNotEmpty) {
+        return message;
+      }
+    }
+    return error.message ?? 'Network request failed.';
+  }
+}
