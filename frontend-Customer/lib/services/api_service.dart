@@ -1,12 +1,16 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 /// Single entry point for all backend HTTP calls.
 ///
 /// Base URL:
+///   - Chrome/web        → http://localhost:5000/api
 ///   - Android emulator  → http://10.0.2.2:5000/api
 ///   - iOS simulator     → http://localhost:5000/api
 ///   - Physical device   → replace with your machine's LAN IP, e.g. http://192.168.x.x:5000/api
-const String _baseUrl = 'http://10.0.2.2:5000/api';
+const String _baseUrl = kIsWeb
+    ? 'http://localhost:5000/api'
+    : 'http://10.0.2.2:5000/api';
 
 // Token held in memory for the session.
 // Replace with flutter_secure_storage when deploying to production.

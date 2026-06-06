@@ -1,7 +1,8 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import 'phone_verification_screen.dart';
 import '../theme.dart';
+import 'package:flutter/services.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -13,7 +14,10 @@ class AuthScreen extends StatefulWidget {
 class _AuthScreenState extends State<AuthScreen> {
   final _phoneController = TextEditingController();
 
-  bool get _canContinue => _phoneController.text.trim().isNotEmpty;
+  String get _phoneNumber => _phoneController.text.trim();
+
+  bool get _canContinue =>
+      _phoneNumber.length == 10 && _phoneNumber.startsWith('0');
 
   @override
   void initState() {
@@ -29,11 +33,10 @@ class _AuthScreenState extends State<AuthScreen> {
 
   void _continue() {
     if (!_canContinue) return;
-    final phone = '+94${_phoneController.text.trim()}';
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => PhoneVerificationScreen(phoneNumber: phone),
+        builder: (_) => PhoneVerificationScreen(phoneNumber: _phoneNumber),
       ),
     );
   }
@@ -51,6 +54,16 @@ class _AuthScreenState extends State<AuthScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: IconButton(
+                        onPressed: () => Navigator.maybePop(context),
+                        icon: const Icon(Icons.arrow_back),
+                        color: Colors.white,
+                        tooltip: 'Back',
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     const Text(
                       'Welcome to RideX',
                       textAlign: TextAlign.center,
@@ -81,20 +94,15 @@ class _AuthScreenState extends State<AuthScreen> {
                           style: TextStyle(fontSize: 20),
                         ),
                         const SizedBox(width: 12),
-                        const Text(
-                          '+94',
-                          style: TextStyle(
-                            color: Color(0xFF9A9A9A),
-                            fontSize: 22,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
                         Expanded(
                           child: TextField(
                             controller: _phoneController,
                             autofocus: true,
                             keyboardType: TextInputType.phone,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(10),
+                            ],
                             cursorColor: AppTheme.primaryBlue,
                             style: const TextStyle(
                               color: Colors.white,
@@ -102,7 +110,7 @@ class _AuthScreenState extends State<AuthScreen> {
                               fontWeight: FontWeight.w500,
                             ),
                             decoration: const InputDecoration(
-                              hintText: '71 234 5678',
+                              hintText: '071 234 5678',
                               hintStyle: TextStyle(
                                 color: Color(0xFF5F5F62),
                                 fontSize: 22,
