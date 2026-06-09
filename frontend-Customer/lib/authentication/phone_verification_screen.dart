@@ -3,14 +3,20 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
-import '../screens/home.dart';
+import '../screens/main_navigation.dart';
+import '../screens/onboarding_screen.dart';
 import '../theme.dart';
 import 'customer_signup_screen.dart';
 
 class PhoneVerificationScreen extends StatefulWidget {
   final String phoneNumber;
+  final bool isNewCustomer;
 
-  const PhoneVerificationScreen({super.key, required this.phoneNumber});
+  const PhoneVerificationScreen({
+    super.key,
+    required this.phoneNumber,
+    this.isNewCustomer = false,
+  });
 
   @override
   State<PhoneVerificationScreen> createState() =>
@@ -100,11 +106,19 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
     final ok = await auth.verifyOtp(widget.phoneNumber, _otp);
     if (!mounted) return;
     if (ok) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const Home()),
-        (_) => false,
-      );
+      if (widget.isNewCustomer) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+          (_) => false,
+        );
+      } else {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const MainNavigation()),
+          (_) => false,
+        );
+      }
     } else {
       setState(() => _error = auth.error ?? 'Invalid OTP');
       auth.clearError();

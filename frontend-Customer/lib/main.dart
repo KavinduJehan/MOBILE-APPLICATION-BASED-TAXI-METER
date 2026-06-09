@@ -20,7 +20,7 @@ class SmartTaxiMeterApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Smart Taxi Meter',
+      title: 'RideX',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.theme,
       home: const MobileFrame(child: SplashScreen()),

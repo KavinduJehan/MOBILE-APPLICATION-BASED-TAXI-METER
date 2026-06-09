@@ -16,8 +16,24 @@ class AuthProvider extends ChangeNotifier {
   bool get loading => _loading;
   String? get error => _error;
 
-  // Session restore is in-memory only for now (no persistence across app restarts).
-  Future<void> tryRestoreSession() async {}
+  // Restore session from persistent storage on app start
+  Future<void> tryRestoreSession() async {
+    try {
+      final token = await ApiService.loadStoredToken();
+      final customerData = await ApiService.getCustomer();
+
+      if (token != null && customerData != null) {
+        _token = token;
+        _customer = CustomerModel.fromJson(customerData);
+        notifyListeners();
+      }
+    } catch (e) {
+      // Silently fail — user will need to log in
+      if (kDebugMode) {
+        print('Failed to restore session: $e');
+      }
+    }
+  }
 
   // ── Request OTP (triggers SMS / console log) ──────────────────────────────
 
@@ -43,10 +59,13 @@ class AuthProvider extends ChangeNotifier {
       final res = await ApiService.customerVerifyOtp(phone, otp);
       final data = res.data as Map<String, dynamic>;
       _token = data['token'] as String;
-      _customer = CustomerModel.fromJson(
-        data['customer'] as Map<String, dynamic>,
-      );
+      final customerData = data['customer'] as Map<String, dynamic>;
+      _customer = CustomerModel.fromJson(customerData);
+      
+      // Persist token and customer data for session restore
       await ApiService.saveToken(_token!);
+      await ApiService.saveCustomer(customerData);
+      
       _error = null;
       notifyListeners();
       return true;
@@ -80,7 +99,7 @@ class AuthProvider extends ChangeNotifier {
   // ── Logout ────────────────────────────────────────────────────────────────
 
   Future<void> logout() async {
-    ApiService.clearToken();
+    await ApiService.clearToken();
     _token = null;
     _customer = null;
     _error = null;

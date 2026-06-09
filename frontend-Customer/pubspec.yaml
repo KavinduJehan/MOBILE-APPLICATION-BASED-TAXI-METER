@@ -1,5 +1,5 @@
 name: customer_app
-description: "A customer app for the taxi meter project."
+description: "A customer app for the EE5206 taxi meter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -35,6 +35,9 @@ dependencies:
 
   # HTTP client
   dio: ^5.8.0+1
+
+  # Token persistence
+  shared_preferences: ^2.2.0
 
   # Secure storage skipped for now (causes Gradle network issues on first build).
   # Re-add flutter_secure_storage: ^9.x when deploying to production.

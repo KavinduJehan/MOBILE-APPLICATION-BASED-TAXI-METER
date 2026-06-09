@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import 'welcome_screen.dart';
+//import 'package:shared_preferences/shared_preferences.dart';
+//import 'main_navigation.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -35,7 +37,7 @@ class _SplashScreenState extends State<SplashScreen> {
             Icon(Icons.local_taxi, size: 90, color: AppTheme.primaryBlue),
             SizedBox(height: 20),
             Text(
-              "SMART TAXI METER",
+              "RideX",
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 26,

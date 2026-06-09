@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
 /// Single entry point for all backend HTTP calls.
 ///
@@ -12,8 +14,11 @@ const String _baseUrl = kIsWeb
     ? 'http://localhost:5000/api'
     : 'http://10.0.2.2:5000/api';
 
+const String _tokenKey = 'auth_token';
+const String _customerKey = 'customer_data';
+
 // Token held in memory for the session.
-// Replace with flutter_secure_storage when deploying to production.
+// Also persisted in SharedPreferences for restore across app restarts.
 String? _inMemoryToken;
 
 class ApiService {
@@ -61,11 +66,41 @@ class ApiService {
 
   // ── Token helpers ─────────────────────────────────────────────────────────
 
-  static Future<void> saveToken(String token) async => _inMemoryToken = token;
+  static Future<void> saveToken(String token) async {
+    _inMemoryToken = token;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_tokenKey, token);
+  }
 
-  static Future<void> clearToken() async => _inMemoryToken = null;
+  static Future<void> clearToken() async {
+    _inMemoryToken = null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_tokenKey);
+    await prefs.remove(_customerKey);
+  }
 
   static Future<String?> getToken() async => _inMemoryToken;
+
+  static Future<void> saveCustomer(Map<String, dynamic> customer) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_customerKey, _jsonEncode(customer));
+  }
+
+  static Future<Map<String, dynamic>?> getCustomer() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonStr = prefs.getString(_customerKey);
+    if (jsonStr == null) return null;
+    return _jsonDecode(jsonStr) as Map<String, dynamic>?;
+  }
+
+  static Future<String?> loadStoredToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString(_tokenKey);
+    if (token != null) {
+      _inMemoryToken = token;
+    }
+    return token;
+  }
 
   // ── Customer Auth ─────────────────────────────────────────────────────────
 
@@ -95,9 +130,9 @@ class ApiService {
 
   // ── Rates (read-only — customer compares rates) ───────────────────────────
 
-  /// GET /api/rates?area=
+  /// GET /api/rates/area?area=
   static Future<Response> getAreaRates(String area) =>
-      _dio.get('/rates', queryParameters: {'area': area});
+      _dio.get('/rates/area', queryParameters: {'area': area});
 
   // ── Ride Requests ─────────────────────────────────────────────────────────
 
@@ -108,4 +143,18 @@ class ApiService {
   /// GET /api/ride-requests/:id/status  — customer polls
   static Future<Response> getRequestStatus(String requestId) =>
       _dio.get('/ride-requests/$requestId/status');
+
+  // ── JSON serialization helpers ────────────────────────────────────────────
+
+  static String _jsonEncode(Map<String, dynamic> data) {
+    return jsonEncode(data);
+  }
+
+  static Map<String, dynamic>? _jsonDecode(String jsonStr) {
+    try {
+      return jsonDecode(jsonStr) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
 }
