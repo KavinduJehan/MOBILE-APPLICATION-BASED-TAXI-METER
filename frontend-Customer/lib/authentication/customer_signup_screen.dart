@@ -50,8 +50,10 @@ class _CustomerSignupScreenState extends State<CustomerSignupScreen> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) =>
-              PhoneVerificationScreen(phoneNumber: widget.phoneNumber),
+          builder: (_) => PhoneVerificationScreen(
+            phoneNumber: widget.phoneNumber,
+            isNewCustomer: true,
+          ),
         ),
       );
     } else {
@@ -83,7 +85,7 @@ class _CustomerSignupScreenState extends State<CustomerSignupScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                'New number detected: ${widget.phoneNumber}\nEnter your name to get started.',
+                'New number detected: ${widget.phoneNumber}\nEnter your good name to get started.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: Color(0xFF9A9A9A),

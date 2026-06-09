@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../screens/welcome_screen.dart';
 import '../theme.dart';
-import '../authentication/auth_screen.dart';
 
 class ProfileTab extends StatelessWidget {
   const ProfileTab({super.key});
@@ -160,7 +160,7 @@ class ProfileTab extends StatelessWidget {
                                 Navigator.pushAndRemoveUntil(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) => const AuthScreen(),
+                                    builder: (_) => const WelcomeScreen(),
                                   ),
                                   (_) => false,
                                 );

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
-import '../authentication/auth_screen.dart';
+import '../screens/welcome_screen.dart';
 
 class Profile extends StatelessWidget {
   const Profile({super.key});
@@ -51,7 +51,7 @@ class Profile extends StatelessWidget {
                   auth.logout();
                   Navigator.pushAndRemoveUntil(
                     context,
-                    MaterialPageRoute(builder: (_) => const AuthScreen()),
+                    MaterialPageRoute(builder: (_) => const WelcomeScreen()),
                     (_) => false,
                   );
                 },

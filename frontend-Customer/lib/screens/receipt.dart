@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'home.dart';
+import 'main_navigation.dart';
 
 class ReceiptScreen extends StatelessWidget {
   final String driverName;
@@ -56,7 +56,7 @@ class ReceiptScreen extends StatelessWidget {
               child: ElevatedButton(
                 onPressed: () => Navigator.pushAndRemoveUntil(
                   context,
-                  MaterialPageRoute(builder: (_) => const Home()),
+                  MaterialPageRoute(builder: (_) => const MainNavigation()),
                   (_) => false,
                 ),
                 child: const Text('Back to Home'),

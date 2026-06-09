@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
-import 'home.dart';
+import 'main_navigation.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -45,7 +45,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     if (_page == _steps.length - 1) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const Home()),
+        MaterialPageRoute(builder: (_) => const MainNavigation()),
       );
       return;
     }
@@ -74,7 +74,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   onPressed: () {
                     Navigator.pushReplacement(
                       context,
-                      MaterialPageRoute(builder: (_) => const Home()),
+                      MaterialPageRoute(builder: (_) => const MainNavigation()),
                     );
                   },
                   child: const Text(

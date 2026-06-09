@@ -80,7 +80,10 @@ class DriverVerificationScreen extends StatelessWidget {
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => RateComparison(area: area),
+                      builder: (_) => RateComparison(
+                        area: area,
+                        driverRate: rate,
+                      ),
                     ),
                   ),
                   child: const Text('Compare Rate'),

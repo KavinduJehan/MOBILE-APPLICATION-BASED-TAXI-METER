@@ -36,7 +36,10 @@ class _AuthScreenState extends State<AuthScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => PhoneVerificationScreen(phoneNumber: _phoneNumber),
+        builder: (_) => PhoneVerificationScreen(
+          phoneNumber: _phoneNumber,
+          isNewCustomer: false,
+        ),
       ),
     );
   }
@@ -110,7 +113,7 @@ class _AuthScreenState extends State<AuthScreen> {
                               fontWeight: FontWeight.w500,
                             ),
                             decoration: const InputDecoration(
-                              hintText: '071 234 5678',
+                              hintText: '+94 77 234 5678',
                               hintStyle: TextStyle(
                                 color: Color(0xFF5F5F62),
                                 fontSize: 22,
