@@ -46,7 +46,7 @@ dependencies:
   provider: ^6.1.5
 
   # QR / barcode camera scanning
-  mobile_scanner: ^4.0.0
+  mobile_scanner: ^7.2.0
 
   # Firebase — skipped for now, add when OTP login is needed
   # firebase_core: ^3.13.0

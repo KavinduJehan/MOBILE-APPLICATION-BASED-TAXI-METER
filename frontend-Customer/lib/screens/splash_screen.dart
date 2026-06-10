@@ -27,7 +27,7 @@ class _SplashScreenState extends State<SplashScreen> {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     
     // Check if session was successfully restored
-    final nextScreen = authProvider.isLoggedIn ? const HomePage() : const WelcomeScreen();
+    final nextScreen = authProvider.isLoggedIn ? Home() : WelcomeScreen();
     
     Navigator.pushReplacement(
       context,
