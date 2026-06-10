@@ -16,7 +16,8 @@ class AuthProvider extends ChangeNotifier {
   bool get loading => _loading;
   String? get error => _error;
 
-  // Restore session from persistent storage on app start
+  /// Restore session from persistent storage on app start.
+  /// This is called before the app UI is rendered to ensure seamless login state.
   Future<void> tryRestoreSession() async {
     try {
       final token = await ApiService.loadStoredToken();
@@ -25,13 +26,24 @@ class AuthProvider extends ChangeNotifier {
       if (token != null && customerData != null) {
         _token = token;
         _customer = CustomerModel.fromJson(customerData);
-        notifyListeners();
+        _error = null;
+        if (kDebugMode) {
+          print('✓ Session restored successfully for ${_customer?.name}');
+        }
+      } else {
+        if (kDebugMode) {
+          print('No valid session found — user needs to log in');
+        }
       }
     } catch (e) {
       // Silently fail — user will need to log in
       if (kDebugMode) {
-        print('Failed to restore session: $e');
+        print('⚠ Failed to restore session: $e');
       }
+      _token = null;
+      _customer = null;
+    } finally {
+      notifyListeners();
     }
   }
 

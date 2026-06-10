@@ -69,10 +69,10 @@ class _HomeState extends State<Home> {
               width: double.infinity,
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
-                color: const Color(0xFF0B1220),
+                color: const Color(0xFF001A4D),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: const Color(0xFF1D4ED8),
+                  color: AppTheme.primaryBlue,
                 ),
               ),
               child: Column(
