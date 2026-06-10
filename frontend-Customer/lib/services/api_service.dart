@@ -16,6 +16,8 @@ const String _baseUrl = kIsWeb
 
 const String _tokenKey = 'auth_token';
 const String _customerKey = 'customer_data';
+const String _sessionTimestampKey = 'session_timestamp';
+const int _sessionExpiryDays = 7; // Tokens expire after 7 days of inactivity
 
 // Token held in memory for the session.
 // Also persisted in SharedPreferences for restore across app restarts.
@@ -70,6 +72,8 @@ class ApiService {
     _inMemoryToken = token;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_tokenKey, token);
+    // Record the timestamp when token was saved
+    await prefs.setInt(_sessionTimestampKey, DateTime.now().millisecondsSinceEpoch);
   }
 
   static Future<void> clearToken() async {
@@ -77,6 +81,7 @@ class ApiService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_tokenKey);
     await prefs.remove(_customerKey);
+    await prefs.remove(_sessionTimestampKey);
   }
 
   static Future<String?> getToken() async => _inMemoryToken;
@@ -96,8 +101,22 @@ class ApiService {
   static Future<String?> loadStoredToken() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString(_tokenKey);
-    if (token != null) {
-      _inMemoryToken = token;
+    final timestamp = prefs.getInt(_sessionTimestampKey);
+
+    if (token != null && timestamp != null) {
+      // Check if session has expired (older than 7 days)
+      final sessionAge = DateTime.now().difference(
+        DateTime.fromMillisecondsSinceEpoch(timestamp),
+      );
+      
+      if (sessionAge.inDays < _sessionExpiryDays) {
+        _inMemoryToken = token;
+        return token;
+      } else {
+        // Session expired, clear it
+        await clearToken();
+        return null;
+      }
     }
     return token;
   }

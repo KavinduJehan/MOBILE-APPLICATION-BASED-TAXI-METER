@@ -102,7 +102,7 @@ class _RateComparisonState extends State<RateComparison> {
                   }
 
                   final data = snapshot.data ?? {};
-                  final averageRate = data['averageRate'] as double?;
+                  final averageRate = (data['averageRate'] as num?)?.toDouble();
                   final drivers = (data['drivers'] as List?)?.cast<Map<String, dynamic>>() ?? [];
                   final driverRate = widget.driverRate ?? 0.0;
                   final status = _getStatusLabel(driverRate, averageRate);

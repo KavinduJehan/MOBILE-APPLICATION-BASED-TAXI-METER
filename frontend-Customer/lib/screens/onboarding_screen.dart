@@ -158,9 +158,9 @@ class _OnboardingPage extends StatelessWidget {
           width: 132,
           height: 132,
           decoration: BoxDecoration(
-            color: const Color(0xFF0B1220),
+            color: const Color(0xFF001A4D),
             shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFF1D4ED8), width: 2),
+            border: Border.all(color: AppTheme.primaryBlue, width: 2),
           ),
           child: Icon(step.icon, color: AppTheme.primaryBlue, size: 58),
         ),
