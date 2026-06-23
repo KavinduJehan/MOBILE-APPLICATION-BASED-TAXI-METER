@@ -4,18 +4,15 @@ import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
 import '../screens/main_navigation.dart';
-import '../screens/onboarding_screen.dart';
 import '../theme.dart';
-import 'customer_signup_screen.dart';
+import '../widgets/brand_logo.dart';
 
 class PhoneVerificationScreen extends StatefulWidget {
   final String phoneNumber;
-  final bool isNewCustomer;
 
   const PhoneVerificationScreen({
     super.key,
     required this.phoneNumber,
-    this.isNewCustomer = false,
   });
 
   @override
@@ -24,7 +21,7 @@ class PhoneVerificationScreen extends StatefulWidget {
 }
 
 class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
-  static const _surfaceDark = Color(0xFF1A1A1C);
+  static const _surfaceDark = AppTheme.surface;
   static const _inactiveDark = Color(0xFF2A2A2C);
   static const _mutedText = Color(0xFF8A8A8A);
   static const _otpLength = 6;
@@ -36,10 +33,19 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
   final _focusNodes = List.generate(_otpLength, (_) => FocusNode());
 
   bool _requesting = false;
+  bool _verifying = false;
   String? _error;
+  String? _info;
 
   String get _otp => _controllers.map((c) => c.text).join();
   bool get _isComplete => _otp.length == _otpLength;
+  String get _displayPhone {
+    final phone = widget.phoneNumber;
+    if (phone.length == 10 && phone.startsWith('0')) {
+      return '+94 ${phone.substring(1)}';
+    }
+    return phone;
+  }
 
   @override
   void initState() {
@@ -62,23 +68,23 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
     setState(() {
       _requesting = true;
       _error = null;
+      _info = null;
     });
     final auth = context.read<AuthProvider>();
     final ok = await auth.requestOtp(widget.phoneNumber);
     if (!mounted) return;
     if (ok) {
-      setState(() => _requesting = false);
+      setState(() {
+        _requesting = false;
+        _info = 'A fresh verification code was sent.';
+      });
     } else {
-      // Account does not exist â€” go to signup
       if (auth.error?.contains('No account') == true) {
+        setState(() {
+          _error = 'No account found for this phone number.';
+          _requesting = false;
+        });
         auth.clearError();
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) =>
-                CustomerSignupScreen(phoneNumber: widget.phoneNumber),
-          ),
-        );
       } else {
         setState(() {
           _error = auth.error ?? 'Failed to send OTP';
@@ -90,6 +96,7 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
   }
 
   void _onCodeChanged(String value, int index) {
+    if (_requesting || _verifying) return;
     setState(() {});
     if (value.isNotEmpty && index < _otpLength - 1) {
       _focusNodes[index + 1].requestFocus();
@@ -101,33 +108,53 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
   }
 
   Future<void> _verifyCode() async {
-    if (!_isComplete) return;
-    final auth = context.read<AuthProvider>();
-    final ok = await auth.verifyOtp(widget.phoneNumber, _otp);
-    if (!mounted) return;
-    if (ok) {
-      if (widget.isNewCustomer) {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const OnboardingScreen()),
-          (_) => false,
-        );
-      } else {
+    if (!_isComplete || _requesting || _verifying) return;
+    setState(() {
+      _verifying = true;
+      _error = null;
+      _info = null;
+    });
+    try {
+      final auth = context.read<AuthProvider>();
+      final ok = await auth.verifyOtp(widget.phoneNumber, _otp);
+      if (!mounted) return;
+      if (ok) {
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const MainNavigation()),
           (_) => false,
         );
+        return;
       }
-    } else {
-      setState(() => _error = auth.error ?? 'Invalid OTP');
+
+      final message = auth.error ?? 'Invalid OTP';
       auth.clearError();
-      // Clear boxes so the user can re-enter
-      for (final c in _controllers) {
-        c.clear();
-      }
+      _clearOtp();
+      setState(() {
+        _error = message.toLowerCase().contains('expired')
+            ? 'That code expired. Press Resend code to get a new one.'
+            : message;
+        _info = null;
+      });
       _focusNodes[0].requestFocus();
+    } finally {
+      if (mounted) {
+        setState(() => _verifying = false);
+      }
     }
+  }
+
+  void _clearOtp() {
+    for (final c in _controllers) {
+      c.clear();
+    }
+    setState(() {});
+  }
+
+  Future<void> _resendOtp() async {
+    _clearOtp();
+    _focusNodes[0].requestFocus();
+    await _sendOtp();
   }
 
   @override
@@ -135,15 +162,18 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
     final auth = context.watch<AuthProvider>();
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppTheme.background,
       resizeToAvoidBottomInset: true,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(28, 22, 28, 28),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Align(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 430),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(28, 22, 28, 28),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Align(
                 alignment: Alignment.centerLeft,
                 child: InkWell(
                   onTap: () => Navigator.maybePop(context),
@@ -164,89 +194,127 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 58),
-              const Text(
-                'Enter Verification Code',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                'Enter the 6-digit code sent to ${widget.phoneNumber}',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: _mutedText,
-                  fontSize: 16,
-                  height: 1.35,
-                ),
-              ),
-              const SizedBox(height: 42),
-              // â”€â”€ OTP boxes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-              if (_requesting)
-                const Center(
-                  child: CircularProgressIndicator(color: AppTheme.primaryBlue),
-                )
-              else
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: List.generate(
-                    _otpLength,
-                    (i) => _CodeBox(
-                      controller: _controllers[i],
-                      focusNode: _focusNodes[i],
-                      onChanged: (v) => _onCodeChanged(v, i),
+                  const SizedBox(height: 8),
+                  const RideXLogo(size: 74, textSize: 32),
+                  const SizedBox(height: 30),
+                  const Text(
+                    'Enter Verification Code',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
-                ),
-              if (_error != null) ...[
-                const SizedBox(height: 16),
-                Text(
-                  _error!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.redAccent, fontSize: 14),
-                ),
-              ],
-              const SizedBox(height: 28),
-              TextButton(
-                style: TextButton.styleFrom(
-                  foregroundColor: AppTheme.primaryBlue,
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                ),
-                onPressed: () => Navigator.maybePop(context),
-                child: const Text(
-                  'Changed your mobile number?',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Center(
-                child: TextButton(
-                  style: TextButton.styleFrom(
-                    backgroundColor: _surfaceDark,
-                    foregroundColor: _mutedText,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 9,
+                  const SizedBox(height: 14),
+                  Text(
+                    'Enter the 6-digit code sent to $_displayPhone',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: _mutedText,
+                      fontSize: 16,
+                      height: 1.35,
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18),
+                  ),
+                  if (auth.latestDevOtp != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'Development OTP: ${auth.latestDevOtp}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: AppTheme.successGreen,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ],
+                  const SizedBox(height: 42),
+                  if (_requesting || _verifying)
+                    const Center(
+                      child: CircularProgressIndicator(
+                        color: AppTheme.primaryBlue,
+                      ),
+                    )
+                  else
+                    Center(
+                      child: SizedBox(
+                        width: 340,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: List.generate(
+                            _otpLength,
+                            (i) => _CodeBox(
+                              controller: _controllers[i],
+                              focusNode: _focusNodes[i],
+                              onChanged: (v) => _onCodeChanged(v, i),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      _error!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.redAccent,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ] else if (_info != null) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      _info!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: AppTheme.successGreen,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 28),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppTheme.primaryBlue,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                    onPressed: () => Navigator.maybePop(context),
+                    child: const Text(
+                      'Changed your mobile number?',
+                      style:
+                          TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                    ),
                   ),
-                  onPressed: _requesting ? null : _sendOtp,
-                  child: const Text(
-                    'Resend code',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                  const SizedBox(height: 4),
+                  Center(
+                    child: TextButton(
+                      style: TextButton.styleFrom(
+                        backgroundColor: _surfaceDark,
+                        foregroundColor:
+                            _requesting ? _mutedText : AppTheme.primaryBlue,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 9,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: (_requesting || _verifying) ? null : _resendOtp,
+                      child: Text(
+                        _requesting ? 'Sending...' : 'Resend code',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              const Spacer(),
-              SizedBox(
+                  const Spacer(),
+                  SizedBox(
                 height: 58,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
@@ -263,7 +331,7 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
                       borderRadius: BorderRadius.circular(32),
                     ),
                   ),
-                  onPressed: (_isComplete && !auth.loading)
+                  onPressed: (_isComplete && !auth.loading && !_verifying)
                       ? _verifyCode
                       : null,
                   child: auth.loading
@@ -283,8 +351,10 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
                           ),
                         ),
                 ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

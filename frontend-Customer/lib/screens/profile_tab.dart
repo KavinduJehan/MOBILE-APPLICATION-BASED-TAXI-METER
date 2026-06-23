@@ -14,7 +14,7 @@ class ProfileTab extends StatelessWidget {
     final phone = auth.customer?.phone ?? '—';
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppTheme.background,
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(
@@ -32,7 +32,7 @@ class ProfileTab extends StatelessWidget {
                         height: 80,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: const Color(0xFF1A1A1C),
+                          color: AppTheme.surface,
                           border: Border.all(
                             color: AppTheme.primaryBlue,
                             width: 2,
@@ -129,7 +129,7 @@ class ProfileTab extends StatelessWidget {
                     icon: const Icon(Icons.logout),
                     label: const Text('Sign Out'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.redAccent.withOpacity(0.2),
+                      backgroundColor: Colors.redAccent.withValues(alpha: 0.2),
                       foregroundColor: Colors.redAccent,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
@@ -157,8 +157,8 @@ class ProfileTab extends StatelessWidget {
                             TextButton(
                               onPressed: () {
                                 auth.logout();
-                                Navigator.pushAndRemoveUntil(
-                                  context,
+                                Navigator.of(context, rootNavigator: true)
+                                    .pushAndRemoveUntil(
                                   MaterialPageRoute(
                                     builder: (_) => const WelcomeScreen(),
                                   ),
@@ -194,7 +194,7 @@ class ProfileTab extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1C),
+          color: AppTheme.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: const Color(0xFF333336)),
         ),

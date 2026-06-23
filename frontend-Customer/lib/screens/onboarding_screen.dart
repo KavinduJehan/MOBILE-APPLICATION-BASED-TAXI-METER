@@ -61,7 +61,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final isLast = _page == _steps.length - 1;
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppTheme.background,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(24, 28, 24, 28),

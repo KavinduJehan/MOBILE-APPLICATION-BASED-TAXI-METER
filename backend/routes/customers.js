@@ -1,9 +1,17 @@
 const express = require('express');
 const router = express.Router();
-const { register, requestOtp, verifyOtp } = require('../controllers/customerController');
+const {
+  register,
+  login,
+  requestOtp,
+  verifyOtp,
+  refreshToken,
+} = require('../controllers/customerController');
 
-router.post('/register', register);       // first-time signup
-router.post('/request-otp', requestOtp); // send OTP to existing account
-router.post('/verify-otp', verifyOtp);   // validate OTP → return JWT
+router.post('/register', register);
+router.post('/login', login);
+router.post('/request-otp', requestOtp);
+router.post('/verify-otp', verifyOtp);
+router.post('/refresh-token', refreshToken);
 
 module.exports = router;

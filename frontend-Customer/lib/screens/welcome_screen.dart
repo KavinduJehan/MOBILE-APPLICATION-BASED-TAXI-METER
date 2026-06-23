@@ -1,109 +1,80 @@
 import 'package:flutter/material.dart';
 
 import '../authentication/auth_screen.dart';
+import '../authentication/customer_signup_screen.dart';
 import '../theme.dart';
+import '../widgets/brand_logo.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
 
+  void _openCreateAccount(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const CustomerSignupScreen()),
+    );
+  }
+
+  void _openSignIn(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AuthScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppTheme.background,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 28),
+          padding: const EdgeInsets.fromLTRB(28, 40, 28, 32),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Spacer(flex: 3),
-              const _MeterLogo(),
-              const SizedBox(height: 44),
+              const Spacer(),
+              const RideXLogo(size: 84, textSize: 38),
+              const SizedBox(height: 30),
               const Text(
-                'RideX',
+                'Welcome to RideX',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 58,
+                  fontSize: 32,
                   fontWeight: FontWeight.w800,
-                  letterSpacing: 0,
                 ),
               ),
-              const Spacer(flex: 4),
-
-              const SizedBox(height: 16),
+              const SizedBox(height: 56),
               const Text(
-                'Fair rides, clear fares, safer trips',
+                "I'm new to RideX",
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Color(0xFF8A8A8A),
-                  fontSize: 19,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 0,
+                  color: Colors.white60,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: 72),
-              SizedBox(
-                width: double.infinity,
-                height: 58,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryBlue,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(32),
-                    ),
-                  ),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const AuthScreen()),
-                    );
-                  },
-                  child: const Text(
-                    'Get Started',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0,
-                    ),
-                  ),
+              const SizedBox(height: 14),
+              _WelcomeButton(
+                label: 'Get Started',
+                onTap: () => _openCreateAccount(context),
+              ),
+              const SizedBox(height: 34),
+              const Text(
+                'Already connected?',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white60,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: 28),
-              TextButton(
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  padding: EdgeInsets.zero,
-                ),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const AuthScreen()),
-                  );
-                },
-                child: const Text.rich(
-                  TextSpan(
-                    text: 'Already have an account? ',
-                    style: TextStyle(
-                      color: Color(0xFF8A8A8A),
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    children: [
-                      TextSpan(
-                        text: 'Sign In',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  ),
-                  textAlign: TextAlign.center,
-                ),
+              const SizedBox(height: 14),
+              _WelcomeButton(
+                label: 'Sign In',
+                onTap: () => _openSignIn(context),
               ),
-              const SizedBox(height: 18),
+              const Spacer(flex: 2),
             ],
           ),
         ),
@@ -112,61 +83,34 @@ class WelcomeScreen extends StatelessWidget {
   }
 }
 
-class _MeterLogo extends StatelessWidget {
-  const _MeterLogo();
+class _WelcomeButton extends StatelessWidget {
+  const _WelcomeButton({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox(
-      width: 160,
-      height: 128,
-      child: CustomPaint(painter: _MeterLogoPainter()),
+    return SizedBox(
+      height: 56,
+      child: ElevatedButton(
+        onPressed: onTap,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppTheme.primaryBlue,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
     );
   }
-}
-
-class _MeterLogoPainter extends CustomPainter {
-  const _MeterLogoPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const mint = AppTheme.primaryBlue;
-    final center = Offset(size.width * 0.5, size.height * 0.62);
-    final radius = size.width * 0.42;
-
-    final arcPaint = Paint()
-      ..color = mint
-      ..strokeWidth = 26
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.butt;
-
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      2.05,
-      4.02,
-      false,
-      arcPaint,
-    );
-
-    final needlePaint = Paint()
-      ..color = mint
-      ..style = PaintingStyle.fill;
-
-    final needle = Path()
-      ..moveTo(center.dx + 2, center.dy - 12)
-      ..lineTo(size.width * 0.98, center.dy)
-      ..lineTo(center.dx + 2, center.dy + 12)
-      ..close();
-    canvas.drawPath(needle, needlePaint);
-
-    canvas.drawCircle(center, 22, needlePaint);
-
-    final innerPaint = Paint()
-      ..color = Colors.black
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(center, 10, innerPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

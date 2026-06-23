@@ -47,7 +47,7 @@ class _HomeState extends State<Home> {
     final displayName = auth.customer?.name ?? 'there';
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppTheme.background,
 
       appBar: AppBar(
         title: const Text("RideX"),

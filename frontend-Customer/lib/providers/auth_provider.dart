@@ -9,12 +9,14 @@ class AuthProvider extends ChangeNotifier {
   String? _token;
   bool _loading = false;
   String? _error;
+  String? _latestDevOtp;
 
   CustomerModel? get customer => _customer;
   String? get token => _token;
   bool get isLoggedIn => _token != null;
   bool get loading => _loading;
   String? get error => _error;
+  String? get latestDevOtp => _latestDevOtp;
 
   /// Restore session from persistent storage on app start.
   /// This is called before the app UI is rendered to ensure seamless login state.
@@ -52,9 +54,18 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> requestOtp(String phone) async {
     _setLoading(true);
     try {
-      await ApiService.customerRequestOtp(phone);
+      final response = await ApiService.customerRequestOtp(phone);
+      final data = response.data;
+      if (data is Map) {
+        _latestDevOtp = data['devOtp']?.toString();
+      } else {
+        _latestDevOtp = null;
+      }
+      _error = null;
+      notifyListeners();
       return true;
     } on DioException catch (e) {
+      _latestDevOtp = null;
       _error = _extractMessage(e) ?? 'Failed to send OTP';
       notifyListeners();
       return false;
@@ -70,19 +81,36 @@ class AuthProvider extends ChangeNotifier {
     try {
       final res = await ApiService.customerVerifyOtp(phone, otp);
       final data = res.data as Map<String, dynamic>;
-      _token = data['token'] as String;
+      _token = (data['token'] ?? data['accessToken']) as String;
+      final refreshToken = data['refreshToken'] as String?;
       final customerData = data['customer'] as Map<String, dynamic>;
       _customer = CustomerModel.fromJson(customerData);
-      
-      // Persist token and customer data for session restore
-      await ApiService.saveToken(_token!);
-      await ApiService.saveCustomer(customerData);
+      _latestDevOtp = null;
+
+      try {
+        await ApiService.saveSession(
+          accessToken: _token!,
+          refreshToken: refreshToken,
+          customer: customerData,
+        );
+      } catch (e) {
+        if (kDebugMode) {
+          print('Session persistence failed after OTP verification: $e');
+        }
+      }
       
       _error = null;
       notifyListeners();
       return true;
     } on DioException catch (e) {
       _error = _extractMessage(e) ?? 'OTP verification failed';
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _error = 'OTP verification failed';
+      if (kDebugMode) {
+        print('Unexpected OTP verification error: $e');
+      }
       notifyListeners();
       return false;
     } finally {
@@ -92,15 +120,69 @@ class AuthProvider extends ChangeNotifier {
 
   // ── Register new customer ─────────────────────────────────────────────────
 
-  Future<bool> register(String name, String phone) async {
+  Future<bool> register({
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String phone,
+    required String password,
+  }) async {
     _setLoading(true);
     try {
-      await ApiService.customerRegister(name, phone);
+      await ApiService.customerRegister(
+        firstName: firstName,
+        lastName: lastName,
+        email: email,
+        phone: phone,
+        password: password,
+      );
       _error = null;
       notifyListeners();
       return true;
     } on DioException catch (e) {
       _error = _extractMessage(e) ?? 'Registration failed';
+      notifyListeners();
+      return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<bool> login({
+    required String identifier,
+    required String password,
+  }) async {
+    _setLoading(true);
+    try {
+      final res = await ApiService.customerLogin(
+        identifier: identifier,
+        password: password,
+      );
+      final data = res.data as Map<String, dynamic>;
+      _token = (data['token'] ?? data['accessToken']) as String;
+      final refreshToken = data['refreshToken'] as String?;
+      final customerData = data['customer'] as Map<String, dynamic>;
+      _customer = CustomerModel.fromJson(customerData);
+      _latestDevOtp = null;
+
+      await ApiService.saveSession(
+        accessToken: _token!,
+        refreshToken: refreshToken,
+        customer: customerData,
+      );
+
+      _error = null;
+      notifyListeners();
+      return true;
+    } on DioException catch (e) {
+      _error = _extractMessage(e) ?? 'Login failed';
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _error = 'Login failed';
+      if (kDebugMode) {
+        print('Unexpected login error: $e');
+      }
       notifyListeners();
       return false;
     } finally {
@@ -114,6 +196,7 @@ class AuthProvider extends ChangeNotifier {
     await ApiService.clearToken();
     _token = null;
     _customer = null;
+    _latestDevOtp = null;
     _error = null;
     notifyListeners();
   }

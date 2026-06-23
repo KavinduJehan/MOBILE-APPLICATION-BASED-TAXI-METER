@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../theme.dart';
+import 'nearby_drivers_screen.dart';
 import 'qr_scan.dart';
 
 class HomeTab extends StatelessWidget {
@@ -13,7 +14,7 @@ class HomeTab extends StatelessWidget {
     final displayName = auth.customer?.name ?? 'Guest';
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppTheme.background,
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(
@@ -36,7 +37,7 @@ class HomeTab extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1A1A1C),
+                    color: AppTheme.surface,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: const Color(0xFF333336)),
                   ),
@@ -92,7 +93,7 @@ class HomeTab extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1A1A1C),
+                      color: AppTheme.surface,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: AppTheme.primaryBlue, width: 1.5),
                     ),
@@ -130,43 +131,52 @@ class HomeTab extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
 
-                // Find nearby drivers button
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1A1A1C),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFF333336)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.search, color: AppTheme.primaryBlue, size: 28),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
-                            Text(
-                              'Find Nearby Drivers',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            SizedBox(height: 4),
-                            Text(
-                              'Browse available drivers around you',
-                              style: TextStyle(
-                                color: Color(0xFF8A8A8A),
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const NearbyDriversScreen(),
                       ),
-                      const Icon(Icons.arrow_forward_ios, color: Color(0xFF666666), size: 16),
-                    ],
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF333336)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.search, color: AppTheme.primaryBlue, size: 28),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Text(
+                                'Find Nearby Drivers',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'Browse available drivers around you',
+                                style: TextStyle(
+                                  color: Color(0xFF8A8A8A),
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.arrow_forward_ios, color: Color(0xFF666666), size: 16),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -216,7 +226,7 @@ class _SearchDestinationSheetState extends State<_SearchDestinationSheet> {
               hintText: 'Enter destination',
               hintStyle: const TextStyle(color: Color(0xFF666666)),
               filled: true,
-              fillColor: const Color(0xFF1A1A1C),
+              fillColor: AppTheme.surface,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
                 borderSide: const BorderSide(color: Color(0xFF333336)),

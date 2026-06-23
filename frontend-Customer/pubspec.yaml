@@ -39,8 +39,11 @@ dependencies:
   # Token persistence
   shared_preferences: ^2.2.0
 
-  # Secure storage skipped for now (causes Gradle network issues on first build).
-  # Re-add flutter_secure_storage: ^9.x when deploying to production.
+  # Secure session persistence
+  flutter_secure_storage: ^9.2.2
+
+  # Typography
+  google_fonts: ^6.2.1
 
   # State management
   provider: ^6.1.5

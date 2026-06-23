@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../screens/welcome_screen.dart';
+import '../theme.dart';
 
 class Profile extends StatelessWidget {
   const Profile({super.key});
@@ -13,6 +14,7 @@ class Profile extends StatelessWidget {
     final phone = auth.customer?.phone ?? '—';
 
     return Scaffold(
+      backgroundColor: AppTheme.background,
       appBar: AppBar(title: const Text("Profile")),
       body: Padding(
         padding: const EdgeInsets.all(20),
@@ -49,8 +51,8 @@ class Profile extends StatelessWidget {
               TextButton.icon(
                 onPressed: () {
                   auth.logout();
-                  Navigator.pushAndRemoveUntil(
-                    context,
+                  Navigator.of(context, rootNavigator: true)
+                      .pushAndRemoveUntil(
                     MaterialPageRoute(builder: (_) => const WelcomeScreen()),
                     (_) => false,
                   );

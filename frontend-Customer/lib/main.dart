@@ -3,12 +3,24 @@ import 'package:provider/provider.dart';
 import 'theme.dart';
 import 'screens/splash_screen.dart';
 import 'providers/auth_provider.dart';
+import 'providers/nearby_drivers_provider.dart';
+import 'providers/rate_provider.dart';
+import 'providers/trip_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  final authProvider = AuthProvider();
+  await authProvider.tryRestoreSession();
+
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => AuthProvider()..tryRestoreSession(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider<AuthProvider>.value(value: authProvider),
+        ChangeNotifierProvider(create: (_) => NearbyDriversProvider()),
+        ChangeNotifierProvider(create: (_) => RateProvider()),
+        ChangeNotifierProvider(create: (_) => TripProvider()),
+      ],
       child: const SmartTaxiMeterApp(),
     ),
   );
