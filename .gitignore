@@ -39,3 +39,11 @@ Flutter/ephemeral/
 
 # Environment files
 .env
+
+frontend/.dart_tool/
+frontend/.idea/
+frontend/windows/flutter/ephemeral/
+
+frontend-Customer/.dart_tool/
+frontend-Customer/build/
+frontend-Customer/.idea/
