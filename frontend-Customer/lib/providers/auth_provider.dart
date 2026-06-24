@@ -192,6 +192,47 @@ class AuthProvider extends ChangeNotifier {
 
   // ── Logout ────────────────────────────────────────────────────────────────
 
+  Future<bool> updateProfile({
+    required String name,
+    required String email,
+    required String phone,
+    required String birthday,
+    required String gender,
+    required String profileImage,
+  }) async {
+    _setLoading(true);
+    try {
+      final res = await ApiService.updateCustomerProfile({
+        'name': name,
+        'email': email,
+        'phone': phone,
+        'birthday': birthday,
+        'gender': gender,
+        'profileImage': profileImage,
+      });
+      final data = res.data as Map<String, dynamic>;
+      final customerData = data['customer'] as Map<String, dynamic>;
+      _customer = CustomerModel.fromJson(customerData);
+      await ApiService.saveCustomer(customerData);
+      _error = null;
+      notifyListeners();
+      return true;
+    } on DioException catch (e) {
+      _error = _extractMessage(e) ?? 'Profile update failed';
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _error = 'Profile update failed';
+      if (kDebugMode) {
+        print('Unexpected profile update error: $e');
+      }
+      notifyListeners();
+      return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   Future<void> logout() async {
     await ApiService.clearToken();
     _token = null;

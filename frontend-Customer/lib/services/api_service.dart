@@ -203,6 +203,9 @@ class ApiService {
   static Future<Response> customerVerifyOtp(String phone, String otp) =>
       _dio.post('/customers/verify-otp', data: {'phone': phone, 'otp': otp});
 
+  static Future<Response> updateCustomerProfile(Map<String, dynamic> body) =>
+      _dio.patch('/customers/profile', data: body);
+
   static Future<Response> getNearbyDrivers({String? area, String? query}) =>
       _dio.get(
         '/drivers/nearby',

@@ -38,9 +38,19 @@ class _ProfileTabState extends State<ProfileTab> {
     final profileJson = prefs.getString('${keyPrefix}_profile_details');
 
     if (!mounted) return;
+    final customerDetails = ProfileDetails(
+      nameOverride: auth.customer?.name ?? '',
+      phoneOverride: auth.customer?.phone ?? '',
+      emailOverride: auth.customer?.email ?? '',
+      birthday: auth.customer?.birthday ?? '',
+      gender: auth.customer?.gender ?? '',
+      hasProfilePicture: (auth.customer?.profileImage ?? '').isNotEmpty,
+      profileImage: auth.customer?.profileImage ?? '',
+    );
+    final storedDetails = ProfileDetails.fromJsonString(profileJson);
     setState(() {
       _savedAddresses = _decodeSavedAddresses(savedAddressJson);
-      _profileDetails = ProfileDetails.fromJsonString(profileJson);
+      _profileDetails = storedDetails.mergeFallback(customerDetails);
       _loadingProfileData = false;
     });
   }
@@ -58,6 +68,24 @@ class _ProfileTabState extends State<ProfileTab> {
   }
 
   Future<void> _saveProfileDetails(ProfileDetails details) async {
+    final auth = context.read<AuthProvider>();
+    final ok = await auth.updateProfile(
+      name: details.nameOverride,
+      email: details.emailOverride,
+      phone: details.phoneOverride,
+      birthday: details.birthday,
+      gender: details.gender,
+      profileImage: details.profileImage,
+    );
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(auth.error ?? 'Profile update failed')),
+      );
+      auth.clearError();
+      return;
+    }
+
     final prefs = await SharedPreferences.getInstance();
     final keyPrefix = _profileKeyPrefix(context.read<AuthProvider>().customer?.id);
     await prefs.setString('${keyPrefix}_profile_details', jsonEncode(details.toJson()));
@@ -100,6 +128,20 @@ class _ProfileTabState extends State<ProfileTab> {
                           ? ClipOval(
                               child: Image.file(
                                 File(_profileDetails.profileImagePath),
+                                width: 84,
+                                height: 84,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, _, _) => const Icon(
+                                  Icons.person,
+                                  size: 45,
+                                  color: AppTheme.primaryBlue,
+                                ),
+                              ),
+                            )
+                          : _profileDetails.profileImage.isNotEmpty
+                          ? ClipOval(
+                              child: Image.memory(
+                                base64Decode(_profileDetails.profileImage.split(',').last),
                                 width: 84,
                                 height: 84,
                                 fit: BoxFit.cover,
@@ -515,7 +557,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       ),
       clipBehavior: Clip.antiAlias,
       child: _details.profileImagePath.isEmpty
-          ? const Icon(Icons.person, color: AppTheme.primaryBlue, size: 54)
+          ? _details.profileImage.isEmpty
+              ? const Icon(Icons.person, color: AppTheme.primaryBlue, size: 54)
+              : Image.memory(
+                  base64Decode(_details.profileImage.split(',').last),
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => const Icon(
+                    Icons.person,
+                    color: AppTheme.primaryBlue,
+                    size: 54,
+                  ),
+                )
           : Image.file(
               File(_details.profileImagePath),
               fit: BoxFit.cover,
@@ -570,9 +622,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         maxWidth: 1200,
       );
       if (image == null || !mounted) return;
+      final bytes = await File(image.path).readAsBytes();
+      final encodedImage = 'data:image/jpeg;base64,${base64Encode(bytes)}';
       setState(() {
         _details = _details.copyWith(
           profileImagePath: image.path,
+          profileImage: encodedImage,
           hasProfilePicture: true,
         );
       });
@@ -946,6 +1001,7 @@ class ProfileDetails {
   final String gender;
   final bool hasProfilePicture;
   final String profileImagePath;
+  final String profileImage;
 
   const ProfileDetails({
     this.nameOverride = '',
@@ -956,6 +1012,7 @@ class ProfileDetails {
     this.gender = '',
     this.hasProfilePicture = false,
     this.profileImagePath = '',
+    this.profileImage = '',
   });
 
   ProfileDetails copyWith({
@@ -967,6 +1024,7 @@ class ProfileDetails {
     String? gender,
     bool? hasProfilePicture,
     String? profileImagePath,
+    String? profileImage,
   }) {
     return ProfileDetails(
       nameOverride: nameOverride ?? this.nameOverride,
@@ -977,6 +1035,21 @@ class ProfileDetails {
       gender: gender ?? this.gender,
       hasProfilePicture: hasProfilePicture ?? this.hasProfilePicture,
       profileImagePath: profileImagePath ?? this.profileImagePath,
+      profileImage: profileImage ?? this.profileImage,
+    );
+  }
+
+  ProfileDetails mergeFallback(ProfileDetails fallback) {
+    return ProfileDetails(
+      nameOverride: nameOverride.isNotEmpty ? nameOverride : fallback.nameOverride,
+      phoneOverride: phoneOverride.isNotEmpty ? phoneOverride : fallback.phoneOverride,
+      emailOverride: emailOverride.isNotEmpty ? emailOverride : fallback.emailOverride,
+      emailVerified: emailVerified,
+      birthday: birthday.isNotEmpty ? birthday : fallback.birthday,
+      gender: gender.isNotEmpty ? gender : fallback.gender,
+      hasProfilePicture: hasProfilePicture || fallback.hasProfilePicture,
+      profileImagePath: profileImagePath,
+      profileImage: profileImage.isNotEmpty ? profileImage : fallback.profileImage,
     );
   }
 
@@ -989,6 +1062,7 @@ class ProfileDetails {
         'gender': gender,
         'hasProfilePicture': hasProfilePicture,
         'profileImagePath': profileImagePath,
+        'profileImage': profileImage,
       };
 
   factory ProfileDetails.fromJsonString(String? source) {
@@ -1004,6 +1078,7 @@ class ProfileDetails {
         gender: json['gender'] as String? ?? '',
         hasProfilePicture: json['hasProfilePicture'] as bool? ?? false,
         profileImagePath: json['profileImagePath'] as String? ?? '',
+        profileImage: json['profileImage'] as String? ?? '',
       );
     } catch (_) {
       return const ProfileDetails();
