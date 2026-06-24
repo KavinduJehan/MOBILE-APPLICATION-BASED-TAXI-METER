@@ -14,28 +14,28 @@ build/
 .packages
 
 # Generated plugin files
-**/GeneratedPluginRegistrant.*
-**/generated_plugin_registrant.*
-**/generated_plugins.cmake
+/GeneratedPluginRegistrant.*
+/generated_plugin_registrant.*
+/generated_plugins.cmake
 
 # IDE
 .idea/
 .vscode/
 
 # Android
-**/android/.gradle/
-**/android/local.properties
+/android/.gradle/
+/android/local.properties
 
 # iOS/macOS
-**/Pods/
-**/Flutter/ephemeral/
+/Pods/
+Flutter/ephemeral/
 
 # Windows/Linux generated
-**/windows/flutter/ephemeral/
-**/linux/flutter/ephemeral/
+/windows/flutter/ephemeral/
+/linux/flutter/ephemeral/
 
 # Chrome debug profile
-**/.dart_tool/chrome-device/
+/.dart_tool/chrome-device/
 
 # Environment files
 .env
