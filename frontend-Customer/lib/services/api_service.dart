@@ -1,19 +1,28 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-/// Single entry point for all backend HTTP calls.
-///
-/// Base URL:
-///   - Android emulator  → http://10.0.2.2:5000/api
-///   - iOS simulator     → http://localhost:5000/api
-///   - Physical device   → replace with your machine's LAN IP, e.g. http://192.168.x.x:5000/api
-const String _baseUrl = 'http://10.0.2.2:5000/api';
+const String _baseUrl = kIsWeb
+    ? 'http://localhost:5000/api'
+    : 'http://10.0.2.2:5000/api';
 
-// Token held in memory for the session.
-// Replace with flutter_secure_storage when deploying to production.
+const String _tokenKey = 'auth_token';
+const String _refreshTokenKey = 'refresh_token';
+const String _customerKey = 'customer_data';
+const String _sessionTimestampKey = 'session_timestamp';
+const int _sessionExpiryDays = 30;
+const Duration _secureStorageTimeout = Duration(seconds: 3);
+
 String? _inMemoryToken;
+String? _inMemoryRefreshToken;
 
 class ApiService {
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
   static final Dio _dio = _buildDio();
+
+  static Dio get dio => _dio;
 
   static Dio _buildDio() {
     final dio = Dio(
@@ -25,18 +34,16 @@ class ApiService {
       ),
     );
 
-    // ── Request interceptor — attach JWT if present ──────────────────────────
     dio.interceptors.add(
       InterceptorsWrapper(
-        onRequest: (options, handler) async {
+        onRequest: (options, handler) {
           final token = _inMemoryToken;
-          if (token != null) {
+          if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
           }
           handler.next(options);
         },
         onError: (DioException error, handler) {
-          // Surface a clean message matching the backend's { message } shape
           final serverMsg = error.response?.data is Map
               ? error.response!.data['message'] as String?
               : null;
@@ -55,53 +62,217 @@ class ApiService {
     return dio;
   }
 
-  // ── Token helpers ─────────────────────────────────────────────────────────
+  static Future<void> saveSession({
+    required String accessToken,
+    String? refreshToken,
+    Map<String, dynamic>? customer,
+  }) async {
+    _inMemoryToken = accessToken;
+    _inMemoryRefreshToken = refreshToken;
 
-  static Future<void> saveToken(String token) async => _inMemoryToken = token;
+    final writes = <Future<void>>[
+      _writeSecure(_tokenKey, accessToken),
+      _writeSecure(
+        _sessionTimestampKey,
+        DateTime.now().millisecondsSinceEpoch.toString(),
+      ),
+      if (refreshToken != null && refreshToken.isNotEmpty)
+        _writeSecure(_refreshTokenKey, refreshToken),
+      if (customer != null) _writeSecure(_customerKey, jsonEncode(customer)),
+    ];
 
-  static Future<void> clearToken() async => _inMemoryToken = null;
+    await Future.wait(writes).timeout(_secureStorageTimeout);
+  }
 
-  static Future<String?> getToken() async => _inMemoryToken;
+  static Future<void> saveToken(String token) async {
+    await saveSession(accessToken: token);
+  }
 
-  // ── Customer Auth ─────────────────────────────────────────────────────────
+  static Future<void> clearToken() async {
+    _inMemoryToken = null;
+    _inMemoryRefreshToken = null;
+    await Future.wait([
+      _deleteSecure(_tokenKey),
+      _deleteSecure(_refreshTokenKey),
+      _deleteSecure(_customerKey),
+      _deleteSecure(_sessionTimestampKey),
+    ]).timeout(_secureStorageTimeout);
+  }
 
-  /// POST /api/customers/register  — first-time signup
-  static Future<Response> customerRegister(String name, String phone) =>
-      _dio.post('/customers/register', data: {'name': name, 'phone': phone});
+  static Future<String?> getToken() async {
+    _inMemoryToken ??= await _readSecure(_tokenKey);
+    return _inMemoryToken;
+  }
 
-  /// POST /api/customers/request-otp  — send OTP to existing account
+  static Future<String?> getRefreshToken() async {
+    _inMemoryRefreshToken ??= await _readSecure(_refreshTokenKey);
+    return _inMemoryRefreshToken;
+  }
+
+  static Future<void> saveCustomer(Map<String, dynamic> customer) async {
+    await _writeSecure(_customerKey, jsonEncode(customer));
+  }
+
+  static Future<Map<String, dynamic>?> getCustomer() async {
+    final jsonStr = await _readSecure(_customerKey);
+    if (jsonStr == null) return null;
+    try {
+      final decoded = jsonDecode(jsonStr);
+      return decoded is Map ? Map<String, dynamic>.from(decoded) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<String?> loadStoredToken() async {
+    final token = await _readSecure(_tokenKey);
+    final refreshToken = await _readSecure(_refreshTokenKey);
+    final timestampRaw = await _readSecure(_sessionTimestampKey);
+    final timestamp = int.tryParse(timestampRaw ?? '');
+
+    if (token == null || timestamp == null) return null;
+
+    final sessionAge = DateTime.now().difference(
+      DateTime.fromMillisecondsSinceEpoch(timestamp),
+    );
+
+    if (sessionAge.inDays < _sessionExpiryDays) {
+      _inMemoryToken = token;
+      _inMemoryRefreshToken = refreshToken;
+      return token;
+    }
+
+    final refreshed = await refreshAccessToken();
+    if (refreshed != null) return refreshed;
+    await clearToken();
+    return null;
+  }
+
+  static Future<String?> refreshAccessToken() async {
+    final refreshToken = await getRefreshToken();
+    if (refreshToken == null || refreshToken.isEmpty) return null;
+
+    try {
+      final response = await _dio.post(
+        '/customers/refresh-token',
+        data: {'refreshToken': refreshToken},
+        options: Options(headers: {'Authorization': null}),
+      );
+      final data = _asMap(response.data);
+      final token = (data['token'] ?? data['accessToken'])?.toString();
+      final newRefreshToken = data['refreshToken']?.toString();
+      if (token == null || token.isEmpty) return null;
+      await saveSession(
+        accessToken: token,
+        refreshToken: newRefreshToken ?? refreshToken,
+        customer: _asNullableMap(data['customer']),
+      );
+      return token;
+    } on DioException {
+      return null;
+    }
+  }
+
+  static Future<Response> customerRegister({
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String phone,
+    required String password,
+  }) =>
+      _dio.post('/customers/register', data: {
+        'firstName': firstName,
+        'lastName': lastName,
+        'email': email,
+        'phone': phone,
+        'password': password,
+      });
+
+  static Future<Response> customerLogin({
+    required String identifier,
+    required String password,
+  }) =>
+      _dio.post('/customers/login', data: {
+        'identifier': identifier,
+        'password': password,
+      });
+
   static Future<Response> customerRequestOtp(String phone) =>
       _dio.post('/customers/request-otp', data: {'phone': phone});
 
-  /// POST /api/customers/verify-otp  — validate OTP, returns JWT + customer
   static Future<Response> customerVerifyOtp(String phone, String otp) =>
       _dio.post('/customers/verify-otp', data: {'phone': phone, 'otp': otp});
 
-  // ── Drivers (read-only — customer looks up driver info) ──────────────────
+  static Future<Response> updateCustomerProfile(Map<String, dynamic> body) =>
+      _dio.patch('/customers/profile', data: body);
 
-  /// GET /api/drivers/nearby?area=
-  static Future<Response> getNearbyDrivers({String? area}) => _dio.get(
-    '/drivers/nearby',
-    queryParameters: area != null ? {'area': area} : {},
-  );
+  static Future<Response> getNearbyDrivers({String? area, String? query}) =>
+      _dio.get(
+        '/drivers/nearby',
+        queryParameters: {
+          if (area != null && area.trim().isNotEmpty) 'area': area.trim(),
+          if (query != null && query.trim().isNotEmpty) 'q': query.trim(),
+        },
+      );
 
-  /// GET /api/drivers/qr/:qrToken
   static Future<Response> getDriverByQR(String qrToken) =>
       _dio.get('/drivers/qr/$qrToken');
 
-  // ── Rates (read-only — customer compares rates) ───────────────────────────
-
-  /// GET /api/rates?area=
   static Future<Response> getAreaRates(String area) =>
-      _dio.get('/rates', queryParameters: {'area': area});
+      _dio.get('/rates/area', queryParameters: {'area': area});
 
-  // ── Ride Requests ─────────────────────────────────────────────────────────
-
-  /// POST /api/ride-requests  — customer JWT required
   static Future<Response> createRideRequest(Map<String, dynamic> body) =>
       _dio.post('/ride-requests', data: body);
 
-  /// GET /api/ride-requests/:id/status  — customer polls
   static Future<Response> getRequestStatus(String requestId) =>
       _dio.get('/ride-requests/$requestId/status');
+
+  static Future<Response> createTrip(Map<String, dynamic> body) =>
+      _dio.post('/trips', data: body);
+
+  static Future<Response> startTrip(String tripId) =>
+      _dio.patch('/trips/$tripId/start');
+
+  static Future<Response> endTrip(String tripId) =>
+      _dio.patch('/trips/$tripId/end');
+
+  static Future<Response> getTripDetails(String tripId) =>
+      _dio.get('/trips/$tripId');
+
+  static Future<Response> getMyTrips({int page = 1, int limit = 20}) => _dio.get(
+        '/trips/my',
+        queryParameters: {'page': page, 'limit': limit},
+      );
+
+  static Future<Response> getReceiptByTripId(String tripId) =>
+      _dio.get('/receipts/trip/$tripId');
+
+  static Map<String, dynamic> _asMap(Object? data) {
+    if (data is Map<String, dynamic>) return data;
+    if (data is Map) return Map<String, dynamic>.from(data);
+    return {};
+  }
+
+  static Map<String, dynamic>? _asNullableMap(Object? data) {
+    if (data == null) return null;
+    return _asMap(data);
+  }
+
+  static Future<void> _writeSecure(String key, String value) async {
+    await _secureStorage
+        .write(key: key, value: value)
+        .timeout(_secureStorageTimeout);
+  }
+
+  static Future<String?> _readSecure(String key) async {
+    try {
+      return await _secureStorage.read(key: key).timeout(_secureStorageTimeout);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> _deleteSecure(String key) async {
+    await _secureStorage.delete(key: key).timeout(_secureStorageTimeout);
+  }
 }

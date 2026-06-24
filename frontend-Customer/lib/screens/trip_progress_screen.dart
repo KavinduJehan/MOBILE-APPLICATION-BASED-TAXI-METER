@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+
+import '../models/trip_model.dart';
+import '../repositories/trip_repository.dart';
 import 'trip_summary_screen.dart';
 
-class TripProgressScreen extends StatelessWidget {
+class TripProgressScreen extends StatefulWidget {
   final String requestId;
   final Map<String, dynamic> driver;
+  final TripModel? trip;
   final double distanceKm;
   final double ratePerKm;
   final double totalFare;
@@ -12,15 +16,31 @@ class TripProgressScreen extends StatelessWidget {
     super.key,
     required this.requestId,
     required this.driver,
+    this.trip,
     required this.distanceKm,
     required this.ratePerKm,
     required this.totalFare,
   });
 
   @override
+  State<TripProgressScreen> createState() => _TripProgressScreenState();
+}
+
+class _TripProgressScreenState extends State<TripProgressScreen> {
+  final _repository = const TripRepository();
+  bool _ending = false;
+  String? _error;
+
+  @override
   Widget build(BuildContext context) {
-    final driverName = driver['name'] as String? ?? 'Driver';
-    final vehicleNumber = driver['vehicleNumber'] as String? ?? '—';
+    final driverName =
+        widget.trip?.driverName ?? (widget.driver['name'] as String?) ?? 'Driver';
+    final vehicleNumber = widget.trip?.vehicleNumber ??
+        (widget.driver['vehicleNumber'] as String?) ??
+        '-';
+    final distanceKm = widget.trip?.distanceKm ?? widget.distanceKm;
+    final ratePerKm = widget.trip?.ratePerKm ?? widget.ratePerKm;
+    final totalFare = widget.trip?.totalFare ?? widget.totalFare;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Trip In Progress')),
@@ -62,14 +82,20 @@ class TripProgressScreen extends StatelessWidget {
                 ),
               ),
             ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(_error!, style: const TextStyle(color: Colors.redAccent)),
+            ],
             const Spacer(),
             SizedBox(
               width: double.infinity,
               height: 50,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                onPressed: () => _confirmEndTrip(context),
-                child: const Text('End Trip'),
+                onPressed: _ending ? null : () => _confirmEndTrip(context),
+                child: _ending
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Text('End Trip'),
               ),
             ),
           ],
@@ -79,12 +105,17 @@ class TripProgressScreen extends StatelessWidget {
   }
 
   void _confirmEndTrip(BuildContext context) {
+    if (widget.trip == null || widget.trip!.id.isEmpty) {
+      setState(() => _error = 'Trip details are not available yet. Please try again.');
+      return;
+    }
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('End Trip?'),
         content: const Text(
-          'Are you sure you want to end the trip? The driver will be notified.',
+          'Are you sure you want to end the trip? The final receipt will be generated.',
         ),
         actions: [
           TextButton(
@@ -93,25 +124,37 @@ class TripProgressScreen extends StatelessWidget {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => TripSummaryScreen(
-                    driverName: driver['name'] as String? ?? '—',
-                    vehicleNumber: driver['vehicleNumber'] as String? ?? '—',
-                    distanceKm: distanceKm,
-                    ratePerKm: ratePerKm,
-                    totalFare: totalFare,
-                  ),
-                ),
-              );
+              await _endTrip();
             },
             child: const Text('End Trip'),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _endTrip() async {
+    setState(() {
+      _ending = true;
+      _error = null;
+    });
+
+    try {
+      final (trip, receipt) = await _repository.endTrip(widget.trip!.id);
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => TripSummaryScreen(trip: trip, receipt: receipt),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = 'Failed to end trip. Please try again.');
+    } finally {
+      if (mounted) setState(() => _ending = false);
+    }
   }
 }
