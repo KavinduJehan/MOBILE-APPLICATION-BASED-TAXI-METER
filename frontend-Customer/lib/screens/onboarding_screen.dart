@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
-import 'main_navigation.dart';
+import 'home.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -45,7 +45,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     if (_page == _steps.length - 1) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const MainNavigation()),
+        MaterialPageRoute(builder: (_) => const Home()),
       );
       return;
     }
@@ -61,7 +61,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final isLast = _page == _steps.length - 1;
 
     return Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: Colors.black,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(24, 28, 24, 28),
@@ -74,7 +74,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   onPressed: () {
                     Navigator.pushReplacement(
                       context,
-                      MaterialPageRoute(builder: (_) => const MainNavigation()),
+                      MaterialPageRoute(builder: (_) => const Home()),
                     );
                   },
                   child: const Text(
@@ -158,9 +158,9 @@ class _OnboardingPage extends StatelessWidget {
           width: 132,
           height: 132,
           decoration: BoxDecoration(
-            color: const Color(0xFF001A4D),
+            color: const Color(0xFF0B1220),
             shape: BoxShape.circle,
-            border: Border.all(color: AppTheme.primaryBlue, width: 2),
+            border: Border.all(color: const Color(0xFF1D4ED8), width: 2),
           ),
           child: Icon(step.icon, color: AppTheme.primaryBlue, size: 58),
         ),

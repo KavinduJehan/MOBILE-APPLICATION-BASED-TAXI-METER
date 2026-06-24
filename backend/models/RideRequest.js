@@ -3,7 +3,6 @@ const mongoose = require('mongoose');
 const rideRequestSchema = new mongoose.Schema(
   {
     driver: { type: mongoose.Schema.Types.ObjectId, ref: 'Driver', required: true },
-    customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', default: null },
 
     // Customer info — anonymous by default
     customerName: { type: String, default: 'Anonymous' },

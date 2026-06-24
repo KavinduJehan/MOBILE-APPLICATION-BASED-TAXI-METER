@@ -14,8 +14,7 @@ class DriverVerificationScreen extends StatelessWidget {
     final name = driver['name'] as String? ?? '—';
     final vehicleNumber = driver['vehicleNumber'] as String? ?? '—';
     final licenseNumber = driver['licenseNumber'] as String? ?? '—';
-    final area = driver['area'] as String?;
-    final displayArea = area ?? '—';
+    final area = driver['area'] as String? ?? '—';
     final rate = (driver['ratePerKm'] as num?)?.toDouble() ?? 0.0;
     final isVerified = driver['isVerified'] as bool? ?? false;
 
@@ -68,7 +67,7 @@ class DriverVerificationScreen extends StatelessWidget {
 
                 _infoRow(Icons.directions_car, 'Vehicle No', vehicleNumber),
                 _infoRow(Icons.badge, 'License No', licenseNumber),
-                _infoRow(Icons.location_on, 'Area', displayArea),
+                _infoRow(Icons.location_on, 'Area', area),
                 _infoRow(
                   Icons.payments,
                   'Rate per km',
@@ -81,10 +80,7 @@ class DriverVerificationScreen extends StatelessWidget {
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => RateComparison(
-                        area: area,
-                        driverRate: rate,
-                      ),
+                      builder: (_) => RateComparison(area: area),
                     ),
                   ),
                   child: const Text('Compare Rate'),

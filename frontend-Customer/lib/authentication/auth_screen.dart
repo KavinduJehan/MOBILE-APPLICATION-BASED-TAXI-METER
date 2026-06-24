@@ -1,11 +1,7 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
+﻿import 'package:flutter/material.dart';
 
-import '../providers/auth_provider.dart';
-import '../theme.dart';
-import '../widgets/brand_logo.dart';
 import 'phone_verification_screen.dart';
+import '../theme.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -15,12 +11,15 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
-  final _formKey = GlobalKey<FormState>();
   final _phoneController = TextEditingController();
 
-  String? _error;
+  bool get _canContinue => _phoneController.text.trim().isNotEmpty;
 
-  String get _otpPhoneNumber => '0${_phoneController.text.trim()}';
+  @override
+  void initState() {
+    super.initState();
+    _phoneController.addListener(() => setState(() {}));
+  }
 
   @override
   void dispose() {
@@ -28,163 +27,139 @@ class _AuthScreenState extends State<AuthScreen> {
     super.dispose();
   }
 
-  void _continueWithOtp() {
-    FocusScope.of(context).unfocus();
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _error = null);
+  void _continue() {
+    if (!_canContinue) return;
+    final phone = '+94${_phoneController.text.trim()}';
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => PhoneVerificationScreen(phoneNumber: _otpPhoneNumber),
+        builder: (_) => PhoneVerificationScreen(phoneNumber: phone),
       ),
     );
   }
 
-  String? _validatePhone(String? value) {
-    final digits = value?.trim() ?? '';
-    if (digits.isEmpty) return 'Phone number is required';
-    if (!RegExp(r'^[1-9]\d{8}$').hasMatch(digits)) {
-      return 'Enter the 9 digits after +94';
-    }
-    return null;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
-
     return Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: Colors.black,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: IconButton(
-                  onPressed: () => Navigator.maybePop(context),
-                  icon: const Icon(Icons.arrow_back),
-                  color: Colors.white,
-                  tooltip: 'Back',
-                ),
-              ),
-              const SizedBox(height: 8),
-              const RideXLogo(size: 78, textSize: 34),
-              const SizedBox(height: 28),
-              const Text(
-                'Sign In',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Please enter your mobile number to sign in.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white60,
-                  fontSize: 15,
-                  height: 1.35,
-                ),
-              ),
-              const SizedBox(height: 28),
-              _PhoneSignInForm(
-                formKey: _formKey,
-                phoneController: _phoneController,
-                validatePhone: _validatePhone,
-                onSubmit: auth.loading ? null : _continueWithOtp,
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Text(
-                  _error!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.redAccent, fontSize: 14),
-                ),
-              ],
-              const SizedBox(height: 28),
-              SizedBox(
-                height: 58,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryBlue,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18),
+        child: Column(
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Welcome to RideX',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0,
+                      ),
                     ),
-                  ),
-                  onPressed: auth.loading ? null : _continueWithOtp,
-                  child: auth.loading
-                      ? const SizedBox(
-                          height: 22,
-                          width: 22,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2.5,
-                          ),
-                        )
-                      : const Text(
-                          'Send OTP',
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Enter your mobile number to sign in or create an account',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Color(0xFF9A9A9A),
+                        fontSize: 18,
+                        height: 1.25,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 40),
+                    // Phone input
+                    Row(
+                      children: [
+                        const Text(
+                          '\u{1F1F1}\u{1F1F0}',
+                          style: TextStyle(fontSize: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          '+94',
                           style: TextStyle(
-                            fontSize: 17,
+                            color: Color(0xFF9A9A9A),
+                            fontSize: 22,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: _phoneController,
+                            autofocus: true,
+                            keyboardType: TextInputType.phone,
+                            cursorColor: AppTheme.primaryBlue,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            decoration: const InputDecoration(
+                              hintText: '71 234 5678',
+                              hintStyle: TextStyle(
+                                color: Color(0xFF5F5F62),
+                                fontSize: 22,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                            onSubmitted: (_) => _continue(),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      "We'll send a 6-digit code to verify your number.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Color(0xFF9A9A9A),
+                        fontSize: 15,
+                        height: 1.3,
+                      ),
+                    ),
+                    const Spacer(),
+                    SizedBox(
+                      height: 58,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _canContinue
+                              ? AppTheme.primaryBlue
+                              : const Color(0xFF2A2A2C),
+                          foregroundColor: _canContinue
+                              ? Colors.white
+                              : const Color(0xFF77777A),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(32),
+                          ),
+                        ),
+                        onPressed: _canContinue ? _continue : null,
+                        child: const Text(
+                          'Continue',
+                          style: TextStyle(
+                            fontSize: 19,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-      ),
-    );
-  }
-}
-
-class _PhoneSignInForm extends StatelessWidget {
-  const _PhoneSignInForm({
-    // ignore: unused_element_parameter
-    super.key,
-    required this.formKey,
-    required this.phoneController,
-    required this.validatePhone,
-    required this.onSubmit,
-  });
-
-  final GlobalKey<FormState> formKey;
-  final TextEditingController phoneController;
-  final String? Function(String?) validatePhone;
-  final VoidCallback? onSubmit;
-
-  @override
-  Widget build(BuildContext context) {
-    return Form(
-      key: formKey,
-      child: TextFormField(
-        controller: phoneController,
-        keyboardType: TextInputType.phone,
-        inputFormatters: [
-          FilteringTextInputFormatter.digitsOnly,
-          LengthLimitingTextInputFormatter(9),
-        ],
-        cursorColor: AppTheme.primaryBlue,
-        style: const TextStyle(color: Colors.white, fontSize: 16),
-        decoration: const InputDecoration(
-          labelText: 'Phone Number',
-          prefixText: '+94 ',
-          prefixStyle: TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        validator: validatePhone,
-        onFieldSubmitted: (_) => onSubmit?.call(),
       ),
     );
   }

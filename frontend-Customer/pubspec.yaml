@@ -1,5 +1,5 @@
-name: customer_app
-description: "A customer app for the EE5206 taxi meter project."
+name: taxi_meter_app
+description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -36,23 +36,14 @@ dependencies:
   # HTTP client
   dio: ^5.8.0+1
 
-  # Token persistence
-  shared_preferences: ^2.2.0
-
-  # Secure session persistence
-  flutter_secure_storage: ^9.2.2
-
-  # Typography
-  google_fonts: ^6.2.1
+  # Secure storage skipped for now (causes Gradle network issues on first build).
+  # Re-add flutter_secure_storage: ^9.x when deploying to production.
 
   # State management
   provider: ^6.1.5
 
   # QR / barcode camera scanning
-  mobile_scanner: ^7.2.0
-
-  # Camera and gallery profile image selection
-  image_picker: ^1.1.2
+  mobile_scanner: ^4.0.0
 
   # Firebase — skipped for now, add when OTP login is needed
   # firebase_core: ^3.13.0
@@ -79,9 +70,6 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
-
-  assets:
-    - assets/ads/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

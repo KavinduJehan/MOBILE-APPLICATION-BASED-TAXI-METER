@@ -3,7 +3,6 @@ const mongoose = require('mongoose');
 const tripSchema = new mongoose.Schema(
   {
     driver: { type: mongoose.Schema.Types.ObjectId, ref: 'Driver', required: true },
-    customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', default: null },
     customerName: { type: String, default: 'Anonymous' },
     startLocation: { type: String, required: true },
     endLocation: { type: String, required: true },

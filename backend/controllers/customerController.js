@@ -2,165 +2,63 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const Customer = require('../models/Customer');
 
-const publicCustomer = (customer) => ({
-  id: customer._id,
-  firstName: customer.firstName || customer.name?.split(' ')[0] || '',
-  lastName: customer.lastName || '',
-  name: customer.name,
-  email: customer.email || '',
-  phone: customer.phone,
-});
+// POST /api/customers/register
+// First-time signup — name + phone only
+const register = async (req, res) => {
+  const { name, phone } = req.body;
+  if (!name || !phone) {
+    return res.status(400).json({ message: 'name and phone are required' });
+  }
 
-const signAccessToken = (customer) =>
-  jwt.sign(
-    {
+  try {
+    const existing = await Customer.findOne({ phone });
+    if (existing) {
+      return res.status(409).json({ message: 'Phone number already registered' });
+    }
+
+    const customer = await Customer.create({ name, phone });
+    res.status(201).json({
       id: customer._id,
       name: customer.name,
       phone: customer.phone,
-      role: 'customer',
-    },
-    process.env.JWT_SECRET,
-    { expiresIn: '30d' }
-  );
-
-const signRefreshToken = (customer) =>
-  jwt.sign(
-    { id: customer._id, type: 'refresh', role: 'customer' },
-    process.env.JWT_SECRET,
-    { expiresIn: '60d' }
-  );
-
-const isProduction = () => process.env.NODE_ENV === 'production';
-const normalizePhone = (phone) => String(phone || '').trim();
-const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
-const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-const isValidSriLankanPhone = (phone) => /^0[1-9]\d{8}$/.test(phone);
-
-const issueSession = (customer) => {
-  const token = signAccessToken(customer);
-  return {
-    token,
-    accessToken: token,
-    refreshToken: signRefreshToken(customer),
-    customer: publicCustomer(customer),
-  };
-};
-
-// POST /api/customers/register
-const register = async (req, res) => {
-  const firstName = String(req.body.firstName || '').trim();
-  const lastName = String(req.body.lastName || '').trim();
-  const email = normalizeEmail(req.body.email);
-  const phone = normalizePhone(req.body.phone);
-  const password = String(req.body.password || '');
-
-  if (!firstName || !lastName || !email || !phone || !password) {
-    return res.status(400).json({
-      message: 'firstName, lastName, email, phone, and password are required',
     });
-  }
-  if (!isValidEmail(email)) {
-    return res.status(400).json({ message: 'Valid email is required' });
-  }
-  if (!isValidSriLankanPhone(phone)) {
-    return res
-      .status(400)
-      .json({ message: 'Valid Sri Lankan phone number is required' });
-  }
-  if (password.length < 6) {
-    return res
-      .status(400)
-      .json({ message: 'Password must be at least 6 characters' });
-  }
-
-  try {
-    const existing = await Customer.findOne({ $or: [{ phone }, { email }] });
-    if (existing) {
-      return res.status(409).json({
-        message:
-          existing.phone === phone
-            ? 'Phone number already registered'
-            : 'Email already registered',
-      });
-    }
-
-    const customer = await Customer.create({
-      firstName,
-      lastName,
-      name: `${firstName} ${lastName}`.trim(),
-      email,
-      phone,
-      password,
-    });
-    res.status(201).json(publicCustomer(customer));
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// POST /api/customers/login
-const login = async (req, res) => {
-  const identifier = String(req.body.identifier || '').trim();
-  const password = String(req.body.password || '');
-
-  if (!identifier || !password) {
-    return res
-      .status(400)
-      .json({ message: 'identifier and password are required' });
-  }
-
-  try {
-    const customer = await Customer.findOne({
-      $or: [{ email: identifier.toLowerCase() }, { phone: identifier }],
-    });
-    if (!customer || !(await customer.comparePassword(password))) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-
-    res.json(issueSession(customer));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
 // POST /api/customers/request-otp
+// Generates a 6-digit OTP and logs it to console (replace with SMS in production)
 const requestOtp = async (req, res) => {
-  const phone = normalizePhone(req.body.phone);
+  const { phone } = req.body;
   if (!phone) return res.status(400).json({ message: 'phone is required' });
 
   try {
     const customer = await Customer.findOne({ phone });
     if (!customer) {
-      return res
-        .status(404)
-        .json({ message: 'No account found for this phone number' });
+      return res.status(404).json({ message: 'No account found for this phone number' });
     }
 
     const otp = String(Math.floor(100000 + Math.random() * 900000));
     const hashedOtp = await bcrypt.hash(otp, 10);
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
     customer.otp = hashedOtp;
-    customer.otpDebug = isProduction() ? undefined : otp;
-    customer.otpExpiry = expiresAt;
+    customer.otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // valid for 10 minutes
     await customer.save();
 
+    // TODO: replace with real SMS gateway before production
     console.log(`[OTP] Phone: ${phone}  OTP: ${otp}`);
 
-    res.json({
-      message: 'OTP sent',
-      expiresAt,
-      ...(!isProduction() ? { devOtp: otp } : {}),
-    });
+    res.json({ message: 'OTP sent' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
 // POST /api/customers/verify-otp
+// Validates OTP and returns a JWT (30-day session)
 const verifyOtp = async (req, res) => {
-  const phone = normalizePhone(req.body.phone);
-  const otp = String(req.body.otp || '').trim();
+  const { phone, otp } = req.body;
   if (!phone || !otp) {
     return res.status(400).json({ message: 'phone and otp are required' });
   }
@@ -168,56 +66,36 @@ const verifyOtp = async (req, res) => {
   try {
     const customer = await Customer.findOne({ phone });
     if (!customer) {
-      return res
-        .status(404)
-        .json({ message: 'No account found for this phone number' });
+      return res.status(404).json({ message: 'No account found for this phone number' });
     }
 
     if (!customer.otpExpiry || customer.otpExpiry < new Date()) {
-      return res
-        .status(400)
-        .json({ message: 'OTP has expired, request a new one' });
+      return res.status(400).json({ message: 'OTP has expired, request a new one' });
     }
 
-    const valid =
-      (await customer.compareOtp(otp)) ||
-      (!isProduction() && customer.otpDebug === otp);
+    const valid = await customer.compareOtp(otp);
     if (!valid) {
       return res.status(400).json({ message: 'Invalid OTP' });
     }
 
+    // Clear OTP after successful use
     customer.otp = undefined;
-    customer.otpDebug = undefined;
     customer.otpExpiry = undefined;
     await customer.save();
 
-    res.json(issueSession(customer));
+    const token = jwt.sign(
+      { id: customer._id, name: customer.name, phone: customer.phone, role: 'customer' },
+      process.env.JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    res.json({
+      token,
+      customer: { id: customer._id, name: customer.name, phone: customer.phone },
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
-const refreshToken = async (req, res) => {
-  const { refreshToken: token } = req.body;
-  if (!token) {
-    return res.status(400).json({ message: 'refreshToken is required' });
-  }
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (decoded.type !== 'refresh' || decoded.role !== 'customer') {
-      return res.status(401).json({ message: 'Invalid refresh token' });
-    }
-
-    const customer = await Customer.findById(decoded.id);
-    if (!customer) {
-      return res.status(404).json({ message: 'Customer not found' });
-    }
-
-    res.json(issueSession(customer));
-  } catch {
-    return res.status(401).json({ message: 'Invalid refresh token' });
-  }
-};
-
-module.exports = { register, login, requestOtp, verifyOtp, refreshToken };
+module.exports = { register, requestOtp, verifyOtp };

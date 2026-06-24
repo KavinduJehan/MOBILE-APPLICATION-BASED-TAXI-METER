@@ -33,13 +33,11 @@ double _haversineKm(double lat1, double lng1, double lat2, double lng2) {
 class RideRequestScreen extends StatefulWidget {
   final Map<String, dynamic> driver;
   final double? suggestedRatePerKm;
-  final String? initialDestination;
 
   const RideRequestScreen({
     super.key,
     required this.driver,
     this.suggestedRatePerKm,
-    this.initialDestination,
   });
 
   @override
@@ -51,20 +49,6 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
   String _dest = 'Galle';
   bool _loading = false;
   String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    final initialDestination = widget.initialDestination?.trim().toLowerCase();
-    if (initialDestination == null || initialDestination.isEmpty) return;
-
-    final matchedCity = _cities.keys.where(
-      (city) => city.toLowerCase() == initialDestination,
-    );
-    if (matchedCity.isNotEmpty) {
-      _dest = matchedCity.first;
-    }
-  }
 
   double get _rate =>
       widget.suggestedRatePerKm ??

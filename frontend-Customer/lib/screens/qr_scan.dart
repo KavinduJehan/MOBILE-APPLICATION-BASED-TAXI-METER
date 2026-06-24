@@ -67,7 +67,7 @@ class _QRScanState extends State<QRScan> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: Colors.black,
       appBar: AppBar(title: const Text('Scan Driver QR')),
       body: Stack(
         children: [
