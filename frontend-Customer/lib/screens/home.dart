@@ -5,43 +5,40 @@ import 'profile.dart';
 import '../providers/auth_provider.dart';
 import '../theme.dart';
 
-class Home extends StatelessWidget {
+class Home extends StatefulWidget {
   const Home({super.key});
 
-  Widget menuCard({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return Card(
-      elevation: 0,
-      color: const Color(0xFF111111),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: Color(0xFF242A36)),
-      ),
-      child: ListTile(
-        onTap: onTap,
-        leading: Icon(icon, color: AppTheme.primaryBlue, size: 32),
-        title: Text(
-          title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        subtitle: Text(
-          subtitle,
-          style: const TextStyle(color: Color(0xFF9CA3AF)),
-        ),
-        trailing: const Icon(
-          Icons.arrow_forward_ios,
-          color: Color(0xFF64748B),
-          size: 18,
-        ),
-      ),
-    );
+  @override
+  State<Home> createState() => _HomeState();
+}
+
+class _HomeState extends State<Home> {
+  int _selectedIndex = 0;
+
+  void _onItemTapped(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+
+    switch (index) {
+      case 1:
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => QRScan()),
+        );
+        break;
+
+      case 2:
+        // Navigate to Trips page
+        break;
+
+      case 3:
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const Profile()),
+        );
+        break;
+    }
   }
 
   @override
@@ -50,7 +47,8 @@ class Home extends StatelessWidget {
     final displayName = auth.customer?.name ?? 'there';
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppTheme.background,
+
       appBar: AppBar(
         title: const Text("RideX"),
         actions: const [
@@ -60,17 +58,22 @@ class Home extends StatelessWidget {
           ),
         ],
       ),
+
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Greeting Card (UNCHANGED)
             Container(
+              width: double.infinity,
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
-                color: const Color(0xFF0B1220),
+                color: const Color(0xFF001A4D),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFF1D4ED8)),
+                border: Border.all(
+                  color: AppTheme.primaryBlue,
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -89,49 +92,94 @@ class Home extends StatelessWidget {
                     style: TextStyle(
                       color: Color(0xFF9CA3AF),
                       fontSize: 14,
-                      height: 1.35,
                     ),
                   ),
                 ],
               ),
             ),
+
+            const SizedBox(height: 24),
+
+            // Search Section
+            const Text(
+              "Where do you want to go?",
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+
             const SizedBox(height: 16),
-            menuCard(
-              icon: Icons.qr_code_scanner,
-              title: "Scan Driver QR",
-              subtitle: "Scan driver QR code",
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => QRScan()),
-                );
-              },
+
+            TextField(
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: "Enter destination",
+                hintStyle: const TextStyle(
+                  color: Color(0xFF9CA3AF),
+                ),
+                prefixIcon: const Icon(
+                  Icons.search,
+                  color: AppTheme.primaryBlue,
+                ),
+                filled: true,
+                fillColor: const Color(0xFF111111),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF242A36),
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF242A36),
+                  ),
+                ),
+              ),
             ),
-            menuCard(
-              icon: Icons.search,
-              title: "Search Nearby Drivers",
-              subtitle: "Find available drivers near you",
-              onTap: () {},
-            ),
-            menuCard(
-              icon: Icons.receipt_long,
-              title: "My Trips",
-              subtitle: "View your trip history",
-              onTap: () {},
-            ),
-            menuCard(
-              icon: Icons.person,
-              title: "Profile",
-              subtitle: "Manage your profile",
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const Profile()),
-                );
-              },
+
+            const SizedBox(height: 24),
+
+            Expanded(
+              child: Center(
+                child: Icon(
+                  Icons.location_city,
+                  size: 120,
+                  color: Colors.grey.shade800,
+                ),
+              ),
             ),
           ],
         ),
+      ),
+
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _selectedIndex,
+        onTap: _onItemTapped,
+        backgroundColor: const Color(0xFF111111),
+        selectedItemColor: AppTheme.primaryBlue,
+        unselectedItemColor: Colors.grey,
+        type: BottomNavigationBarType.fixed,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home),
+            label: "Home",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.qr_code_scanner),
+            label: "QR",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.receipt_long),
+            label: "Trips",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person),
+            label: "Profile",
+          ),
+        ],
       ),
     );
   }

@@ -20,7 +20,7 @@ const createRideRequest = async (req, res) => {
   } = req.body;
 
   // Customer name comes from the verified JWT — not from the request body
-  const customerName = req.user.name;
+  const customerName = req.user?.name || req.body.customerName || 'Anonymous';
 
   if (!driverId || pickupLat == null || pickupLng == null ||
       destLat == null || destLng == null || !estimatedDistanceKm) {
@@ -45,6 +45,7 @@ const createRideRequest = async (req, res) => {
 
     const rideRequest = await RideRequest.create({
       driver: driverId,
+      customer: req.user?.role === 'customer' ? req.user.id : null,
       customerName,
       pickupLat,
       pickupLng,
@@ -82,8 +83,8 @@ const getIncomingRequests = async (req, res) => {
 const getRequestStatus = async (req, res) => {
   try {
     const rideRequest = await RideRequest.findById(req.params.id)
-      .populate('trip', 'status startTime totalFare')
-      .populate('driver', 'name vehicleNumber phone');
+      .populate('trip', 'driver customer customerName startLocation endLocation distanceKm ratePerKm totalFare status startTime endTime createdAt')
+      .populate('driver', 'name vehicleNumber vehicleType phone area ratePerKm');
     if (!rideRequest) return res.status(404).json({ message: 'Ride request not found' });
     res.json(rideRequest);
   } catch (err) {
@@ -130,6 +131,7 @@ const respondToRequest = async (req, res) => {
     // Auto-create the trip
     const trip = await Trip.create({
       driver: req.user.id,
+      customer: rideRequest.customer || null,
       customerName: rideRequest.customerName,
       startLocation: rideRequest.pickupAddress || `${rideRequest.pickupLat},${rideRequest.pickupLng}`,
       endLocation: rideRequest.destAddress || `${rideRequest.destLat},${rideRequest.destLng}`,
