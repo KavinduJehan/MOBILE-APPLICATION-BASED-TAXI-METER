@@ -76,7 +76,7 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
     if (ok) {
       setState(() {
         _requesting = false;
-        _info = 'A fresh verification code was sent.';
+        _info = 'A verification code was sent.';
       });
     } else {
       if (auth.error?.contains('No account') == true) {
@@ -132,7 +132,7 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
       _clearOtp();
       setState(() {
         _error = message.toLowerCase().contains('expired')
-            ? 'That code expired. Press Resend code to get a new one.'
+            ? 'Code expired. Press Resend code to get a new one.'
             : message;
         _info = null;
       });
@@ -198,7 +198,7 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
                   const RideXLogo(size: 74, textSize: 32),
                   const SizedBox(height: 30),
                   const Text(
-                    'Enter Verification Code',
+                    'Verification Code',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.white,
@@ -208,7 +208,7 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    'Enter the 6-digit code sent to $_displayPhone',
+                    'A 6-digit verification code has been sent to $_displayPhone. Please enter the OTP below to verify your mobile.',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: _mutedText,
@@ -281,7 +281,7 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
                     ),
                     onPressed: () => Navigator.maybePop(context),
                     child: const Text(
-                      'Changed your mobile number?',
+                      'Need to Change the mobile number?',
                       style:
                           TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
                     ),

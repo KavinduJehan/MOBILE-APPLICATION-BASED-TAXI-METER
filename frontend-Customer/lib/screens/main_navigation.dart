@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../theme.dart';
 import 'home_tab.dart';
 import 'trips_tab.dart';
@@ -25,14 +26,16 @@ class _MainNavigationState extends State<MainNavigation> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
         final navigator = _navigatorKeys[_currentIndex].currentState;
         if (navigator != null && navigator.canPop()) {
           navigator.pop();
-          return false;
+          return;
         }
-        return true;
+        SystemNavigator.pop();
       },
       child: Scaffold(
         backgroundColor: AppTheme.background,
@@ -49,14 +52,19 @@ class _MainNavigationState extends State<MainNavigation> {
           ),
         ),
         bottomNavigationBar: Container(
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
+            color: Color(0xFF070B12),
             border: Border(
-              top: BorderSide(color: const Color(0xFF333336), width: 1),
+              top: BorderSide(color: Color(0xFF333336), width: 1.2),
             ),
           ),
-          child: BottomNavigationBar(
-            currentIndex: _currentIndex,
-            onTap: (index) {
+          child: NavigationBar(
+            height: 74,
+            selectedIndex: _currentIndex,
+            backgroundColor: const Color(0xFF070B12),
+            indicatorColor: AppTheme.primaryBlue.withValues(alpha: 0.22),
+            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+            onDestinationSelected: (index) {
               if (index == _currentIndex) {
                 _navigatorKeys[index]
                     .currentState
@@ -67,26 +75,25 @@ class _MainNavigationState extends State<MainNavigation> {
                 _currentIndex = index;
               });
             },
-            type: BottomNavigationBarType.fixed,
-            backgroundColor: const Color(0xFF070B12),
-            selectedItemColor: AppTheme.primaryBlue,
-            unselectedItemColor: const Color(0xFF666666),
-            elevation: 0,
-            items: const [
-              BottomNavigationBarItem(
-                icon: Icon(Icons.home),
+            destinations: const [
+              NavigationDestination(
+                selectedIcon: Icon(Icons.home_rounded, size: 28),
+                icon: Icon(Icons.home_outlined, size: 26),
                 label: 'Home',
               ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.directions_car),
+              NavigationDestination(
+                selectedIcon: Icon(Icons.directions_car_rounded, size: 28),
+                icon: Icon(Icons.directions_car_outlined, size: 26),
                 label: 'Trips',
               ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.receipt_long),
+              NavigationDestination(
+                selectedIcon: Icon(Icons.receipt_long_rounded, size: 28),
+                icon: Icon(Icons.receipt_long_outlined, size: 26),
                 label: 'Receipts',
               ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.person),
+              NavigationDestination(
+                selectedIcon: Icon(Icons.person_rounded, size: 28),
+                icon: Icon(Icons.person_outline_rounded, size: 26),
                 label: 'Profile',
               ),
             ],

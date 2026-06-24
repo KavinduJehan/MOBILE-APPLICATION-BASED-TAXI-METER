@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../theme.dart';
 import '../widgets/brand_logo.dart';
+import 'auth_screen.dart';
 import 'phone_verification_screen.dart';
 
 class CustomerSignupScreen extends StatefulWidget {
@@ -76,9 +77,16 @@ class _CustomerSignupScreenState extends State<CustomerSignupScreen> {
   String? _validateEmail(String? value) {
     final required = _required(value, 'Email');
     if (required != null) return required;
-    final email = value!.trim();
+    final email = value!.trim().toLowerCase();
     final valid = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email);
-    return valid ? null : 'Enter a valid email address';
+    return valid ? null : 'Enter a valid Email address';
+  }
+
+  void _openSignIn() {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const AuthScreen()),
+    );
   }
 
   String? _validatePhone(String? value) {
@@ -129,7 +137,7 @@ class _CustomerSignupScreenState extends State<CustomerSignupScreen> {
                 const RideXLogo(size: 72, textSize: 32),
                 const SizedBox(height: 24),
                 const Text(
-                  'Create Account',
+                  'Sign Up',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.white,
@@ -138,31 +146,23 @@ class _CustomerSignupScreenState extends State<CustomerSignupScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _AuthField(
-                        controller: _firstNameController,
-                        label: 'First Name',
-                        textCapitalization: TextCapitalization.words,
-                        validator: (value) => _required(value, 'First name'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _AuthField(
-                        controller: _lastNameController,
-                        label: 'Last Name',
-                        textCapitalization: TextCapitalization.words,
-                        validator: (value) => _required(value, 'Last name'),
-                      ),
-                    ),
-                  ],
+                _AuthField(
+                  controller: _firstNameController,
+                  label: 'First Name',
+                  textCapitalization: TextCapitalization.words,
+                  validator: (value) => _required(value, 'First name'),
+                ),
+                const SizedBox(height: 14),
+                _AuthField(
+                  controller: _lastNameController,
+                  label: 'Last Name',
+                  textCapitalization: TextCapitalization.words,
+                  validator: (value) => _required(value, 'Last name'),
                 ),
                 const SizedBox(height: 14),
                 _AuthField(
                   controller: _emailController,
-                  label: 'Email',
+                  label: 'Email Address',
                   keyboardType: TextInputType.emailAddress,
                   validator: _validateEmail,
                 ),
@@ -242,13 +242,41 @@ class _CustomerSignupScreenState extends State<CustomerSignupScreen> {
                             ),
                           )
                         : const Text(
-                            'Create Account',
+                            'Sign Up',
                             style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w800,
                             ),
                           ),
                   ),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Flexible(
+                      child: Text(
+                        'Already have an account?',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white60, fontSize: 15),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: auth.loading ? null : _openSignIn,
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppTheme.primaryBlue,
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text(
+                        'Sign In',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

@@ -3,12 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
-import '../screens/main_navigation.dart';
 import '../theme.dart';
 import '../widgets/brand_logo.dart';
 import 'phone_verification_screen.dart';
-
-enum _SignInMode { password, otp }
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -18,53 +15,23 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
-  final _passwordFormKey = GlobalKey<FormState>();
-  final _otpFormKey = GlobalKey<FormState>();
-  final _identifierController = TextEditingController();
-  final _passwordController = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
   final _phoneController = TextEditingController();
 
-  _SignInMode _mode = _SignInMode.password;
-  bool _obscurePassword = true;
   String? _error;
 
   String get _otpPhoneNumber => '0${_phoneController.text.trim()}';
 
   @override
   void dispose() {
-    _identifierController.dispose();
-    _passwordController.dispose();
     _phoneController.dispose();
     super.dispose();
   }
 
-  Future<void> _signInWithPassword() async {
-    FocusScope.of(context).unfocus();
-    if (!_passwordFormKey.currentState!.validate()) return;
-    setState(() => _error = null);
-
-    final auth = context.read<AuthProvider>();
-    final ok = await auth.login(
-      identifier: _normalizeIdentifier(_identifierController.text),
-      password: _passwordController.text,
-    );
-    if (!mounted) return;
-
-    if (ok) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const MainNavigation()),
-        (_) => false,
-      );
-    } else {
-      setState(() => _error = auth.error ?? 'Login failed');
-      auth.clearError();
-    }
-  }
-
   void _continueWithOtp() {
     FocusScope.of(context).unfocus();
-    if (!_otpFormKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _error = null);
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -73,36 +40,7 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  String _normalizeIdentifier(String value) {
-    final trimmed = value.trim();
-    final digits = trimmed.replaceAll(RegExp(r'\D'), '');
-    if (digits.length == 9) return '0$digits';
-    if (digits.length == 10 && digits.startsWith('0')) return digits;
-    if (digits.length == 11 && digits.startsWith('94')) {
-      return '0${digits.substring(2)}';
-    }
-    return trimmed.toLowerCase();
-  }
-
-  String? _validateIdentifier(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return 'Email or phone number is required';
-    }
-    final normalized = _normalizeIdentifier(value);
-    final isEmail = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(normalized);
-    final isPhone = RegExp(r'^0[1-9]\d{8}$').hasMatch(normalized);
-    if (!isEmail && !isPhone) {
-      return 'Enter a valid email or Sri Lankan phone number';
-    }
-    return null;
-  }
-
-  String? _validatePassword(String? value) {
-    if (value == null || value.isEmpty) return 'Password is required';
-    return null;
-  }
-
-  String? _validateOtpPhone(String? value) {
+  String? _validatePhone(String? value) {
     final digits = value?.trim() ?? '';
     if (digits.isEmpty) return 'Phone number is required';
     if (!RegExp(r'^[1-9]\d{8}$').hasMatch(digits)) {
@@ -146,7 +84,7 @@ class _AuthScreenState extends State<AuthScreen> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Use your RideX account details or sign in with a phone OTP.',
+                'Please enter your mobile number to sign in.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white60,
@@ -155,51 +93,11 @@ class _AuthScreenState extends State<AuthScreen> {
                 ),
               ),
               const SizedBox(height: 28),
-              SegmentedButton<_SignInMode>(
-                segments: const [
-                  ButtonSegment(
-                    value: _SignInMode.password,
-                    label: Text('Password'),
-                    icon: Icon(Icons.lock_rounded),
-                  ),
-                  ButtonSegment(
-                    value: _SignInMode.otp,
-                    label: Text('OTP'),
-                    icon: Icon(Icons.sms_rounded),
-                  ),
-                ],
-                selected: {_mode},
-                onSelectionChanged: (selection) {
-                  setState(() {
-                    _mode = selection.first;
-                    _error = null;
-                  });
-                },
-              ),
-              const SizedBox(height: 24),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 180),
-                child: _mode == _SignInMode.password
-                    ? _PasswordSignInForm(
-                        key: const ValueKey('password-form'),
-                        formKey: _passwordFormKey,
-                        identifierController: _identifierController,
-                        passwordController: _passwordController,
-                        obscurePassword: _obscurePassword,
-                        onTogglePassword: () {
-                          setState(() => _obscurePassword = !_obscurePassword);
-                        },
-                        validateIdentifier: _validateIdentifier,
-                        validatePassword: _validatePassword,
-                        onSubmit: auth.loading ? null : _signInWithPassword,
-                      )
-                    : _OtpSignInForm(
-                        key: const ValueKey('otp-form'),
-                        formKey: _otpFormKey,
-                        phoneController: _phoneController,
-                        validatePhone: _validateOtpPhone,
-                        onSubmit: _continueWithOtp,
-                      ),
+              _PhoneSignInForm(
+                formKey: _formKey,
+                phoneController: _phoneController,
+                validatePhone: _validatePhone,
+                onSubmit: auth.loading ? null : _continueWithOtp,
               ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
@@ -221,11 +119,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       borderRadius: BorderRadius.circular(18),
                     ),
                   ),
-                  onPressed: auth.loading
-                      ? null
-                      : (_mode == _SignInMode.password
-                          ? _signInWithPassword
-                          : _continueWithOtp),
+                  onPressed: auth.loading ? null : _continueWithOtp,
                   child: auth.loading
                       ? const SizedBox(
                           height: 22,
@@ -235,11 +129,9 @@ class _AuthScreenState extends State<AuthScreen> {
                             strokeWidth: 2.5,
                           ),
                         )
-                      : Text(
-                          _mode == _SignInMode.password
-                              ? 'Sign In'
-                              : 'Send OTP',
-                          style: const TextStyle(
+                      : const Text(
+                          'Send OTP',
+                          style: TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w800,
                           ),
@@ -254,76 +146,9 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 }
 
-class _PasswordSignInForm extends StatelessWidget {
-  const _PasswordSignInForm({
-    super.key,
-    required this.formKey,
-    required this.identifierController,
-    required this.passwordController,
-    required this.obscurePassword,
-    required this.onTogglePassword,
-    required this.validateIdentifier,
-    required this.validatePassword,
-    required this.onSubmit,
-  });
-
-  final GlobalKey<FormState> formKey;
-  final TextEditingController identifierController;
-  final TextEditingController passwordController;
-  final bool obscurePassword;
-  final VoidCallback onTogglePassword;
-  final String? Function(String?) validateIdentifier;
-  final String? Function(String?) validatePassword;
-  final VoidCallback? onSubmit;
-
-  @override
-  Widget build(BuildContext context) {
-    return Form(
-      key: formKey,
-      child: Column(
-        children: [
-          TextFormField(
-            controller: identifierController,
-            keyboardType: TextInputType.emailAddress,
-            cursorColor: AppTheme.primaryBlue,
-            style: const TextStyle(color: Colors.white, fontSize: 16),
-            decoration: const InputDecoration(
-              labelText: 'Email or Phone Number',
-              prefixIcon: Icon(Icons.person_rounded),
-            ),
-            validator: validateIdentifier,
-            onFieldSubmitted: (_) => onSubmit?.call(),
-          ),
-          const SizedBox(height: 14),
-          TextFormField(
-            controller: passwordController,
-            obscureText: obscurePassword,
-            cursorColor: AppTheme.primaryBlue,
-            style: const TextStyle(color: Colors.white, fontSize: 16),
-            decoration: InputDecoration(
-              labelText: 'Password',
-              prefixIcon: const Icon(Icons.lock_rounded),
-              suffixIcon: IconButton(
-                onPressed: onTogglePassword,
-                icon: Icon(
-                  obscurePassword
-                      ? Icons.visibility_off_rounded
-                      : Icons.visibility_rounded,
-                  color: Colors.white54,
-                ),
-              ),
-            ),
-            validator: validatePassword,
-            onFieldSubmitted: (_) => onSubmit?.call(),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _OtpSignInForm extends StatelessWidget {
-  const _OtpSignInForm({
+class _PhoneSignInForm extends StatelessWidget {
+  const _PhoneSignInForm({
+    // ignore: unused_element_parameter
     super.key,
     required this.formKey,
     required this.phoneController,
@@ -334,7 +159,7 @@ class _OtpSignInForm extends StatelessWidget {
   final GlobalKey<FormState> formKey;
   final TextEditingController phoneController;
   final String? Function(String?) validatePhone;
-  final VoidCallback onSubmit;
+  final VoidCallback? onSubmit;
 
   @override
   Widget build(BuildContext context) {
@@ -357,10 +182,9 @@ class _OtpSignInForm extends StatelessWidget {
             fontSize: 16,
             fontWeight: FontWeight.w700,
           ),
-          prefixIcon: Icon(Icons.phone_rounded),
         ),
         validator: validatePhone,
-        onFieldSubmitted: (_) => onSubmit(),
+        onFieldSubmitted: (_) => onSubmit?.call(),
       ),
     );
   }

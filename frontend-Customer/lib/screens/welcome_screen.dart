@@ -83,31 +83,66 @@ class WelcomeScreen extends StatelessWidget {
   }
 }
 
-class _WelcomeButton extends StatelessWidget {
+class _WelcomeButton extends StatefulWidget {
   const _WelcomeButton({required this.label, required this.onTap});
 
   final String label;
   final VoidCallback onTap;
 
   @override
+  State<_WelcomeButton> createState() => _WelcomeButtonState();
+}
+
+class _WelcomeButtonState extends State<_WelcomeButton> {
+  bool _isHovered = false;
+  bool _isFocused = false;
+  bool _isPressed = false;
+
+  bool get _isActive => _isHovered || _isFocused || _isPressed;
+
+  @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 56,
-      child: ElevatedButton(
-        onPressed: onTap,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppTheme.primaryBlue,
-          foregroundColor: Colors.white,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-          ),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w800,
+    final backgroundColor = _isActive
+        ? AppTheme.primaryBlue
+        : AppTheme.primaryBlue.withValues(alpha: 0.18);
+    final textColor = _isActive ? Colors.white : AppTheme.primaryBlue;
+
+    return FocusableActionDetector(
+      onShowFocusHighlight: (focused) => setState(() => _isFocused = focused),
+      mouseCursor: SystemMouseCursors.click,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() {
+          _isHovered = false;
+          _isPressed = false;
+        }),
+        child: GestureDetector(
+          onTapDown: (_) => setState(() => _isPressed = true),
+          onTapCancel: () => setState(() => _isPressed = false),
+          onTapUp: (_) => setState(() => _isPressed = false),
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            height: 56,
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOut,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: _isActive
+                    ? AppTheme.primaryBlue
+                    : AppTheme.primaryBlue.withValues(alpha: 0.34),
+              ),
+            ),
+            child: Text(
+              widget.label,
+              style: TextStyle(
+                color: textColor,
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ),
         ),
       ),
