@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../models/trip_model.dart';
 import '../services/api_service.dart';
 import '../theme.dart';
 import 'trip_progress_screen.dart';
@@ -63,6 +64,20 @@ class _WaitingForDriverScreenState extends State<WaitingForDriverScreen> {
         final tripObj = data['trip'] as Map<String, dynamic>?;
         final totalFare = (tripObj?['totalFare'] as num?)?.toDouble();
         final effectiveRate = agreedRate ?? widget.ratePerKm;
+        final trip = tripObj == null
+            ? null
+            : TripModel.fromJson({
+                ...tripObj,
+                'driver': data['driver'] ?? widget.driver,
+                'driverName': widget.driver['name'],
+                'vehicleNumber': widget.driver['vehicleNumber'],
+                'startLocation': tripObj['startLocation'] ?? data['pickupAddress'],
+                'endLocation': tripObj['endLocation'] ?? data['destAddress'],
+                'distanceKm': tripObj['distanceKm'] ?? widget.distanceKm,
+                'ratePerKm': tripObj['ratePerKm'] ?? effectiveRate,
+                'totalFare': tripObj['totalFare'] ??
+                    double.parse((widget.distanceKm * effectiveRate).toStringAsFixed(2)),
+              });
 
         Navigator.pushReplacement(
           context,
@@ -70,6 +85,7 @@ class _WaitingForDriverScreenState extends State<WaitingForDriverScreen> {
             builder: (_) => TripProgressScreen(
               requestId: widget.requestId,
               driver: widget.driver,
+              trip: trip,
               distanceKm: widget.distanceKm,
               ratePerKm: effectiveRate,
               totalFare: totalFare ?? widget.distanceKm * effectiveRate,
@@ -90,7 +106,7 @@ class _WaitingForDriverScreenState extends State<WaitingForDriverScreen> {
     final isRejected = _status == 'rejected';
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppTheme.background,
       appBar: AppBar(title: const Text('Waiting for Driver')),
       body: Center(
         child: Padding(

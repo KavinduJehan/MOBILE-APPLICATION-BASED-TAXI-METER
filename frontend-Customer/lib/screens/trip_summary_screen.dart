@@ -1,25 +1,24 @@
 import 'package:flutter/material.dart';
+
+import '../models/receipt_model.dart';
+import '../models/trip_model.dart';
+import '../theme.dart';
 import 'receipt.dart';
 
 class TripSummaryScreen extends StatelessWidget {
-  final String driverName;
-  final String vehicleNumber;
-  final double distanceKm;
-  final double ratePerKm;
-  final double totalFare;
+  final TripModel trip;
+  final ReceiptModel? receipt;
 
   const TripSummaryScreen({
     super.key,
-    required this.driverName,
-    required this.vehicleNumber,
-    required this.distanceKm,
-    required this.ratePerKm,
-    required this.totalFare,
+    required this.trip,
+    this.receipt,
   });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppTheme.background,
       appBar: AppBar(title: const Text('Trip Summary')),
       body: Padding(
         padding: const EdgeInsets.all(20),
@@ -27,47 +26,43 @@ class TripSummaryScreen extends StatelessWidget {
           children: [
             const Icon(
               Icons.check_circle_outline,
-              color: Colors.green,
+              color: AppTheme.successGreen,
               size: 64,
             ),
             const SizedBox(height: 12),
             const Text(
               'Trip Completed',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 24),
-            _summaryRow('Driver', driverName),
-            _summaryRow('Vehicle', vehicleNumber),
+            _summaryRow('Driver', trip.driverName),
+            _summaryRow('Vehicle', trip.vehicleNumber),
+            _summaryRow('Pickup', trip.pickupLocation),
+            _summaryRow('Drop', trip.dropLocation),
+            _summaryRow('Total distance', '${trip.distanceKm.toStringAsFixed(1)} km'),
+            _summaryRow('Rate per km', 'Rs. ${trip.ratePerKm.toStringAsFixed(2)}'),
+            const Divider(color: Color(0xFF333336)),
             _summaryRow(
-              'Total Distance',
-              '${distanceKm.toStringAsFixed(1)} km',
-            ),
-            _summaryRow('Rate per km', 'Rs. ${ratePerKm.toStringAsFixed(0)}'),
-            const Divider(),
-            _summaryRow(
-              'Total Fare',
-              'Rs. ${totalFare.toStringAsFixed(0)}',
+              'Total fare',
+              'Rs. ${trip.totalFare.toStringAsFixed(2)}',
               bold: true,
             ),
             const Spacer(),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ReceiptScreen(
-                      driverName: driverName,
-                      vehicleNumber: vehicleNumber,
-                      distanceKm: distanceKm,
-                      ratePerKm: ratePerKm,
-                      totalFare: totalFare,
-                    ),
+            ElevatedButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ReceiptScreen(
+                    trip: trip,
+                    initialReceipt: receipt,
                   ),
                 ),
-                child: const Text('View Receipt'),
               ),
+              child: const Text('View Receipt'),
             ),
           ],
         ),
@@ -76,14 +71,13 @@ class TripSummaryScreen extends StatelessWidget {
   }
 
   Widget _summaryRow(String label, String value, {bool bold = false}) {
-    return Card(
-      child: ListTile(
-        title: Text(label),
-        trailing: Text(
-          value,
-          style: TextStyle(
-            fontWeight: bold ? FontWeight.bold : FontWeight.normal,
-          ),
+    return ListTile(
+      title: Text(label, style: const TextStyle(color: Color(0xFF9CA3AF))),
+      trailing: Text(
+        value,
+        style: TextStyle(
+          color: Colors.white,
+          fontWeight: bold ? FontWeight.bold : FontWeight.normal,
         ),
       ),
     );
