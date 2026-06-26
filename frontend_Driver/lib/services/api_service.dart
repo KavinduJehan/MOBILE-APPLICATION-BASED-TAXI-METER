@@ -82,7 +82,8 @@ class ApiService {
 
   Future<List<RideRequest>> getIncomingRequests() async {
     final response = await _request('GET', '/ride-requests/incoming');
-    return _readMapList(_asMap(response.data), ['requests', 'data', 'items']).map(RideRequest.fromJson).toList();
+    final list = _extractList(response.data, ['requests', 'data', 'items']);
+    return list.map(RideRequest.fromJson).toList();
   }
 
   Future<Map<String, dynamic>> respondToRequest({
@@ -115,7 +116,8 @@ class ApiService {
 
   Future<List<TripRecord>> getMyTrips() async {
     final response = await _request('GET', '/trips/my');
-    return _readMapList(_asMap(response.data), ['trips', 'data', 'items']).map(TripRecord.fromJson).toList();
+    final list = _extractList(response.data, ['trips', 'data', 'items']);
+    return list.map(TripRecord.fromJson).toList();
   }
 
   Future<IncomeSummary> getIncomeSummary() async {
@@ -203,6 +205,43 @@ class ApiService {
       }
     }
     return null;
+  }
+
+  // Extracts a list of maps from various response shapes:
+  // - top-level JSON array: [ {...}, {...} ]
+  // - wrapped object: { "trips": [...] } or { "requests": [...] }
+  // - nested under common keys provided in `keys`
+  List<Map<String, dynamic>> _extractList(dynamic data, List<String> keys) {
+    if (data is List) {
+      return data.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    }
+
+    if (data is Map<String, dynamic>) {
+      for (final key in keys) {
+        final value = data[key];
+        if (value is List) {
+          return value.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+        }
+      }
+
+      // fallback: if any value is a List, return the first one
+      for (final entry in data.entries) {
+        if (entry.value is List) {
+          return (entry.value as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+        }
+      }
+
+      // if it's a non-empty map, return it as a single-item list
+      if (data.isNotEmpty) return [Map<String, dynamic>.from(data)];
+      return const [];
+    }
+
+    if (data is Map) {
+      final m = Map<String, dynamic>.from(data);
+      return _extractList(m, keys);
+    }
+
+    return const [];
   }
 
   List<Map<String, dynamic>> _readMapList(Map<String, dynamic> data, List<String> keys) {
