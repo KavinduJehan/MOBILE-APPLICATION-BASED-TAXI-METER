@@ -80,6 +80,11 @@ class ApiService {
     return _readDouble(data, ['ratePerKm', 'averageRate', 'rate', 'value']);
   }
 
+  Future<Map<String, dynamic>> getPublicConfig() async {
+    final response = await _request('GET', '/config/public', auth: false);
+    return _asMap(response.data);
+  }
+
   Future<List<RideRequest>> getIncomingRequests() async {
     final response = await _request('GET', '/ride-requests/incoming');
     final list = _extractList(response.data, ['requests', 'data', 'items']);

@@ -91,12 +91,14 @@ class _RateScreenState extends State<RateScreen> {
                     child: TextFormField(
                       controller: _rateController,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      enabled: auth.rateMode != 'ADMIN',
                       decoration: InputDecoration(
                         labelText: 'Rate per km',
                         suffixText: 'Rs',
                         helperText: _areaAverage == null ? 'Area average unavailable' : 'Area average: Rs. ${_areaAverage!.toStringAsFixed(2)}',
                       ),
                       validator: (value) {
+                        if (auth.rateMode == 'ADMIN') return null;
                         final parsed = double.tryParse(value?.trim() ?? '');
                         if (parsed == null || parsed <= 0) {
                           return 'Enter a valid rate';
@@ -106,7 +108,26 @@ class _RateScreenState extends State<RateScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  PrimaryActionButton(label: 'Save Rate', isBusy: auth.busy, onPressed: _save),
++                  if (auth.rateMode == 'ADMIN') ...[
++                    Container(
++                      padding: const EdgeInsets.all(14),
++                      decoration: BoxDecoration(
++                        color: Colors.orange.withOpacity(0.12),
++                        borderRadius: BorderRadius.circular(16),
++                        border: Border.all(color: Colors.orange.withOpacity(0.24)),
++                      ),
++                      child: const Text(
++                        'Rates are controlled by the regulator. You cannot change your rate.',
++                        style: TextStyle(color: Colors.orange, fontWeight: FontWeight.w600),
++                      ),
++                    ),
++                    const SizedBox(height: 20),
++                  ],
+                   PrimaryActionButton(
+                     label: 'Save Rate',
+                     isBusy: auth.busy,
+                     onPressed: auth.rateMode == 'ADMIN' ? null : _save,
+                   ),
                 ],
               ),
             ),
