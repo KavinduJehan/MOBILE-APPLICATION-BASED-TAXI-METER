@@ -108,25 +108,25 @@ class _RateScreenState extends State<RateScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-+                  if (auth.rateMode == 'ADMIN') ...[
-+                    Container(
-+                      padding: const EdgeInsets.all(14),
-+                      decoration: BoxDecoration(
-+                        color: Colors.orange.withOpacity(0.12),
-+                        borderRadius: BorderRadius.circular(16),
-+                        border: Border.all(color: Colors.orange.withOpacity(0.24)),
-+                      ),
-+                      child: const Text(
-+                        'Rates are controlled by the regulator. You cannot change your rate.',
-+                        style: TextStyle(color: Colors.orange, fontWeight: FontWeight.w600),
-+                      ),
-+                    ),
-+                    const SizedBox(height: 20),
-+                  ],
-                   PrimaryActionButton(
-                     label: 'Save Rate',
-                     isBusy: auth.busy,
-                     onPressed: auth.rateMode == 'ADMIN' ? null : _save,
+                  if (auth.rateMode == 'ADMIN') ...[
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.orange.withOpacity(0.24)),
+                      ),
+                      child: const Text(
+                        'Rates are controlled by the regulator. You cannot change your rate.',
+                        style: TextStyle(color: Colors.orange, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                  PrimaryActionButton(
+                    label: 'Save Rate',
+                    isBusy: auth.busy,
+                    onPressed: auth.rateMode == 'ADMIN' ? null : _save,
                    ),
                 ],
               ),

@@ -34,7 +34,8 @@ class AuthProvider extends ChangeNotifier {
     _setBusy(true);
     try {
       final config = await api.getPublicConfig();
-      _rateMode = _readString(config, ['rateMode'], fallback: 'DRIVER');
+      final rm = config['rateMode'];
+      _rateMode = (rm is String && rm.trim().isNotEmpty) ? rm : 'DRIVER';
 
       _token = await SessionStore.readToken();
       if (_token != null) {
