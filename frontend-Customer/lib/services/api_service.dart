@@ -179,14 +179,20 @@ class ApiService {
     required String email,
     required String phone,
     required String password,
-  }) =>
-      _dio.post('/customers/register', data: {
-        'firstName': firstName,
-        'lastName': lastName,
-        'email': email,
-        'phone': phone,
-        'password': password,
-      });
+  }) {
+    final name = [firstName.trim(), lastName.trim()]
+        .where((part) => part.isNotEmpty)
+        .join(' ');
+
+    return _dio.post('/customers/register', data: {
+      'name': name,
+      'firstName': firstName,
+      'lastName': lastName,
+      'email': email,
+      'phone': phone,
+      'password': password,
+    });
+  }
 
   static Future<Response> customerLogin({
     required String identifier,
