@@ -8,11 +8,15 @@ import 'ride_request_screen.dart';
 
 class NearbyDriversScreen extends StatefulWidget {
   final String? area;
+  final double? pickupLat;
+  final double? pickupLng;
   final bool returnSelection;
 
   const NearbyDriversScreen({
     super.key,
     this.area,
+    this.pickupLat,
+    this.pickupLng,
     this.returnSelection = false,
   });
 
@@ -27,7 +31,11 @@ class _NearbyDriversScreenState extends State<NearbyDriversScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<NearbyDriversProvider>().load(area: widget.area);
+      context.read<NearbyDriversProvider>().load(
+        area: widget.area ?? '',
+        pickupLat: widget.pickupLat,
+        pickupLng: widget.pickupLng,
+      );
     });
   }
 
@@ -72,11 +80,17 @@ class _NearbyDriversScreenState extends State<NearbyDriversScreen> {
                   decoration: InputDecoration(
                     hintText: 'Search driver, vehicle, or area',
                     hintStyle: const TextStyle(color: Color(0xFF8A8A8A)),
-                    prefixIcon: const Icon(Icons.search, color: AppTheme.primaryBlue),
+                    prefixIcon: const Icon(
+                      Icons.search,
+                      color: AppTheme.primaryBlue,
+                    ),
                     suffixIcon: _searchController.text.isEmpty
                         ? null
                         : IconButton(
-                            icon: const Icon(Icons.close, color: Colors.white70),
+                            icon: const Icon(
+                              Icons.close,
+                              color: Colors.white70,
+                            ),
                             onPressed: () {
                               _searchController.clear();
                               provider.setSearch('');
@@ -166,7 +180,10 @@ class _DriverCard extends StatelessWidget {
                 spacing: 12,
                 runSpacing: 6,
                 children: [
-                  _Meta(icon: Icons.place, text: driver.area.isEmpty ? '-' : driver.area),
+                  _Meta(
+                    icon: Icons.place,
+                    text: driver.area.isEmpty ? '-' : driver.area,
+                  ),
                   _Meta(
                     icon: Icons.route,
                     text: driver.distanceKm == null
@@ -224,7 +241,9 @@ class _LoadingState extends StatelessWidget {
   Widget build(BuildContext context) {
     return const SizedBox(
       height: 260,
-      child: Center(child: CircularProgressIndicator(color: AppTheme.primaryBlue)),
+      child: Center(
+        child: CircularProgressIndicator(color: AppTheme.primaryBlue),
+      ),
     );
   }
 }

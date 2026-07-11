@@ -33,13 +33,23 @@ double _haversineKm(double lat1, double lng1, double lat2, double lng2) {
 class RideRequestScreen extends StatefulWidget {
   final Map<String, dynamic> driver;
   final double? suggestedRatePerKm;
+  final String? initialPickup;
+  final double? initialPickupLat;
+  final double? initialPickupLng;
   final String? initialDestination;
+  final double? initialDestinationLat;
+  final double? initialDestinationLng;
 
   const RideRequestScreen({
     super.key,
     required this.driver,
     this.suggestedRatePerKm,
+    this.initialPickup,
+    this.initialPickupLat,
+    this.initialPickupLng,
     this.initialDestination,
+    this.initialDestinationLat,
+    this.initialDestinationLng,
   });
 
   @override
@@ -52,9 +62,25 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
   bool _loading = false;
   String? _error;
 
+  bool get _hasMapSelection =>
+      widget.initialPickupLat != null &&
+      widget.initialPickupLng != null &&
+      widget.initialDestinationLat != null &&
+      widget.initialDestinationLng != null;
+
   @override
   void initState() {
     super.initState();
+    final initialPickup = widget.initialPickup?.trim().toLowerCase();
+    if (initialPickup != null && initialPickup.isNotEmpty) {
+      final matchedPickup = _cities.keys.where(
+        (city) => city.toLowerCase() == initialPickup,
+      );
+      if (matchedPickup.isNotEmpty) {
+        _pickup = matchedPickup.first;
+      }
+    }
+
     final initialDestination = widget.initialDestination?.trim().toLowerCase();
     if (initialDestination == null || initialDestination.isEmpty) return;
 
@@ -72,6 +98,16 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
       0.0;
 
   double get _distanceKm {
+    if (_hasMapSelection) {
+      return _haversineKm(
+            widget.initialPickupLat!,
+            widget.initialPickupLng!,
+            widget.initialDestinationLat!,
+            widget.initialDestinationLng!,
+          ) *
+          1.25;
+    }
+
     final (lat1, lng1) = _cities[_pickup]!;
     final (lat2, lng2) = _cities[_dest]!;
     return _haversineKm(lat1, lng1, lat2, lng2) * 1.25;
@@ -80,7 +116,11 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
   double get _estimatedFare => _distanceKm * _rate;
 
   Future<void> _sendRequest() async {
-    if (_pickup == _dest) {
+    final sameMapPoint =
+        _hasMapSelection &&
+        widget.initialPickupLat == widget.initialDestinationLat &&
+        widget.initialPickupLng == widget.initialDestinationLng;
+    if ((!_hasMapSelection && _pickup == _dest) || sameMapPoint) {
       setState(() => _error = 'Pickup and destination must be different.');
       return;
     }
@@ -90,18 +130,24 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
     });
 
     try {
-      final (pLat, pLng) = _cities[_pickup]!;
-      final (dLat, dLng) = _cities[_dest]!;
+      final (cityPickupLat, cityPickupLng) = _cities[_pickup]!;
+      final (cityDestLat, cityDestLng) = _cities[_dest]!;
+      final pickupLat = widget.initialPickupLat ?? cityPickupLat;
+      final pickupLng = widget.initialPickupLng ?? cityPickupLng;
+      final destLat = widget.initialDestinationLat ?? cityDestLat;
+      final destLng = widget.initialDestinationLng ?? cityDestLng;
+      final pickupAddress = widget.initialPickup ?? _pickup;
+      final destAddress = widget.initialDestination ?? _dest;
       final driverId = widget.driver['_id'] as String;
 
       final resp = await ApiService.createRideRequest({
         'driverId': driverId,
-        'pickupLat': pLat,
-        'pickupLng': pLng,
-        'pickupAddress': _pickup,
-        'destLat': dLat,
-        'destLng': dLng,
-        'destAddress': _dest,
+        'pickupLat': pickupLat,
+        'pickupLng': pickupLng,
+        'pickupAddress': pickupAddress,
+        'destLat': destLat,
+        'destLng': destLng,
+        'destAddress': destAddress,
         'estimatedDistanceKm': double.parse(_distanceKm.toStringAsFixed(2)),
         if (widget.suggestedRatePerKm != null)
           'suggestedRatePerKm': widget.suggestedRatePerKm,
@@ -141,35 +187,46 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // ── Pickup ──────────────────────────────────────────────────────
-            DropdownButtonFormField<String>(
-              initialValue: _pickup,
-              decoration: const InputDecoration(
-                labelText: 'Pickup Location',
-                border: OutlineInputBorder(),
+            if (_hasMapSelection) ...[
+              _locationSummary(
+                icon: Icons.trip_origin,
+                label: 'Pickup Location',
+                value: widget.initialPickup ?? 'Pinned pickup',
               ),
-              items: cityList
-                  .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                  .toList(),
-              onChanged: (v) => setState(() => _pickup = v!),
-            ),
-            const SizedBox(height: 16),
-
-            // ── Destination ─────────────────────────────────────────────────
-            DropdownButtonFormField<String>(
-              initialValue: _dest,
-              decoration: const InputDecoration(
-                labelText: 'Destination',
-                border: OutlineInputBorder(),
+              const SizedBox(height: 12),
+              _locationSummary(
+                icon: Icons.location_on,
+                label: 'Destination',
+                value: widget.initialDestination ?? 'Pinned destination',
               ),
-              items: cityList
-                  .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                  .toList(),
-              onChanged: (v) => setState(() => _dest = v!),
-            ),
+            ] else ...[
+              DropdownButtonFormField<String>(
+                initialValue: _pickup,
+                decoration: const InputDecoration(
+                  labelText: 'Pickup Location',
+                  border: OutlineInputBorder(),
+                ),
+                items: cityList
+                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                    .toList(),
+                onChanged: (v) => setState(() => _pickup = v!),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: _dest,
+                decoration: const InputDecoration(
+                  labelText: 'Destination',
+                  border: OutlineInputBorder(),
+                ),
+                items: cityList
+                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                    .toList(),
+                onChanged: (v) => setState(() => _dest = v!),
+              ),
+            ],
             const SizedBox(height: 24),
 
-            // ── Estimates ───────────────────────────────────────────────────
+            // --- Estimates ───────────────────────────────────────────────────
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -211,6 +268,42 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _locationSummary({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        border: Border.all(color: const Color(0xFF333336)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.blueAccent),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(color: Colors.black54, fontSize: 12),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

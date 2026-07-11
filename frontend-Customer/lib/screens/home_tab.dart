@@ -6,6 +6,7 @@ import '../models/driver_model.dart';
 import '../providers/auth_provider.dart';
 import '../theme.dart';
 import '../widgets/brand_logo.dart';
+import 'location_picker_screen.dart';
 import 'nearby_drivers_screen.dart';
 import 'qr_scan.dart';
 import 'ride_request_screen.dart';
@@ -49,7 +50,10 @@ class HomeTab extends StatelessWidget {
 
                 // Where are you going search bar
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                   decoration: BoxDecoration(
                     color: AppTheme.surface,
                     borderRadius: BorderRadius.circular(12),
@@ -57,25 +61,30 @@ class HomeTab extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.location_on_outlined, color: AppTheme.primaryBlue, size: 24),
+                      const Icon(
+                        Icons.location_on_outlined,
+                        color: AppTheme.primaryBlue,
+                        size: 24,
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: GestureDetector(
                           onTap: () async {
-                            final destination = await showModalBottomSheet<String>(
-                              context: context,
-                              builder: (context) => const _SearchDestinationSheet(),
-                              backgroundColor: const Color(0xFF0A0A0A),
-                              shape: const RoundedRectangleBorder(
-                                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                              ),
-                            );
-                            if (!context.mounted || destination == null) return;
+                            final selection =
+                                await Navigator.push<LocationSelectionResult>(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const LocationPickerScreen(),
+                                  ),
+                                );
+                            if (!context.mounted || selection == null) return;
                             final driver = await Navigator.push<DriverModel>(
                               context,
                               MaterialPageRoute(
                                 builder: (_) => NearbyDriversScreen(
-                                  area: destination,
+                                  pickupLat: selection.pickupLat,
+                                  pickupLng: selection.pickupLng,
                                   returnSelection: true,
                                 ),
                               ),
@@ -86,7 +95,15 @@ class HomeTab extends StatelessWidget {
                               MaterialPageRoute(
                                 builder: (_) => RideRequestScreen(
                                   driver: driver.toLegacyMap(),
-                                  initialDestination: destination,
+                                  initialPickup: selection.pickupAddress,
+                                  initialPickupLat: selection.pickupLat,
+                                  initialPickupLng: selection.pickupLng,
+                                  initialDestination:
+                                      selection.destinationAddress,
+                                  initialDestinationLat:
+                                      selection.destinationLat,
+                                  initialDestinationLng:
+                                      selection.destinationLng,
                                 ),
                               ),
                             );
@@ -211,11 +228,18 @@ class HomeTab extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: AppTheme.surface,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppTheme.primaryBlue, width: 1.5),
+                      border: Border.all(
+                        color: AppTheme.primaryBlue,
+                        width: 1.5,
+                      ),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.qr_code_scanner, color: AppTheme.primaryBlue, size: 28),
+                        const Icon(
+                          Icons.qr_code_scanner,
+                          color: AppTheme.primaryBlue,
+                          size: 28,
+                        ),
                         const SizedBox(width: 16),
                         Expanded(
                           child: Column(
@@ -240,7 +264,11 @@ class HomeTab extends StatelessWidget {
                             ],
                           ),
                         ),
-                        const Icon(Icons.arrow_forward_ios, color: Color(0xFF666666), size: 16),
+                        const Icon(
+                          Icons.arrow_forward_ios,
+                          color: Color(0xFF666666),
+                          size: 16,
+                        ),
                       ],
                     ),
                   ),
@@ -265,7 +293,11 @@ class HomeTab extends StatelessWidget {
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.search, color: AppTheme.primaryBlue, size: 28),
+                        const Icon(
+                          Icons.search,
+                          color: AppTheme.primaryBlue,
+                          size: 28,
+                        ),
                         const SizedBox(width: 16),
                         Expanded(
                           child: Column(
@@ -290,7 +322,11 @@ class HomeTab extends StatelessWidget {
                             ],
                           ),
                         ),
-                        const Icon(Icons.arrow_forward_ios, color: Color(0xFF666666), size: 16),
+                        const Icon(
+                          Icons.arrow_forward_ios,
+                          color: Color(0xFF666666),
+                          size: 16,
+                        ),
                       ],
                     ),
                   ),
@@ -354,11 +390,7 @@ class _MiniOffer extends StatelessWidget {
   final IconData icon;
   final String label;
 
-  const _MiniOffer({
-    super.key,
-    required this.icon,
-    required this.label,
-  });
+  const _MiniOffer({super.key, required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -396,7 +428,8 @@ class _SearchDestinationSheet extends StatefulWidget {
   const _SearchDestinationSheet({super.key});
 
   @override
-  State<_SearchDestinationSheet> createState() => _SearchDestinationSheetState();
+  State<_SearchDestinationSheet> createState() =>
+      _SearchDestinationSheetState();
 }
 
 class _SearchDestinationSheetState extends State<_SearchDestinationSheet> {
@@ -447,7 +480,10 @@ class _SearchDestinationSheetState extends State<_SearchDestinationSheet> {
                 borderRadius: BorderRadius.circular(8),
                 borderSide: const BorderSide(color: AppTheme.primaryBlue),
               ),
-              prefixIcon: const Icon(Icons.location_on, color: AppTheme.primaryBlue),
+              prefixIcon: const Icon(
+                Icons.location_on,
+                color: AppTheme.primaryBlue,
+              ),
             ),
           ),
           const SizedBox(height: 20),
@@ -455,7 +491,9 @@ class _SearchDestinationSheetState extends State<_SearchDestinationSheet> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.primaryBlue,
               padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             onPressed: _controller.text.trim().isNotEmpty
                 ? () => Navigator.pop(context, _controller.text.trim())

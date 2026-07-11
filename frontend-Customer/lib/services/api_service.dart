@@ -180,28 +180,31 @@ class ApiService {
     required String phone,
     required String password,
   }) {
-    final name = [firstName.trim(), lastName.trim()]
-        .where((part) => part.isNotEmpty)
-        .join(' ');
+    final name = [
+      firstName.trim(),
+      lastName.trim(),
+    ].where((part) => part.isNotEmpty).join(' ');
 
-    return _dio.post('/customers/register', data: {
-      'name': name,
-      'firstName': firstName,
-      'lastName': lastName,
-      'email': email,
-      'phone': phone,
-      'password': password,
-    });
+    return _dio.post(
+      '/customers/register',
+      data: {
+        'name': name,
+        'firstName': firstName,
+        'lastName': lastName,
+        'email': email,
+        'phone': phone,
+        'password': password,
+      },
+    );
   }
 
   static Future<Response> customerLogin({
     required String identifier,
     required String password,
-  }) =>
-      _dio.post('/customers/login', data: {
-        'identifier': identifier,
-        'password': password,
-      });
+  }) => _dio.post(
+    '/customers/login',
+    data: {'identifier': identifier, 'password': password},
+  );
 
   static Future<Response> customerRequestOtp(String phone) =>
       _dio.post('/customers/request-otp', data: {'phone': phone});
@@ -212,14 +215,24 @@ class ApiService {
   static Future<Response> updateCustomerProfile(Map<String, dynamic> body) =>
       _dio.patch('/customers/profile', data: body);
 
-  static Future<Response> getNearbyDrivers({String? area, String? query}) =>
-      _dio.get(
-        '/drivers/nearby',
-        queryParameters: {
-          if (area != null && area.trim().isNotEmpty) 'area': area.trim(),
-          if (query != null && query.trim().isNotEmpty) 'q': query.trim(),
-        },
-      );
+  static Future<Response> getNearbyDrivers({
+    String? area,
+    String? query,
+    double? pickupLat,
+    double? pickupLng,
+  }) {
+    final queryParameters = <String, dynamic>{};
+    if (area != null && area.trim().isNotEmpty) {
+      queryParameters['area'] = area.trim();
+    }
+    if (query != null && query.trim().isNotEmpty) {
+      queryParameters['q'] = query.trim();
+    }
+    if (pickupLat != null) queryParameters['lat'] = pickupLat;
+    if (pickupLng != null) queryParameters['lng'] = pickupLng;
+
+    return _dio.get('/drivers/nearby', queryParameters: queryParameters);
+  }
 
   static Future<Response> getDriverByQR(String qrToken) =>
       _dio.get('/drivers/qr/$qrToken');
@@ -245,10 +258,8 @@ class ApiService {
   static Future<Response> getTripDetails(String tripId) =>
       _dio.get('/trips/$tripId');
 
-  static Future<Response> getMyTrips({int page = 1, int limit = 20}) => _dio.get(
-        '/trips/my',
-        queryParameters: {'page': page, 'limit': limit},
-      );
+  static Future<Response> getMyTrips({int page = 1, int limit = 20}) =>
+      _dio.get('/trips/my', queryParameters: {'page': page, 'limit': limit});
 
   static Future<Response> getReceiptByTripId(String tripId) =>
       _dio.get('/receipts/trip/$tripId');
