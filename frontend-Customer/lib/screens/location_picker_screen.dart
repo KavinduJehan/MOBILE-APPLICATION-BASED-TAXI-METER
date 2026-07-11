@@ -5,7 +5,9 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../services/api_service.dart';
 import '../theme.dart';
+import 'profile_tab.dart';
 
 const _defaultCenter = LatLng(6.9271, 79.8612);
 
@@ -71,6 +73,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   bool _locating = true;
   bool _showMap = false;
   String? _locationMessage;
+  List<_SavedPlace> _savedPlaces = const [];
+  bool _loadingSavedPlaces = false;
 
   @override
   void initState() {
@@ -160,6 +164,91 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     });
   }
 
+  Future<void> _loadSavedPlaces() async {
+    setState(() => _loadingSavedPlaces = true);
+    try {
+      final response = await ApiService.getSavedPlaces();
+      if (!mounted) return;
+      setState(() {
+        _savedPlaces = _SavedPlace.listFromResponse(response.data);
+        _loadingSavedPlaces = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingSavedPlaces = false);
+    }
+  }
+
+  Future<void> _openSavedPlaces() async {
+    if (_loadingSavedPlaces) return;
+    if (_savedPlaces.isEmpty) {
+      await _loadSavedPlaces();
+      if (!mounted) return;
+    }
+
+    final updated = await Navigator.push<List<SavedAddress>>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SavedPlacesScreen(
+          addresses: _savedPlaces
+              .map((place) => place.toSavedAddress())
+              .toList(),
+        ),
+      ),
+    );
+    if (updated == null) return;
+
+    setState(() {
+      _loadingSavedPlaces = true;
+      _savedPlaces = updated.map(_SavedPlace.fromSavedAddress).toList();
+    });
+
+    try {
+      final response = await ApiService.updateSavedPlaces(
+        updated.map((address) => address.toJson()).toList(),
+      );
+      if (!mounted) return;
+      setState(() {
+        _savedPlaces = _SavedPlace.listFromResponse(response.data);
+        _loadingSavedPlaces = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingSavedPlaces = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Saved locally. Sync failed, try again online.'),
+        ),
+      );
+    }
+  }
+
+  void _selectSavedPlace(_SavedPlace place) {
+    final point = place.point ?? _pointForSavedPlace(place);
+    _searchController.text = place.address;
+    if (point == null) {
+      setState(() {
+        _destinationAddress = place.address;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Set this saved place on the map to continue.'),
+        ),
+      );
+      _openMapForPinning();
+      return;
+    }
+    _selectDestination(place.address, point);
+  }
+
+  LatLng? _pointForSavedPlace(_SavedPlace place) {
+    final source = '${place.label} ${place.address}'.toLowerCase();
+    for (final entry in _places.entries) {
+      if (source.contains(entry.key.toLowerCase())) return entry.value;
+    }
+    return null;
+  }
+
   void _selectDestination(String name, LatLng point) {
     _searchController.text = name;
     setState(() {
@@ -232,80 +321,214 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   }
 
   Widget _buildSearchView() {
+    final quickPlaces = _savedPlaces.take(3).toList();
+
     return Scaffold(
       resizeToAvoidBottomInset: true,
       backgroundColor: AppTheme.background,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _TripTypeHeader(onClose: () => Navigator.pop(context)),
-            _PickupDropPanel(
-              pickupAddress: _locating
-                  ? 'Detecting location...'
-                  : _pickupAddress,
-              locationMessage: _locationMessage,
-              controller: _searchController,
-              focusNode: _dropFocusNode,
-              onClearDrop: _clearDrop,
-              onOpenMap: _openMapForPinning,
+      body: Stack(
+        children: [
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: _pickup,
+              initialZoom: 15,
+              onTap: (_, point) {
+                setState(() {
+                  _destination = point;
+                  _destinationAddress = _searchController.text.trim().isEmpty
+                      ? 'Pinned destination'
+                      : _searchController.text.trim();
+                  _showMap = true;
+                });
+              },
             ),
-            Expanded(
-              child: ListView(
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                children: [
-                  _ActionTile(
-                    icon: Icons.favorite_border,
-                    title: 'Saved Addresses',
-                    trailing: const Icon(
-                      Icons.chevron_right,
-                      color: Colors.white54,
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.ridex.customer',
+              ),
+              MarkerLayer(
+                markers: [
+                  if (_liveLocation != null)
+                    Marker(
+                      point: _liveLocation!,
+                      width: 34,
+                      height: 34,
+                      child: const Icon(
+                        Icons.my_location,
+                        color: AppTheme.primaryBlue,
+                        size: 26,
+                      ),
                     ),
-                    onTap: () {},
-                  ),
-                  _ActionTile(
-                    icon: Icons.pin_drop_outlined,
-                    title: 'Set location on map',
-                    emphasized: true,
-                    onTap: _openMapForPinning,
-                  ),
-                  const SizedBox(height: 8),
-                  _ActionTile(
-                    icon: Icons.work_outline,
-                    title: 'Add Work',
-                    iconColor: Colors.orangeAccent,
-                    trailing: const Icon(Icons.add, color: Colors.white70),
-                    onTap: () {},
-                  ),
-                  _SavedLocationTile(
-                    icon: Icons.home_outlined,
-                    title: 'Home',
-                    subtitle: '543, Galedanda Road, Gonawala, Gampaha',
-                    onTap: () =>
-                        _selectDestination('Gampaha', _places['Gampaha']!),
-                  ),
-                  _SavedLocationTile(
-                    icon: Icons.access_time,
-                    title: 'Rovinta electronics',
-                    subtitle: 'Kandy Road, Kiribathgoda, Sri Lanka',
-                    onTap: () => _selectDestination(
-                      'Kiribathgoda',
-                      _places['Kiribathgoda']!,
-                    ),
-                  ),
-                  if (_suggestions.isNotEmpty) const _SectionDivider(),
-                  ..._suggestions.map(
-                    (entry) => _SuggestionTile(
-                      title: entry.key,
-                      subtitle: 'Sri Lanka',
-                      onTap: () => _selectDestination(entry.key, entry.value),
+                  Marker(
+                    point: _pickup,
+                    width: 48,
+                    height: 48,
+                    child: const Icon(
+                      Icons.location_pin,
+                      color: AppTheme.successGreen,
+                      size: 42,
                     ),
                   ),
                 ],
               ),
+            ],
+          ),
+          SafeArea(
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Material(
+                  color: Colors.white,
+                  shape: const CircleBorder(),
+                  elevation: 4,
+                  child: IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.arrow_back, color: Colors.black87),
+                    tooltip: 'Back',
+                  ),
+                ),
+              ),
             ),
-          ],
-        ),
+          ),
+          Positioned(
+            right: 16,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 190,
+            child: Material(
+              color: Colors.white,
+              shape: const CircleBorder(),
+              elevation: 4,
+              child: IconButton(
+                onPressed: _openMapForPinning,
+                icon: const Icon(
+                  Icons.my_location,
+                  color: AppTheme.primaryBlue,
+                ),
+                tooltip: 'Set on map',
+              ),
+            ),
+          ),
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  0,
+                  16,
+                  16 + MediaQuery.of(context).viewInsets.bottom,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _MapSearchPanel(
+                      pickupAddress: _locating
+                          ? 'Detecting location...'
+                          : _pickupAddress,
+                      locationMessage: _locationMessage,
+                      controller: _searchController,
+                      focusNode: _dropFocusNode,
+                      onClearDrop: _clearDrop,
+                      onOpenMap: _openMapForPinning,
+                    ),
+                    if (_suggestions.isNotEmpty ||
+                        _searchController.text.isNotEmpty)
+                      Container(
+                        constraints: const BoxConstraints(maxHeight: 220),
+                        margin: const EdgeInsets.only(top: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x22000000),
+                              blurRadius: 16,
+                              offset: Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: _suggestions.isEmpty
+                            ? const Padding(
+                                padding: EdgeInsets.all(16),
+                                child: Text(
+                                  'No matching locations found',
+                                  style: TextStyle(color: Colors.black54),
+                                ),
+                              )
+                            : ListView.separated(
+                                shrinkWrap: true,
+                                padding: EdgeInsets.zero,
+                                itemCount: _suggestions.length,
+                                separatorBuilder: (_, _) =>
+                                    const Divider(height: 1),
+                                itemBuilder: (context, index) {
+                                  final entry = _suggestions[index];
+                                  return _LightSuggestionTile(
+                                    title: entry.key,
+                                    subtitle: 'Sri Lanka',
+                                    onTap: () => _selectDestination(
+                                      entry.key,
+                                      entry.value,
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _QuickDestinationCard(
+                            icon: Icons.home_outlined,
+                            label: quickPlaces.isNotEmpty
+                                ? quickPlaces[0].label
+                                : 'Home',
+                            subtitle: quickPlaces.isNotEmpty
+                                ? quickPlaces[0].address
+                                : 'Saved places',
+                            onTap: quickPlaces.isNotEmpty
+                                ? () => _selectSavedPlace(quickPlaces[0])
+                                : _openSavedPlaces,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _QuickDestinationCard(
+                            icon: Icons.work_outline,
+                            label: quickPlaces.length > 1
+                                ? quickPlaces[1].label
+                                : 'Work',
+                            subtitle: quickPlaces.length > 1
+                                ? quickPlaces[1].address
+                                : 'Add work',
+                            onTap: quickPlaces.length > 1
+                                ? () => _selectSavedPlace(quickPlaces[1])
+                                : _openSavedPlaces,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _QuickDestinationCard(
+                            icon: Icons.favorite_border,
+                            label: 'Saved',
+                            subtitle: _loadingSavedPlaces
+                                ? 'Loading...'
+                                : '${_savedPlaces.length} places',
+                            onTap: _openSavedPlaces,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -409,72 +632,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   }
 }
 
-class _TripTypeHeader extends StatelessWidget {
-  const _TripTypeHeader({required this.onClose});
-
-  final VoidCallback onClose;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 76,
-      decoration: const BoxDecoration(color: Color(0xFF0E1422)),
-      child: Row(
-        children: [
-          Expanded(
-            child: Container(
-              height: double.infinity,
-              color: AppTheme.surfaceAlt,
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircleAvatar(
-                    radius: 14,
-                    backgroundColor: Colors.white,
-                    child: Icon(
-                      Icons.check,
-                      color: AppTheme.background,
-                      size: 18,
-                    ),
-                  ),
-                  SizedBox(width: 12),
-                  Text(
-                    'One way',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Expanded(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                Icon(
-                  Icons.radio_button_unchecked,
-                  color: Colors.white38,
-                  size: 30,
-                ),
-                SizedBox(width: 12),
-                Text(
-                  'Return trip*',
-                  style: TextStyle(fontSize: 20, color: Colors.white70),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            onPressed: onClose,
-            icon: const Icon(Icons.close, color: Colors.white70),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PickupDropPanel extends StatelessWidget {
-  const _PickupDropPanel({
+class _MapSearchPanel extends StatelessWidget {
+  const _MapSearchPanel({
     required this.pickupAddress,
     required this.locationMessage,
     required this.controller,
@@ -492,193 +651,196 @@ class _PickupDropPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppTheme.background,
-        border: Border(bottom: BorderSide(color: Color(0xFF202938))),
-      ),
-      padding: const EdgeInsets.fromLTRB(20, 20, 12, 18),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 78,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                const Text(
-                  'PICKUP',
-                  style: TextStyle(
-                    color: AppTheme.primaryBlue,
-                    fontWeight: FontWeight.w800,
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      elevation: 8,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 10, 14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Column(
+              children: const [
+                Icon(Icons.circle, color: Color(0xFFFFB33F), size: 10),
+                SizedBox(height: 12),
+                SizedBox(
+                  height: 32,
+                  child: VerticalDivider(
+                    color: Color(0xFFE0E3E7),
+                    thickness: 2,
+                    width: 8,
                   ),
                 ),
-                const SizedBox(height: 16),
-                Container(width: 2, height: 28, color: Colors.white24),
-                const SizedBox(height: 14),
-                const Text(
-                  'DROP',
-                  style: TextStyle(
-                    color: Colors.orangeAccent,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
+                SizedBox(height: 10),
+                Icon(Icons.trip_origin, color: Color(0xFFFFB33F), size: 15),
               ],
             ),
-          ),
-          const SizedBox(width: 18),
-          Expanded(
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        pickupAddress,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Pick up',
+                    style: TextStyle(
+                      color: Colors.grey.shade500,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
                     ),
-                    if (locationMessage != null)
-                      IconButton(
-                        onPressed: onOpenMap,
-                        icon: const Icon(
-                          Icons.warning_amber_rounded,
-                          color: Colors.orangeAccent,
-                        ),
-                        tooltip: locationMessage,
-                      ),
-                  ],
-                ),
-                const Divider(height: 24, color: Color(0xFF2A3446)),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: controller,
-                        focusNode: focusNode,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                        ),
-                        textInputAction: TextInputAction.search,
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          contentPadding: EdgeInsets.zero,
-                          filled: false,
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          hintText: 'Where are you going?',
-                          hintStyle: TextStyle(
-                            color: Colors.white38,
-                            fontSize: 18,
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          pickupAddress,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.black87,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
+                      if (locationMessage != null)
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          onPressed: onOpenMap,
+                          icon: const Icon(
+                            Icons.warning_amber_rounded,
+                            color: Color(0xFFFFB33F),
+                          ),
+                          tooltip: locationMessage,
+                        ),
+                    ],
+                  ),
+                  const Divider(height: 18, color: Color(0xFFE8EAEE)),
+                  Text(
+                    'Drop off',
+                    style: TextStyle(
+                      color: Colors.grey.shade500,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
                     ),
-                    IconButton(
-                      onPressed: controller.text.isEmpty
-                          ? onOpenMap
-                          : onClearDrop,
-                      icon: Icon(
-                        controller.text.isEmpty ? Icons.add : Icons.close,
-                        color: Colors.white70,
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: controller,
+                          focusNode: focusNode,
+                          style: const TextStyle(
+                            color: Colors.black87,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          textInputAction: TextInputAction.search,
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.only(top: 2),
+                            filled: false,
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            hintText: 'Where to?',
+                            hintStyle: TextStyle(
+                              color: Color(0xFF9AA0A6),
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
                       ),
-                      tooltip: controller.text.isEmpty
-                          ? 'Set on map'
-                          : 'Clear destination',
-                    ),
-                  ],
-                ),
-              ],
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        onPressed: controller.text.isEmpty
+                            ? onOpenMap
+                            : onClearDrop,
+                        icon: Icon(
+                          controller.text.isEmpty ? Icons.add : Icons.close,
+                          color: Colors.black54,
+                        ),
+                        tooltip: controller.text.isEmpty
+                            ? 'Set on map'
+                            : 'Clear destination',
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ActionTile extends StatelessWidget {
-  const _ActionTile({
-    required this.icon,
-    required this.title,
-    required this.onTap,
-    this.trailing,
-    this.iconColor = Colors.white,
-    this.emphasized = false,
-  });
-
-  final IconData icon;
-  final String title;
-  final VoidCallback onTap;
-  final Widget? trailing;
-  final Color iconColor;
-  final bool emphasized;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      onTap: onTap,
-      minVerticalPadding: 18,
-      leading: Icon(icon, color: iconColor, size: 28),
-      title: Text(
-        title,
-        style: TextStyle(
-          fontSize: 17,
-          fontWeight: emphasized ? FontWeight.w800 : FontWeight.w700,
+          ],
         ),
       ),
-      trailing: trailing,
-      shape: const Border(bottom: BorderSide(color: Color(0xFF202938))),
     );
   }
 }
 
-class _SavedLocationTile extends StatelessWidget {
-  const _SavedLocationTile({
+class _QuickDestinationCard extends StatelessWidget {
+  const _QuickDestinationCard({
     required this.icon,
-    required this.title,
+    required this.label,
     required this.subtitle,
     required this.onTap,
   });
 
   final IconData icon;
-  final String title;
+  final String label;
   final String subtitle;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      onTap: onTap,
-      minVerticalPadding: 14,
-      leading: CircleAvatar(
-        backgroundColor: Colors.orangeAccent.withValues(alpha: 0.12),
-        child: Icon(icon, color: Colors.orangeAccent),
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      elevation: 4,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: const Color(
+                  0xFFFFB33F,
+                ).withValues(alpha: 0.16),
+                child: Icon(icon, color: const Color(0xFFFFA51F), size: 20),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.black87,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.black45, fontSize: 11),
+              ),
+            ],
+          ),
+        ),
       ),
-      title: Text(
-        title,
-        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-      ),
-      subtitle: Text(
-        subtitle,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(color: Colors.white54),
-      ),
-      trailing: const Icon(Icons.more_vert, color: Colors.white54),
-      shape: const Border(bottom: BorderSide(color: Color(0xFF202938))),
     );
   }
 }
 
-class _SuggestionTile extends StatelessWidget {
-  const _SuggestionTile({
+class _LightSuggestionTile extends StatelessWidget {
+  const _LightSuggestionTile({
     required this.title,
     required this.subtitle,
     required this.onTap,
@@ -692,21 +854,72 @@ class _SuggestionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       onTap: onTap,
+      dense: true,
       leading: const Icon(Icons.place_outlined, color: AppTheme.primaryBlue),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-      subtitle: Text(subtitle, style: const TextStyle(color: Colors.white54)),
-      trailing: const Icon(Icons.chevron_right, color: Colors.white38),
-      shape: const Border(bottom: BorderSide(color: Color(0xFF202938))),
+      title: Text(
+        title,
+        style: const TextStyle(
+          color: Colors.black87,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      subtitle: Text(subtitle, style: const TextStyle(color: Colors.black45)),
+      trailing: const Icon(Icons.chevron_right, color: Colors.black38),
     );
   }
 }
 
-class _SectionDivider extends StatelessWidget {
-  const _SectionDivider();
+class _SavedPlace {
+  const _SavedPlace({
+    required this.label,
+    required this.address,
+    this.lat,
+    this.lng,
+  });
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(height: 10, color: const Color(0xFF070B12));
+  final String label;
+  final String address;
+  final double? lat;
+  final double? lng;
+
+  LatLng? get point => lat == null || lng == null ? null : LatLng(lat!, lng!);
+
+  factory _SavedPlace.fromJson(Map<String, dynamic> json) {
+    return _SavedPlace(
+      label: (json['label'] ?? 'Saved place').toString(),
+      address: (json['address'] ?? '').toString(),
+      lat: _readDouble(json['lat']),
+      lng: _readDouble(json['lng']),
+    );
+  }
+
+  factory _SavedPlace.fromSavedAddress(SavedAddress address) {
+    return _SavedPlace(label: address.label, address: address.address);
+  }
+
+  SavedAddress toSavedAddress() {
+    return SavedAddress(label: label, address: address);
+  }
+
+  static List<_SavedPlace> listFromResponse(Object? data) {
+    Object? listSource;
+    if (data is Map) {
+      listSource = data['savedPlaces'] ?? data['data'];
+    } else {
+      listSource = data;
+    }
+    if (listSource is! List) return const [];
+    return listSource
+        .whereType<Map>()
+        .map((item) => _SavedPlace.fromJson(Map<String, dynamic>.from(item)))
+        .where((place) => place.address.trim().isNotEmpty)
+        .toList();
+  }
+
+  static double? _readDouble(Object? value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
   }
 }
 
