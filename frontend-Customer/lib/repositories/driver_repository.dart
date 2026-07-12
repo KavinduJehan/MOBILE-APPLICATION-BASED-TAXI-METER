@@ -9,8 +9,15 @@ class DriverRepository {
   Future<List<DriverModel>> getNearbyDrivers({
     String? area,
     String? query,
+    double? pickupLat,
+    double? pickupLng,
   }) async {
-    final response = await ApiService.getNearbyDrivers(area: area, query: query);
+    final response = await ApiService.getNearbyDrivers(
+      area: area,
+      query: query,
+      pickupLat: pickupLat,
+      pickupLng: pickupLng,
+    );
     final list = _readList(response.data);
     final drivers = list.map(DriverModel.fromJson).toList();
     final normalizedQuery = query?.trim().toLowerCase();
