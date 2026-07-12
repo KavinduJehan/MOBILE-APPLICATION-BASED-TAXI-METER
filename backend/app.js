@@ -8,7 +8,7 @@ const tripRoutes = require('./routes/trips');
 const rateRoutes = require('./routes/rates');
 const adminRoutes = require('./routes/admin');
 const rideRequestRoutes = require('./routes/rideRequests');
-const customerRoutes = require('./routes/customers');
+const customerRoutes = require('./routes/customerRoutes');
 
 const app = express();
 
@@ -23,6 +23,10 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/ride-requests', rideRequestRoutes);
 app.use('/api/customers', customerRoutes);
 
+app.get('/api', (req, res) => res.json({
+  status: 'ok',
+  message: 'Taxi Meter API is running',
+}));
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 module.exports = app;

@@ -1,7 +1,49 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const Customer = require('../models/Customer');
+const Customer = require('../models/customerModel');
 
+const normalizeSavedPlaces = (places = []) => {
+  if (!Array.isArray(places)) return [];
+  return places
+    .map((place) => ({
+      label: String(place.label || '').trim(),
+      address: String(place.address || '').trim(),
+      lat: place.lat == null ? null : Number(place.lat),
+      lng: place.lng == null ? null : Number(place.lng),
+    }))
+    .filter((place) => place.label && place.address)
+    .map((place) => ({
+      label: place.label,
+      address: place.address,
+      lat: Number.isFinite(place.lat) ? place.lat : null,
+      lng: Number.isFinite(place.lng) ? place.lng : null,
+    }));
+};
+
+const getSavedPlaces = async (req, res) => {
+  try {
+    const customer = await Customer.findById(req.user.id).select('savedPlaces');
+    if (!customer) return res.status(404).json({ message: 'Customer not found' });
+    res.json({ savedPlaces: customer.savedPlaces || [] });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+const updateSavedPlaces = async (req, res) => {
+  const savedPlaces = normalizeSavedPlaces(req.body.savedPlaces);
+  try {
+    const customer = await Customer.findByIdAndUpdate(
+      req.user.id,
+      { savedPlaces },
+      { new: true, runValidators: true }
+    ).select('savedPlaces');
+    if (!customer) return res.status(404).json({ message: 'Customer not found' });
+    res.json({ savedPlaces: customer.savedPlaces || [] });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
 // POST /api/customers/register
 // First-time signup — name + phone only
 const register = async (req, res) => {
@@ -98,4 +140,11 @@ const verifyOtp = async (req, res) => {
   }
 };
 
-module.exports = { register, requestOtp, verifyOtp };
+module.exports = {
+  register,
+  requestOtp,
+  verifyOtp,
+  getSavedPlaces,
+  updateSavedPlaces,
+};
+
