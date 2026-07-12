@@ -39,7 +39,7 @@ class ActiveTripScreen extends StatelessWidget {
                   InfoRow(label: 'Rate', value: 'Rs. ${trip.ratePerKm.toStringAsFixed(2)} / km'),
                   InfoRow(label: 'Estimated fare', value: 'Rs. ${trip.estimatedFare.toStringAsFixed(2)}'),
                 ],
-              ),
+              ), 
             ),
             const SizedBox(height: 18),
             PrimaryActionButton(

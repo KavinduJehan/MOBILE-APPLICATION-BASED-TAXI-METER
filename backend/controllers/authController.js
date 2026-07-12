@@ -1,11 +1,20 @@
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const Driver = require('../models/Driver');
+const SystemConfig = require('../models/SystemConfig');
 
 const signToken = (payload) =>
   jwt.sign(payload, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   });
+
+const loadSystemConfig = async () => {
+  let config = await SystemConfig.findOne();
+  if (!config) {
+    config = await SystemConfig.create({});
+  }
+  return config;
+};
 
 const register = async (req, res) => {
   const { name, email, phone, password, licenseNumber, vehicleNumber, area } = req.body;
@@ -14,6 +23,11 @@ const register = async (req, res) => {
   }
 
   try {
+    const config = await loadSystemConfig();
+    if (!config.registrationOpen) {
+      return res.status(403).json({ message: 'Driver registration is currently closed.' });
+    }
+
     const exists = await Driver.findOne({ $or: [{ email }, { licenseNumber }] });
     if (exists) return res.status(409).json({ message: 'Driver already registered' });
 
@@ -70,6 +84,11 @@ const phoneLogin = async (req, res) => {
 
     if (!driver) {
       // First time — registration details required
+      const config = await loadSystemConfig();
+      if (!config.registrationOpen) {
+        return res.status(403).json({ message: 'Driver registration is currently closed.' });
+      }
+
       if (!name || !licenseNumber || !vehicleNumber) {
         return res.status(404).json({
           message: 'Driver not registered. Provide name, licenseNumber, and vehicleNumber to create an account.',

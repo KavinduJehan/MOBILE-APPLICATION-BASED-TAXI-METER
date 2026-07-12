@@ -34,11 +34,12 @@ export default function Login() {
     <div style={styles.container}>
       <div style={styles.card}>
         <h2 style={styles.title}>Taxi Meter — Admin</h2>
+        <p style={styles.subtitle}>Sign in with your regulator account to continue.</p>
         <form onSubmit={handleSubmit}>
           <div style={styles.field}>
             <label style={styles.label}>Email</label>
             <input
-              style={styles.input}
+              style={styles.input} 
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -57,7 +58,11 @@ export default function Login() {
             />
           </div>
           {error && <p style={styles.error}>{error}</p>}
-          <button style={styles.button} type="submit" disabled={loading}>
+          <button
+            style={{ ...styles.button, ...(loading ? styles.buttonDisabled : {}) }}
+            type="submit"
+            disabled={loading}
+          >
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
@@ -88,6 +93,13 @@ const styles = {
     textAlign: 'center',
     color: '#1a1a2e',
   },
+  subtitle: {
+    marginTop: '-0.75rem',
+    marginBottom: '1.25rem',
+    fontSize: '0.9rem',
+    textAlign: 'center',
+    color: '#5b6078',
+  },
   field: { marginBottom: '1rem' },
   label: { display: 'block', marginBottom: '0.3rem', fontSize: '0.9rem', color: '#555' },
   input: {
@@ -108,6 +120,10 @@ const styles = {
     fontSize: '1rem',
     cursor: 'pointer',
     marginTop: '0.5rem',
+  },
+  buttonDisabled: {
+    opacity: 0.75,
+    cursor: 'not-allowed',
   },
   error: { color: '#c0392b', fontSize: '0.9rem', marginBottom: '0.5rem' },
 };
