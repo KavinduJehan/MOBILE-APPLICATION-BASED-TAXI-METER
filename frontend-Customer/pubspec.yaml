@@ -51,6 +51,11 @@ dependencies:
   # QR / barcode camera scanning
   mobile_scanner: ^7.2.0
 
+  # Map and live location picker
+  flutter_map: ^8.2.2
+  latlong2: ^0.9.1
+  geolocator: ^14.0.2
+
   # Camera and gallery profile image selection
   image_picker: ^1.1.2
 
@@ -115,3 +120,4 @@ flutter:
   # see https://flutter.dev/to/font-from-package
 
   
+
