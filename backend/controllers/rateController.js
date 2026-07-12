@@ -1,4 +1,5 @@
 const Driver = require('../models/Driver');
+const SystemConfig = require('../models/SystemConfig');
 
 const updateRate = async (req, res) => {
   const { ratePerKm } = req.body;
@@ -7,6 +8,15 @@ const updateRate = async (req, res) => {
   }
 
   try {
+    let config = await SystemConfig.findOne();
+    if (!config) {
+      config = await SystemConfig.create({});
+    }
+
+    if (config.rateMode === 'ADMIN') {
+      return res.status(403).json({ message: 'You cannot update rates.' });
+    }
+
     const driver = await Driver.findByIdAndUpdate(
       req.user.id,
       { ratePerKm },
