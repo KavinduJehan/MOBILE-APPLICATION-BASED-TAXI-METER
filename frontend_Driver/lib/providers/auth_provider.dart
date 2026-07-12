@@ -23,12 +23,20 @@ class AuthProvider extends ChangeNotifier {
   DriverProfile? get profile => _profile;
   bool get isAuthenticated => _token != null;
 
+  String get rateMode => _rateMode;
+
+  String _rateMode = 'DRIVER';
+
   Future<void> bootstrap() async {
     if (!_bootstrapping) {
       return;
     }
     _setBusy(true);
     try {
+      final config = await api.getPublicConfig();
+      final rm = config['rateMode'];
+      _rateMode = (rm is String && rm.trim().isNotEmpty) ? rm : 'DRIVER';
+
       _token = await SessionStore.readToken();
       if (_token != null) {
         // Try reading a locally persisted profile (used for offline/demo mode)
