@@ -10,6 +10,7 @@ import '../models/trip_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/trip_provider.dart';
 import '../screens/welcome_screen.dart';
+import '../services/api_service.dart';
 import '../theme.dart';
 
 class ProfileTab extends StatefulWidget {
@@ -36,6 +37,18 @@ class _ProfileTabState extends State<ProfileTab> {
     final keyPrefix = _profileKeyPrefix(auth.customer?.id);
     final savedAddressJson = prefs.getString('${keyPrefix}_saved_addresses');
     final profileJson = prefs.getString('${keyPrefix}_profile_details');
+    var savedAddresses = _decodeSavedAddresses(savedAddressJson);
+
+    try {
+      final response = await ApiService.getSavedPlaces();
+      savedAddresses = _decodeSavedAddressesFromResponse(response.data);
+      await prefs.setString(
+        '${keyPrefix}_saved_addresses',
+        jsonEncode(savedAddresses.map((address) => address.toJson()).toList()),
+      );
+    } catch (_) {
+      // Keep using the local cache when offline or unauthenticated.
+    }
 
     if (!mounted) return;
     final customerDetails = ProfileDetails(
@@ -49,20 +62,40 @@ class _ProfileTabState extends State<ProfileTab> {
     );
     final storedDetails = ProfileDetails.fromJsonString(profileJson);
     setState(() {
-      _savedAddresses = _decodeSavedAddresses(savedAddressJson);
+      _savedAddresses = savedAddresses;
       _profileDetails = storedDetails.mergeFallback(customerDetails);
       _loadingProfileData = false;
     });
   }
 
   Future<void> _saveAddresses(List<SavedAddress> addresses) async {
+    final customerId = context.read<AuthProvider>().customer?.id;
     final prefs = await SharedPreferences.getInstance();
-    // ignore: use_build_context_synchronously
-    final keyPrefix = _profileKeyPrefix(context.read<AuthProvider>().customer?.id);
+    final keyPrefix = _profileKeyPrefix(customerId);
     await prefs.setString(
       '${keyPrefix}_saved_addresses',
       jsonEncode(addresses.map((address) => address.toJson()).toList()),
     );
+
+    try {
+      final response = await ApiService.updateSavedPlaces(
+        addresses.map((address) => address.toJson()).toList(),
+      );
+      addresses = _decodeSavedAddressesFromResponse(response.data);
+      await prefs.setString(
+        '${keyPrefix}_saved_addresses',
+        jsonEncode(addresses.map((address) => address.toJson()).toList()),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Saved locally. Sync failed, try again online.'),
+          ),
+        );
+      }
+    }
+
     if (!mounted) return;
     setState(() => _savedAddresses = addresses);
   }
@@ -86,14 +119,19 @@ class _ProfileTabState extends State<ProfileTab> {
       return;
     }
 
+    final customerId = context.read<AuthProvider>().customer?.id;
     final prefs = await SharedPreferences.getInstance();
-    final keyPrefix = _profileKeyPrefix(context.read<AuthProvider>().customer?.id);
-    await prefs.setString('${keyPrefix}_profile_details', jsonEncode(details.toJson()));
+    final keyPrefix = _profileKeyPrefix(customerId);
+    await prefs.setString(
+      '${keyPrefix}_profile_details',
+      jsonEncode(details.toJson()),
+    );
     if (!mounted) return;
     setState(() => _profileDetails = details);
   }
 
-  String _profileKeyPrefix(String? customerId) => 'customer_${customerId ?? 'guest'}';
+  String _profileKeyPrefix(String? customerId) =>
+      'customer_${customerId ?? 'guest'}';
 
   @override
   Widget build(BuildContext context) {
@@ -141,7 +179,9 @@ class _ProfileTabState extends State<ProfileTab> {
                           : _profileDetails.profileImage.isNotEmpty
                           ? ClipOval(
                               child: Image.memory(
-                                base64Decode(_profileDetails.profileImage.split(',').last),
+                                base64Decode(
+                                  _profileDetails.profileImage.split(',').last,
+                                ),
                                 width: 84,
                                 height: 84,
                                 fit: BoxFit.cover,
@@ -221,7 +261,8 @@ class _ProfileTabState extends State<ProfileTab> {
                   final updated = await Navigator.push<List<SavedAddress>>(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => SavedPlacesScreen(addresses: _savedAddresses),
+                      builder: (_) =>
+                          SavedPlacesScreen(addresses: _savedAddresses),
                     ),
                   );
                   if (updated != null) {
@@ -236,7 +277,9 @@ class _ProfileTabState extends State<ProfileTab> {
                 subtitle: 'Manage your payment options',
                 onTap: () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Payment methods feature coming soon')),
+                    const SnackBar(
+                      content: Text('Payment methods feature coming soon'),
+                    ),
                   );
                 },
               ),
@@ -248,7 +291,9 @@ class _ProfileTabState extends State<ProfileTab> {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const HelpSupportScreen()),
+                    MaterialPageRoute(
+                      builder: (_) => const HelpSupportScreen(),
+                    ),
                   );
                 },
               ),
@@ -259,7 +304,9 @@ class _ProfileTabState extends State<ProfileTab> {
                 subtitle: 'Learn about our app',
                 onTap: () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('RideX taxi meter customer app')),
+                    const SnackBar(
+                      content: Text('RideX taxi meter customer app'),
+                    ),
                   );
                 },
               ),
@@ -267,7 +314,12 @@ class _ProfileTabState extends State<ProfileTab> {
               if (auth.isLoggedIn)
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color.fromARGB(255, 126, 122, 161).withValues(alpha: 0.2),
+                    backgroundColor: const Color.fromARGB(
+                      255,
+                      126,
+                      122,
+                      161,
+                    ).withValues(alpha: 0.2),
                     foregroundColor: Colors.redAccent,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
@@ -307,7 +359,10 @@ class _ProfileTabState extends State<ProfileTab> {
                 (_) => false,
               );
             },
-            child: const Text('Sign Out', style: TextStyle(color: Colors.redAccent)),
+            child: const Text(
+              'Sign Out',
+              style: TextStyle(color: Colors.redAccent),
+            ),
           ),
         ],
       ),
@@ -349,12 +404,19 @@ class _ProfileTabState extends State<ProfileTab> {
                   const SizedBox(height: 4),
                   Text(
                     subtitle,
-                    style: const TextStyle(color: Color(0xFF8A8A8A), fontSize: 13),
+                    style: const TextStyle(
+                      color: Color(0xFF8A8A8A),
+                      fontSize: 13,
+                    ),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.arrow_forward_ios, color: Color(0xFF666666), size: 16),
+            const Icon(
+              Icons.arrow_forward_ios,
+              color: Color(0xFF666666),
+              size: 16,
+            ),
           ],
         ),
       ),
@@ -455,20 +517,32 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             title: 'E-mail',
             value: _details.emailOverride,
             badge: _details.emailVerified ? 'Verified' : 'Unverified',
-            onTap: () => _editText('E-mail', _details.emailOverride, (value) {
-              _details = _details.copyWith(emailOverride: value, emailVerified: false);
-            }, keyboardType: TextInputType.emailAddress),
+            onTap: () => _editText(
+              'E-mail',
+              _details.emailOverride,
+              (value) {
+                _details = _details.copyWith(
+                  emailOverride: value,
+                  emailVerified: false,
+                );
+              },
+              keyboardType: TextInputType.emailAddress,
+            ),
           ),
           _infoTile(
             icon: Icons.cake_outlined,
             title: 'Birthday',
-            value: _details.birthday.isEmpty ? 'Add your birthday' : _details.birthday,
+            value: _details.birthday.isEmpty
+                ? 'Add your birthday'
+                : _details.birthday,
             onTap: _pickBirthday,
           ),
           _infoTile(
             icon: Icons.wc,
             title: 'Gender',
-            value: _details.gender.isEmpty ? 'Add your gender' : _details.gender,
+            value: _details.gender.isEmpty
+                ? 'Add your gender'
+                : _details.gender,
             onTap: _pickGender,
           ),
         ],
@@ -558,16 +632,20 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       clipBehavior: Clip.antiAlias,
       child: _details.profileImagePath.isEmpty
           ? _details.profileImage.isEmpty
-              ? const Icon(Icons.person, color: AppTheme.primaryBlue, size: 54)
-              : Image.memory(
-                  base64Decode(_details.profileImage.split(',').last),
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => const Icon(
+                ? const Icon(
                     Icons.person,
                     color: AppTheme.primaryBlue,
                     size: 54,
-                  ),
-                )
+                  )
+                : Image.memory(
+                    base64Decode(_details.profileImage.split(',').last),
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => const Icon(
+                      Icons.person,
+                      color: AppTheme.primaryBlue,
+                      size: 54,
+                    ),
+                  )
           : Image.file(
               File(_details.profileImagePath),
               fit: BoxFit.cover,
@@ -592,12 +670,18 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.photo_camera, color: AppTheme.primaryBlue),
+              leading: const Icon(
+                Icons.photo_camera,
+                color: AppTheme.primaryBlue,
+              ),
               title: const Text('Take a photo'),
               onTap: () => Navigator.pop(context, ImageSource.camera),
             ),
             ListTile(
-              leading: const Icon(Icons.photo_library, color: AppTheme.primaryBlue),
+              leading: const Icon(
+                Icons.photo_library,
+                color: AppTheme.primaryBlue,
+              ),
               title: const Text('Select from photos'),
               onTap: () => Navigator.pop(context, ImageSource.gallery),
             ),
@@ -658,7 +742,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           decoration: InputDecoration(labelText: label),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(context, controller.text.trim()),
             child: const Text('Save'),
@@ -735,10 +822,12 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
-        Navigator.pop(context, _addresses);
-        return false;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          Navigator.pop(context, _addresses);
+        }
       },
       child: Scaffold(
         backgroundColor: AppTheme.background,
@@ -784,7 +873,8 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
                       child: const Icon(Icons.delete, color: Colors.white),
                     ),
                     direction: DismissDirection.endToStart,
-                    onDismissed: (_) => setState(() => _addresses.removeAt(index)),
+                    onDismissed: (_) =>
+                        setState(() => _addresses.removeAt(index)),
                     child: Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -817,8 +907,12 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
                           ),
                           IconButton(
                             tooltip: 'Delete address',
-                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                            onPressed: () => setState(() => _addresses.removeAt(index)),
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              color: Colors.redAccent,
+                            ),
+                            onPressed: () =>
+                                setState(() => _addresses.removeAt(index)),
                           ),
                         ],
                       ),
@@ -845,7 +939,10 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
           children: [
             TextField(
               controller: labelController,
-              decoration: const InputDecoration(labelText: 'Label', hintText: 'Home'),
+              decoration: const InputDecoration(
+                labelText: 'Label',
+                hintText: 'Home',
+              ),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -860,13 +957,19 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () {
               final label = labelController.text.trim();
               final address = addressController.text.trim();
               if (label.isEmpty || address.isEmpty) return;
-              Navigator.pop(context, SavedAddress(label: label, address: address));
+              Navigator.pop(
+                context,
+                SavedAddress(label: label, address: address),
+              );
             },
             child: const Text('Add'),
           ),
@@ -886,7 +989,9 @@ class HelpSupportScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final trips = context.watch<TripProvider>().trips.take(5).toList();
-    final activities = trips.isEmpty ? _fallbackActivities : trips.map(_activityFromTrip).toList();
+    final activities = trips.isEmpty
+        ? _fallbackActivities
+        : trips.map(_activityFromTrip).toList();
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -896,7 +1001,11 @@ class HelpSupportScreen extends StatelessWidget {
         children: [
           const Text(
             'Last 5 activities',
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 12),
           ...activities.map(
@@ -912,7 +1021,11 @@ class HelpSupportScreen extends StatelessWidget {
           const SizedBox(height: 18),
           const Text(
             'Other topics',
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 12),
           _supportTopic(context, Icons.receipt_long, 'Trip and receipt help'),
@@ -931,7 +1044,11 @@ class HelpSupportScreen extends StatelessWidget {
     );
   }
 
-  static Widget _supportTopic(BuildContext context, IconData icon, String title) {
+  static Widget _supportTopic(
+    BuildContext context,
+    IconData icon,
+    String title,
+  ) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: _supportCard(
@@ -939,9 +1056,9 @@ class HelpSupportScreen extends StatelessWidget {
         title: title,
         subtitle: 'Tap to contact support about $title',
         onTap: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('$title support selected')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('$title support selected')));
         },
       ),
     );
@@ -1041,29 +1158,37 @@ class ProfileDetails {
 
   ProfileDetails mergeFallback(ProfileDetails fallback) {
     return ProfileDetails(
-      nameOverride: nameOverride.isNotEmpty ? nameOverride : fallback.nameOverride,
-      phoneOverride: phoneOverride.isNotEmpty ? phoneOverride : fallback.phoneOverride,
-      emailOverride: emailOverride.isNotEmpty ? emailOverride : fallback.emailOverride,
+      nameOverride: nameOverride.isNotEmpty
+          ? nameOverride
+          : fallback.nameOverride,
+      phoneOverride: phoneOverride.isNotEmpty
+          ? phoneOverride
+          : fallback.phoneOverride,
+      emailOverride: emailOverride.isNotEmpty
+          ? emailOverride
+          : fallback.emailOverride,
       emailVerified: emailVerified,
       birthday: birthday.isNotEmpty ? birthday : fallback.birthday,
       gender: gender.isNotEmpty ? gender : fallback.gender,
       hasProfilePicture: hasProfilePicture || fallback.hasProfilePicture,
       profileImagePath: profileImagePath,
-      profileImage: profileImage.isNotEmpty ? profileImage : fallback.profileImage,
+      profileImage: profileImage.isNotEmpty
+          ? profileImage
+          : fallback.profileImage,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'nameOverride': nameOverride,
-        'phoneOverride': phoneOverride,
-        'emailOverride': emailOverride,
-        'emailVerified': emailVerified,
-        'birthday': birthday,
-        'gender': gender,
-        'hasProfilePicture': hasProfilePicture,
-        'profileImagePath': profileImagePath,
-        'profileImage': profileImage,
-      };
+    'nameOverride': nameOverride,
+    'phoneOverride': phoneOverride,
+    'emailOverride': emailOverride,
+    'emailVerified': emailVerified,
+    'birthday': birthday,
+    'gender': gender,
+    'hasProfilePicture': hasProfilePicture,
+    'profileImagePath': profileImagePath,
+    'profileImage': profileImage,
+  };
 
   factory ProfileDetails.fromJsonString(String? source) {
     if (source == null || source.isEmpty) return const ProfileDetails();
@@ -1128,8 +1253,26 @@ List<SavedAddress> _decodeSavedAddresses(String? source) {
   }
 }
 
+List<SavedAddress> _decodeSavedAddressesFromResponse(Object? data) {
+  Object? listSource;
+  if (data is Map) {
+    listSource = data['savedPlaces'] ?? data['data'];
+  } else {
+    listSource = data;
+  }
+  if (listSource is! List) return const [];
+  return listSource
+      .whereType<Map>()
+      .map((json) => SavedAddress.fromJson(Map<String, dynamic>.from(json)))
+      .where((address) => address.address.isNotEmpty)
+      .toList();
+}
+
 String _initials(String name) {
-  final parts = name.trim().split(RegExp(r'\s+')).where((part) => part.isNotEmpty);
+  final parts = name
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((part) => part.isNotEmpty);
   if (parts.isEmpty) return 'U';
   return parts.take(2).map((part) => part[0].toUpperCase()).join();
 }

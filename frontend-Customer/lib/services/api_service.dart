@@ -215,6 +215,13 @@ class ApiService {
   static Future<Response> updateCustomerProfile(Map<String, dynamic> body) =>
       _dio.patch('/customers/profile', data: body);
 
+  static Future<Response> getSavedPlaces() =>
+      _dio.get('/customers/saved-places');
+
+  static Future<Response> updateSavedPlaces(
+    List<Map<String, dynamic>> places,
+  ) => _dio.put('/customers/saved-places', data: {'savedPlaces': places});
+
   static Future<Response> getNearbyDrivers({
     String? area,
     String? query,
