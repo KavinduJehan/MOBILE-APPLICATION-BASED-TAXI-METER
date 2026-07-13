@@ -18,6 +18,20 @@ const customerSchema = new mongoose.Schema(
     otp: { type: String },
     otpDebug: { type: String },
     otpExpiry: { type: Date },
+    birthday: { type: String, default: '' },
+    gender: { type: String, default: '' },
+    profileImage: { type: String, default: '' },
+    savedPlaces: {
+      type: [
+        {
+          label: { type: String, required: true, trim: true },
+          address: { type: String, required: true, trim: true },
+          lat: { type: Number },
+          lng: { type: Number },
+        },
+      ],
+      default: [],
+    },
   },
   { timestamps: true }
 );

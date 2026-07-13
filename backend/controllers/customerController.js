@@ -9,6 +9,10 @@ const publicCustomer = (customer) => ({
   name: customer.name,
   email: customer.email || '',
   phone: customer.phone,
+  birthday: customer.birthday || '',
+  gender: customer.gender || '',
+  profileImage: customer.profileImage || '',
+  savedPlaces: customer.savedPlaces || [],
 });
 
 const signAccessToken = (customer) =>
@@ -220,4 +224,84 @@ const refreshToken = async (req, res) => {
   }
 };
 
-module.exports = { register, login, requestOtp, verifyOtp, refreshToken };
+const updateProfile = async (req, res) => {
+  const allowed = ['name', 'email', 'phone', 'birthday', 'gender', 'profileImage'];
+  const updates = {};
+
+  for (const key of allowed) {
+    if (req.body[key] !== undefined) updates[key] = String(req.body[key]).trim();
+  }
+
+  if (updates.email) updates.email = normalizeEmail(updates.email);
+  if (updates.email && !isValidEmail(updates.email)) {
+    return res.status(400).json({ message: 'Valid email is required' });
+  }
+  if (updates.phone && !isValidSriLankanPhone(updates.phone)) {
+    return res
+      .status(400)
+      .json({ message: 'Valid Sri Lankan phone number is required' });
+  }
+
+  try {
+    const customer = await Customer.findByIdAndUpdate(req.user.id, updates, {
+      new: true,
+      runValidators: true,
+    });
+    if (!customer) return res.status(404).json({ message: 'Customer not found' });
+    res.json(publicCustomer(customer));
+  } catch (err) {
+    if (err.code === 11000) {
+      return res.status(409).json({ message: 'Email or phone already in use' });
+    }
+    res.status(500).json({ message: err.message });
+  }
+};
+
+const getSavedPlaces = async (req, res) => {
+  try {
+    const customer = await Customer.findById(req.user.id).select('savedPlaces');
+    if (!customer) return res.status(404).json({ message: 'Customer not found' });
+    res.json({ savedPlaces: customer.savedPlaces || [] });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+const updateSavedPlaces = async (req, res) => {
+  const savedPlaces = Array.isArray(req.body.savedPlaces)
+    ? req.body.savedPlaces
+    : [];
+
+  const sanitized = savedPlaces
+    .map((place) => ({
+      label: String(place.label || '').trim(),
+      address: String(place.address || '').trim(),
+      lat: place.lat === undefined || place.lat === null ? undefined : Number(place.lat),
+      lng: place.lng === undefined || place.lng === null ? undefined : Number(place.lng),
+    }))
+    .filter((place) => place.label && place.address)
+    .slice(0, 20);
+
+  try {
+    const customer = await Customer.findByIdAndUpdate(
+      req.user.id,
+      { savedPlaces: sanitized },
+      { new: true, runValidators: true }
+    ).select('savedPlaces');
+    if (!customer) return res.status(404).json({ message: 'Customer not found' });
+    res.json({ savedPlaces: customer.savedPlaces || [] });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+module.exports = {
+  register,
+  login,
+  requestOtp,
+  verifyOtp,
+  refreshToken,
+  updateProfile,
+  getSavedPlaces,
+  updateSavedPlaces,
+};
