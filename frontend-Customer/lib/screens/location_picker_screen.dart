@@ -272,6 +272,17 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     });
   }
 
+  void _openPickupForPinning() {
+    _dropFocusNode.unfocus();
+    setState(() {
+      _editingPickup = true;
+      _showMap = true;
+    });
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _mapController.move(_pickup, 15),
+    );
+  }
+
   void _clearDrop() {
     _searchController.clear();
     setState(() {
@@ -432,6 +443,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                       locationMessage: _locationMessage,
                       controller: _searchController,
                       focusNode: _dropFocusNode,
+                      onEditPickup: _openPickupForPinning,
                       onClearDrop: _clearDrop,
                       onOpenMap: _openMapForPinning,
                     ),
@@ -638,6 +650,7 @@ class _MapSearchPanel extends StatelessWidget {
     required this.locationMessage,
     required this.controller,
     required this.focusNode,
+    required this.onEditPickup,
     required this.onClearDrop,
     required this.onOpenMap,
   });
@@ -646,6 +659,7 @@ class _MapSearchPanel extends StatelessWidget {
   final String? locationMessage;
   final TextEditingController controller;
   final FocusNode focusNode;
+  final VoidCallback onEditPickup;
   final VoidCallback onClearDrop;
   final VoidCallback onOpenMap;
 
@@ -689,31 +703,47 @@ class _MapSearchPanel extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          pickupAddress,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.black87,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                          ),
+                  Semantics(
+                    button: true,
+                    label: 'Pickup location, $pickupAddress. Change pickup',
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: onEditPickup,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                pickupAddress,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.black87,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            if (locationMessage != null)
+                              Tooltip(
+                                message: locationMessage!,
+                                child: const Icon(
+                                  Icons.warning_amber_rounded,
+                                  color: Color(0xFFFFB33F),
+                                  size: 20,
+                                ),
+                              )
+                            else
+                              const Icon(
+                                Icons.chevron_right_rounded,
+                                color: Color(0xFF9AA0A6),
+                                size: 20,
+                              ),
+                          ],
                         ),
                       ),
-                      if (locationMessage != null)
-                        IconButton(
-                          visualDensity: VisualDensity.compact,
-                          onPressed: onOpenMap,
-                          icon: const Icon(
-                            Icons.warning_amber_rounded,
-                            color: Color(0xFFFFB33F),
-                          ),
-                          tooltip: locationMessage,
-                        ),
-                    ],
+                    ),
                   ),
                   const Divider(height: 18, color: Color(0xFFE8EAEE)),
                   Text(
