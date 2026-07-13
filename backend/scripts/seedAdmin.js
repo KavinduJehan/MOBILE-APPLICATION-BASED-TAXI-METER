@@ -42,11 +42,20 @@ if (!MONGO_URI) {
     process.exit(1);
   }
 
-  const existing = await Driver.findOne({ email: ADMIN_EMAIL });
+  const existing = await Driver.findOne({
+    $or: [{ email: ADMIN_EMAIL.toLowerCase() }, { phone: ADMIN_PHONE }],
+  });
   if (existing) {
-    console.log(`Admin account already exists for ${ADMIN_EMAIL}. No changes made.`);
+    if (existing.email === ADMIN_EMAIL.toLowerCase()) {
+      console.log(`Admin account already exists for ${ADMIN_EMAIL}. No changes made.`);
+    } else {
+      console.error(
+        `ERROR: ADMIN_PHONE ${ADMIN_PHONE} is already used by another account. ` +
+          'Set a different ADMIN_PHONE in .env and run this script again.'
+      );
+    }
     await mongoose.disconnect();
-    process.exit(0);
+    process.exit(existing.email === ADMIN_EMAIL.toLowerCase() ? 0 : 1);
   }
 
   await Driver.create({
