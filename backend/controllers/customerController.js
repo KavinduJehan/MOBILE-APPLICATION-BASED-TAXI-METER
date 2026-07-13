@@ -220,4 +220,77 @@ const refreshToken = async (req, res) => {
   }
 };
 
-module.exports = { register, login, requestOtp, verifyOtp, refreshToken };
+// GET /api/customers/saved-places
+const getSavedPlaces = async (req, res) => {
+  try {
+    const customer = await Customer.findById(req.user.id).select('savedPlaces');
+    if (!customer) {
+      return res.status(404).json({ message: 'Customer not found' });
+    }
+
+    return res.json({ savedPlaces: customer.savedPlaces || [] });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+// PUT /api/customers/saved-places
+const updateSavedPlaces = async (req, res) => {
+  const { savedPlaces } = req.body;
+  if (!Array.isArray(savedPlaces)) {
+    return res.status(400).json({ message: 'savedPlaces must be an array' });
+  }
+  if (savedPlaces.length > 20) {
+    return res.status(400).json({ message: 'A maximum of 20 saved places is allowed' });
+  }
+
+  const normalizedPlaces = [];
+  for (const place of savedPlaces) {
+    if (!place || typeof place !== 'object' || Array.isArray(place)) {
+      return res.status(400).json({ message: 'Each saved place must be an object' });
+    }
+
+    const label = String(place.label || '').trim();
+    const address = String(place.address || '').trim();
+    const lat = place.lat == null ? null : Number(place.lat);
+    const lng = place.lng == null ? null : Number(place.lng);
+
+    if (!label || !address) {
+      return res.status(400).json({ message: 'Each saved place requires a label and address' });
+    }
+    if (label.length > 50 || address.length > 500) {
+      return res.status(400).json({ message: 'Saved place label or address is too long' });
+    }
+    if (lat !== null && (!Number.isFinite(lat) || lat < -90 || lat > 90)) {
+      return res.status(400).json({ message: 'Saved place latitude must be between -90 and 90' });
+    }
+    if (lng !== null && (!Number.isFinite(lng) || lng < -180 || lng > 180)) {
+      return res.status(400).json({ message: 'Saved place longitude must be between -180 and 180' });
+    }
+
+    normalizedPlaces.push({ label, address, lat, lng });
+  }
+
+  try {
+    const customer = await Customer.findById(req.user.id);
+    if (!customer) {
+      return res.status(404).json({ message: 'Customer not found' });
+    }
+
+    customer.savedPlaces = normalizedPlaces;
+    await customer.save();
+    return res.json({ savedPlaces: customer.savedPlaces });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+module.exports = {
+  register,
+  login,
+  requestOtp,
+  verifyOtp,
+  refreshToken,
+  getSavedPlaces,
+  updateSavedPlaces,
+};

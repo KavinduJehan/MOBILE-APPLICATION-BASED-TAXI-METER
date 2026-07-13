@@ -1,6 +1,16 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
+const savedPlaceSchema = new mongoose.Schema(
+  {
+    label: { type: String, required: true, trim: true, maxlength: 50 },
+    address: { type: String, required: true, trim: true, maxlength: 500 },
+    lat: { type: Number, default: null, min: -90, max: 90 },
+    lng: { type: Number, default: null, min: -180, max: 180 },
+  },
+  { _id: false }
+);
+
 const customerSchema = new mongoose.Schema(
   {
     firstName: { type: String, trim: true },
@@ -18,6 +28,7 @@ const customerSchema = new mongoose.Schema(
     otp: { type: String },
     otpDebug: { type: String },
     otpExpiry: { type: Date },
+    savedPlaces: { type: [savedPlaceSchema], default: [] },
   },
   { timestamps: true }
 );
