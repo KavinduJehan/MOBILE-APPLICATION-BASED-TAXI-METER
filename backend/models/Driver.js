@@ -18,12 +18,26 @@ const driverSchema = new mongoose.Schema(
     ratePerKm: { type: Number, default: 0 },  // Per-km rate in LKR
     area: { type: String, default: '' },
     location: {
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: undefined,
+      },
+      coordinates: {
+        type: [Number],
+        default: undefined,
+      },
       lat: { type: Number, default: null },
       lng: { type: Number, default: null },
       updatedAt: { type: Date, default: null },
     },
   },
   { timestamps: true }
+);
+
+driverSchema.index(
+  { location: '2dsphere' },
+  { partialFilterExpression: { 'location.coordinates': { $exists: true } } }
 );
 
 driverSchema.pre('save', async function (next) {
@@ -37,3 +51,4 @@ driverSchema.methods.comparePassword = async function (candidatePassword) {
 };
 
 module.exports = mongoose.model('Driver', driverSchema);
+
