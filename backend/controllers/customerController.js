@@ -9,6 +9,10 @@ const publicCustomer = (customer) => ({
   name: customer.name,
   email: customer.email || '',
   phone: customer.phone,
+  birthday: customer.birthday || '',
+  gender: customer.gender || '',
+  profileImage: customer.profileImage || '',
+  savedPlaces: customer.savedPlaces || [],
 });
 
 const signAccessToken = (customer) =>
