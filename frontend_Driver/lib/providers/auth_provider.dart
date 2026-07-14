@@ -43,7 +43,6 @@ class AuthProvider extends ChangeNotifier {
 
       _token = await SessionStore.readToken();
       if (_token != null) {
-        // Try reading a locally persisted profile (used for offline/demo mode)
         _profile = await SessionStore.readProfile() ?? await api.getProfile();
         await _startLocationUpdates();
       }
