@@ -113,7 +113,6 @@ export default function Dashboard() {
             <p style={styles.eyebrow}>Operations overview</p>
             <h2 style={styles.pageTitle}>Admin Dashboard</h2>
           </div>
-          <div style={styles.heroBadge}>Live insights</div>
         </div>
 
         {loading && <p style={styles.info}>Loading analytics...</p>}
