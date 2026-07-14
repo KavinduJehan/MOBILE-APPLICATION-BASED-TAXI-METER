@@ -40,23 +40,23 @@ dependencies:
   shared_preferences: ^2.2.0
 
   # Secure session persistence
-  flutter_secure_storage: ^9.2.2
+  flutter_secure_storage: ^10.3.1
 
   # Typography
-  google_fonts: ^6.2.1
+  google_fonts: ^8.1.0
 
   # State management
   provider: ^6.1.5
 
   # QR / barcode camera scanning
-  mobile_scanner: ^5.0.0
+  mobile_scanner: ^7.2.0
 
   # Package info
-  package_info_plus: ^8.0.0
+  package_info_plus: ^10.2.0
 
   # Map and live location picker
   flutter_map: ^8.2.2
-  latlong2: ^0.9.1
+  latlong2: ^0.10.1
   geolocator: ^14.0.2
 
   # Camera and gallery profile image selection

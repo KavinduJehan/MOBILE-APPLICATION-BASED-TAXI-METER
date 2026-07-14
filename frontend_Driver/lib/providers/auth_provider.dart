@@ -3,12 +3,16 @@ import 'package:flutter/material.dart';
 import '../models/api_exception.dart';
 import '../models/driver_profile.dart';
 import '../services/api_service.dart';
+import '../services/driver_location_service.dart';
 import '../services/session_store.dart';
 
 class AuthProvider extends ChangeNotifier {
-  AuthProvider() : api = ApiService();
+  AuthProvider() {
+    _locationService = DriverLocationService(api);
+  }
 
-  final ApiService api;
+  final ApiService api = ApiService();
+  late final DriverLocationService _locationService;
 
   bool _bootstrapping = true;
   bool _busy = false;
@@ -41,6 +45,7 @@ class AuthProvider extends ChangeNotifier {
       if (_token != null) {
         // Try reading a locally persisted profile (used for offline/demo mode)
         _profile = await SessionStore.readProfile() ?? await api.getProfile();
+        await _startLocationUpdates();
       }
     } catch (error) {
       await SessionStore.clear();
@@ -60,6 +65,7 @@ class AuthProvider extends ChangeNotifier {
       _token = result.token;
       await SessionStore.saveToken(result.token);
       _profile = result.profile ?? await api.getProfile();
+      await _startLocationUpdates();
       _errorMessage = null;
     } catch (error) {
       _errorMessage = _messageFrom(error);
@@ -149,6 +155,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    _locationService.stop();
     await SessionStore.clear();
     _token = null;
     _profile = null;
@@ -166,10 +173,24 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> _startLocationUpdates() async {
+    if (_token == null || _locationService.isRunning) return;
+    await _locationService.start();
+    if (_locationService.lastError != null) {
+      _errorMessage = _locationService.lastError;
+    }
+  }
+
   String _messageFrom(Object error) {
     if (error is ApiException) {
       return error.message;
     }
     return error.toString();
+  }
+
+  @override
+  void dispose() {
+    _locationService.stop();
+    super.dispose();
   }
 }

@@ -51,10 +51,14 @@ class _RateScreenState extends State<RateScreen> {
     try {
       await auth.updateRate(rate);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Rate updated')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Rate updated')));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(auth.errorMessage ?? 'Unable to save rate')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(auth.errorMessage ?? 'Unable to save rate')),
+      );
     }
   }
 
@@ -79,23 +83,36 @@ class _RateScreenState extends State<RateScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SectionTitle(title: 'Profile rate', subtitle: 'Adjust the amount you charge per kilometer.'),
+                  const SectionTitle(
+                    title: 'Profile rate',
+                    subtitle: 'Adjust the amount you charge per kilometer.',
+                  ),
                   const SizedBox(height: 18),
                   InfoRow(label: 'Name', value: profile?.name ?? '-'),
-                  InfoRow(label: 'License', value: profile?.licenseNumber ?? '-'),
-                  InfoRow(label: 'Vehicle', value: profile?.vehicleNumber ?? '-'),
+                  InfoRow(
+                    label: 'License',
+                    value: profile?.licenseNumber ?? '-',
+                  ),
+                  InfoRow(
+                    label: 'Vehicle',
+                    value: profile?.vehicleNumber ?? '-',
+                  ),
                   InfoRow(label: 'Area', value: profile?.area ?? '-'),
                   const SizedBox(height: 10),
                   Form(
                     key: _formKey,
                     child: TextFormField(
                       controller: _rateController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       enabled: auth.rateMode != 'ADMIN',
                       decoration: InputDecoration(
                         labelText: 'Rate per km',
                         suffixText: 'Rs',
-                        helperText: _areaAverage == null ? 'Area average unavailable' : 'Area average: Rs. ${_areaAverage!.toStringAsFixed(2)}',
+                        helperText: _areaAverage == null
+                            ? 'Area average unavailable'
+                            : 'Area average: Rs. ${_areaAverage!.toStringAsFixed(2)}',
                       ),
                       validator: (value) {
                         if (auth.rateMode == 'ADMIN') return null;
@@ -112,13 +129,18 @@ class _RateScreenState extends State<RateScreen> {
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.12),
+                        color: Colors.orange.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.orange.withOpacity(0.24)),
+                        border: Border.all(
+                          color: Colors.orange.withValues(alpha: 0.24),
+                        ),
                       ),
                       child: const Text(
                         'Rates are controlled by the regulator. You cannot change your rate.',
-                        style: TextStyle(color: Colors.orange, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                          color: Colors.orange,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -127,7 +149,7 @@ class _RateScreenState extends State<RateScreen> {
                     label: 'Save Rate',
                     isBusy: auth.busy,
                     onPressed: auth.rateMode == 'ADMIN' ? null : _save,
-                   ),
+                  ),
                 ],
               ),
             ),
