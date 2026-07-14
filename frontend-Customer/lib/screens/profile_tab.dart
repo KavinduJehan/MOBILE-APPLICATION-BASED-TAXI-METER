@@ -258,15 +258,15 @@ class _ProfileTabState extends State<ProfileTab> {
                     ? 'Loading saved addresses'
                     : '${_savedAddresses.length} saved address${_savedAddresses.length == 1 ? '' : 'es'}',
                 onTap: () async {
-                  final updated = await Navigator.push<List<SavedAddress>>(
+                  final result = await Navigator.push<SavedPlacesResult>(
                     context,
                     MaterialPageRoute(
                       builder: (_) =>
                           SavedPlacesScreen(addresses: _savedAddresses),
                     ),
                   );
-                  if (updated != null) {
-                    await _saveAddresses(updated);
+                  if (result != null) {
+                    await _saveAddresses(result.addresses);
                   }
                 },
               ),
@@ -802,10 +802,22 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 }
 
+class SavedPlacesResult {
+  const SavedPlacesResult({required this.addresses, this.selectedAddress});
+
+  final List<SavedAddress> addresses;
+  final SavedAddress? selectedAddress;
+}
+
 class SavedPlacesScreen extends StatefulWidget {
   final List<SavedAddress> addresses;
+  final bool allowSelection;
 
-  const SavedPlacesScreen({super.key, required this.addresses});
+  const SavedPlacesScreen({
+    super.key,
+    required this.addresses,
+    this.allowSelection = false,
+  });
 
   @override
   State<SavedPlacesScreen> createState() => _SavedPlacesScreenState();
@@ -813,6 +825,7 @@ class SavedPlacesScreen extends StatefulWidget {
 
 class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
   late List<SavedAddress> _addresses;
+  bool _canPop = false;
 
   @override
   void initState() {
@@ -820,29 +833,36 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
     _addresses = List.of(widget.addresses);
   }
 
+  void _finish([SavedAddress? selectedAddress]) {
+    if (_canPop) return;
+    final result = SavedPlacesResult(
+      addresses: List.unmodifiable(_addresses),
+      selectedAddress: selectedAddress,
+    );
+    setState(() => _canPop = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.pop(context, result);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false,
+      canPop: _canPop,
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) {
-          Navigator.pop(context, _addresses);
+          _finish();
         }
       },
       child: Scaffold(
         backgroundColor: AppTheme.background,
         appBar: AppBar(
-          title: const Text('Saved Places'),
+          title: const Text('Favourites'),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
-            onPressed: () => Navigator.pop(context, _addresses),
+            onPressed: _finish,
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, _addresses),
-              child: const Text('Done'),
-            ),
-          ],
+          actions: [TextButton(onPressed: _finish, child: const Text('Done'))],
         ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: _addAddress,
@@ -875,46 +895,71 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
                     direction: DismissDirection.endToStart,
                     onDismissed: (_) =>
                         setState(() => _addresses.removeAt(index)),
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppTheme.surface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFF333336)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.place, color: AppTheme.primaryBlue),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  address.label,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w700,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: widget.allowSelection
+                          ? () => _finish(address)
+                          : null,
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppTheme.surface,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFF333336)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.place,
+                              color: AppTheme.primaryBlue,
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    address.label,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  address.address,
-                                  style: const TextStyle(color: Colors.white70),
-                                ),
-                              ],
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    address.address,
+                                    style: const TextStyle(
+                                      color: Colors.white70,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                          IconButton(
-                            tooltip: 'Delete address',
-                            icon: const Icon(
-                              Icons.delete_outline,
-                              color: Colors.redAccent,
+                            IconButton(
+                              tooltip: 'Edit address',
+                              icon: const Icon(
+                                Icons.edit_outlined,
+                                color: Colors.white70,
+                              ),
+                              onPressed: () => _editAddress(index),
                             ),
-                            onPressed: () =>
-                                setState(() => _addresses.removeAt(index)),
-                          ),
-                        ],
+                            if (widget.allowSelection)
+                              const Icon(
+                                Icons.chevron_right,
+                                color: AppTheme.primaryBlue,
+                              )
+                            else
+                              IconButton(
+                                tooltip: 'Delete address',
+                                icon: const Icon(
+                                  Icons.delete_outline,
+                                  color: Colors.redAccent,
+                                ),
+                                onPressed: () =>
+                                    setState(() => _addresses.removeAt(index)),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                   );
@@ -980,6 +1025,62 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
     addressController.dispose();
     if (address == null) return;
     setState(() => _addresses = [..._addresses, address]);
+  }
+
+  Future<void> _editAddress(int index) async {
+    final existing = _addresses[index];
+    final labelController = TextEditingController(text: existing.label);
+    final addressController = TextEditingController(text: existing.address);
+    final updated = await showDialog<SavedAddress>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('Edit saved address'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: labelController,
+              decoration: const InputDecoration(labelText: 'Label'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: addressController,
+              minLines: 2,
+              maxLines: 3,
+              decoration: const InputDecoration(labelText: 'Address'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              final label = labelController.text.trim();
+              final address = addressController.text.trim();
+              if (label.isEmpty || address.isEmpty) return;
+              Navigator.pop(
+                context,
+                SavedAddress(
+                  label: label,
+                  address: address,
+                  lat: address == existing.address ? existing.lat : null,
+                  lng: address == existing.address ? existing.lng : null,
+                ),
+              );
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    labelController.dispose();
+    addressController.dispose();
+    if (updated == null || !mounted) return;
+    setState(() => _addresses[index] = updated);
   }
 }
 
@@ -1214,17 +1315,37 @@ class ProfileDetails {
 class SavedAddress {
   final String label;
   final String address;
+  final double? lat;
+  final double? lng;
 
-  const SavedAddress({required this.label, required this.address});
+  const SavedAddress({
+    required this.label,
+    required this.address,
+    this.lat,
+    this.lng,
+  });
 
-  Map<String, dynamic> toJson() => {'label': label, 'address': address};
+  Map<String, dynamic> toJson() => {
+    'label': label,
+    'address': address,
+    'lat': lat,
+    'lng': lng,
+  };
 
   factory SavedAddress.fromJson(Map<String, dynamic> json) {
     return SavedAddress(
       label: json['label'] as String? ?? 'Saved place',
       address: json['address'] as String? ?? '',
+      lat: _savedAddressDouble(json['lat']),
+      lng: _savedAddressDouble(json['lng']),
     );
   }
+}
+
+double? _savedAddressDouble(Object? value) {
+  if (value is num) return value.toDouble();
+  if (value is String) return double.tryParse(value);
+  return null;
 }
 
 class SupportActivity {
