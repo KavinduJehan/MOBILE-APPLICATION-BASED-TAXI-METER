@@ -49,7 +49,10 @@ dependencies:
   provider: ^6.1.5
 
   # QR / barcode camera scanning
-  mobile_scanner: ^7.2.0
+  mobile_scanner: ^5.0.0
+
+  # Package info
+  package_info_plus: ^8.0.0
 
   # Map and live location picker
   flutter_map: ^8.2.2

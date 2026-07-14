@@ -224,74 +224,68 @@ const refreshToken = async (req, res) => {
   }
 };
 
-const updateProfile = async (req, res) => {
-  const allowed = ['name', 'email', 'phone', 'birthday', 'gender', 'profileImage'];
-  const updates = {};
-
-  for (const key of allowed) {
-    if (req.body[key] !== undefined) updates[key] = String(req.body[key]).trim();
-  }
-
-  if (updates.email) updates.email = normalizeEmail(updates.email);
-  if (updates.email && !isValidEmail(updates.email)) {
-    return res.status(400).json({ message: 'Valid email is required' });
-  }
-  if (updates.phone && !isValidSriLankanPhone(updates.phone)) {
-    return res
-      .status(400)
-      .json({ message: 'Valid Sri Lankan phone number is required' });
-  }
-
-  try {
-    const customer = await Customer.findByIdAndUpdate(req.user.id, updates, {
-      new: true,
-      runValidators: true,
-    });
-    if (!customer) return res.status(404).json({ message: 'Customer not found' });
-    res.json(publicCustomer(customer));
-  } catch (err) {
-    if (err.code === 11000) {
-      return res.status(409).json({ message: 'Email or phone already in use' });
-    }
-    res.status(500).json({ message: err.message });
-  }
-};
-
+// GET /api/customers/saved-places
 const getSavedPlaces = async (req, res) => {
   try {
     const customer = await Customer.findById(req.user.id).select('savedPlaces');
-    if (!customer) return res.status(404).json({ message: 'Customer not found' });
-    res.json({ savedPlaces: customer.savedPlaces || [] });
+    if (!customer) {
+      return res.status(404).json({ message: 'Customer not found' });
+    }
+
+    return res.json({ savedPlaces: customer.savedPlaces || [] });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    return res.status(500).json({ message: err.message });
   }
 };
 
+// PUT /api/customers/saved-places
 const updateSavedPlaces = async (req, res) => {
-  const savedPlaces = Array.isArray(req.body.savedPlaces)
-    ? req.body.savedPlaces
-    : [];
+  const { savedPlaces } = req.body;
+  if (!Array.isArray(savedPlaces)) {
+    return res.status(400).json({ message: 'savedPlaces must be an array' });
+  }
+  if (savedPlaces.length > 20) {
+    return res.status(400).json({ message: 'A maximum of 20 saved places is allowed' });
+  }
 
-  const sanitized = savedPlaces
-    .map((place) => ({
-      label: String(place.label || '').trim(),
-      address: String(place.address || '').trim(),
-      lat: place.lat === undefined || place.lat === null ? undefined : Number(place.lat),
-      lng: place.lng === undefined || place.lng === null ? undefined : Number(place.lng),
-    }))
-    .filter((place) => place.label && place.address)
-    .slice(0, 20);
+  const normalizedPlaces = [];
+  for (const place of savedPlaces) {
+    if (!place || typeof place !== 'object' || Array.isArray(place)) {
+      return res.status(400).json({ message: 'Each saved place must be an object' });
+    }
+
+    const label = String(place.label || '').trim();
+    const address = String(place.address || '').trim();
+    const lat = place.lat == null ? null : Number(place.lat);
+    const lng = place.lng == null ? null : Number(place.lng);
+
+    if (!label || !address) {
+      return res.status(400).json({ message: 'Each saved place requires a label and address' });
+    }
+    if (label.length > 50 || address.length > 500) {
+      return res.status(400).json({ message: 'Saved place label or address is too long' });
+    }
+    if (lat !== null && (!Number.isFinite(lat) || lat < -90 || lat > 90)) {
+      return res.status(400).json({ message: 'Saved place latitude must be between -90 and 90' });
+    }
+    if (lng !== null && (!Number.isFinite(lng) || lng < -180 || lng > 180)) {
+      return res.status(400).json({ message: 'Saved place longitude must be between -180 and 180' });
+    }
+
+    normalizedPlaces.push({ label, address, lat, lng });
+  }
 
   try {
-    const customer = await Customer.findByIdAndUpdate(
-      req.user.id,
-      { savedPlaces: sanitized },
-      { new: true, runValidators: true }
-    ).select('savedPlaces');
-    if (!customer) return res.status(404).json({ message: 'Customer not found' });
-    res.json({ savedPlaces: customer.savedPlaces || [] });
+    const customer = await Customer.findById(req.user.id);
+    if (!customer) {
+      return res.status(404).json({ message: 'Customer not found' });
+    }
+
+    customer.savedPlaces = normalizedPlaces;
+    await customer.save();
+    return res.json({ savedPlaces: customer.savedPlaces });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    return res.status(500).json({ message: err.message });
   }
 };
 
@@ -301,7 +295,6 @@ module.exports = {
   requestOtp,
   verifyOtp,
   refreshToken,
-  updateProfile,
   getSavedPlaces,
   updateSavedPlaces,
 };
