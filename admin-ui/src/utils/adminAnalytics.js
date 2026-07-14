@@ -46,3 +46,49 @@ export function buildAnalyticsData(drivers = [], trips = []) {
     tripTrend,
   };
 }
+
+export function getWeeklyTripsByDay(trips = [], weekStartDate = new Date()) {
+  // Normalize to Monday start of week
+  const startDate = new Date(weekStartDate);
+  const dayOfWeek = startDate.getDay();
+  const diff = startDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+  startDate.setDate(diff);
+  startDate.setHours(0, 0, 0, 0);
+
+  const endDate = new Date(startDate);
+  endDate.setDate(endDate.getDate() + 7);
+
+  const completedTrips = trips.filter((trip) => trip.status === 'completed');
+  
+  const tripsInWeek = completedTrips.filter((trip) => {
+    const tripDate = new Date(trip.startTime);
+    return tripDate >= startDate && tripDate < endDate;
+  });
+
+  const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const tripsByDay = {
+    Monday: 0,
+    Tuesday: 0,
+    Wednesday: 0,
+    Thursday: 0,
+    Friday: 0,
+    Saturday: 0,
+    Sunday: 0,
+  };
+
+  tripsInWeek.forEach((trip) => {
+    const tripDate = new Date(trip.startTime);
+    const dayIndex = (tripDate.getDay() + 6) % 7; // Convert Sun=0 to Mon=0
+    const dayName = daysOfWeek[dayIndex];
+    tripsByDay[dayName] = (tripsByDay[dayName] || 0) + 1;
+  });
+
+  return {
+    startDate,
+    endDate,
+    data: daysOfWeek.map((day) => ({
+      day,
+      count: tripsByDay[day],
+    })),
+  };
+}
