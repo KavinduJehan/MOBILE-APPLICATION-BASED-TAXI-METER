@@ -4,6 +4,8 @@ import api from '../api';
 
 export default function Trips() {
   const [trips, setTrips] = useState([]);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -40,11 +42,45 @@ export default function Trips() {
     return map[s] || {};
   };
 
+  const visibleTrips = trips.filter((trip) => {
+    const term = search.toLowerCase();
+    const matchesSearch = [trip.customerName, trip.startLocation, trip.endLocation, trip.driver?.name]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+      .includes(term);
+    const matchesStatus = statusFilter === 'all' || trip.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
   return (
     <div style={styles.page}>
-      <nav style={styles.nav}>
+      <style>{`
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .trip-nav button:hover {
+          opacity: 0.92;
+          transform: translateY(-1px);
+        }
+        .trip-search:focus,
+        .trip-select:focus {
+          border-color: #6c7cff;
+          box-shadow: 0 0 0 4px rgba(108, 124, 255, 0.18);
+        }
+        .trip-table tbody tr:hover {
+          background: #f8fbff;
+        }
+        @keyframes shimmer {
+          0% { background-position: -200px 0; }
+          100% { background-position: calc(200px + 100%) 0; }
+        }
+      `}</style>
+      <nav style={styles.nav} className="trip-nav">
         <span style={styles.navTitle}>Taxi Meter Admin</span>
         <div>
+          <button style={styles.navBtn} onClick={() => navigate('/dashboard')}>Dashboard</button>
           <button style={styles.navBtn} onClick={() => navigate('/drivers')}>Drivers</button>
           <button style={styles.navBtn} onClick={() => navigate('/trips')}>Trips</button>
           <button style={{ ...styles.navBtn, color: '#e74c3c' }} onClick={handleLogout}>Logout</button>
@@ -52,17 +88,45 @@ export default function Trips() {
       </nav>
 
       <div style={styles.content}>
-        <h2 style={styles.pageTitle}>All Trips</h2>
+        <div style={styles.header}>
+          <h2 style={styles.pageTitle}>All Trips</h2>
+          <div style={styles.headerActions}>
+            <input
+              style={styles.searchInput}
+              className="trip-search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search trips"
+            />
+            <select style={styles.select} className="trip-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value="all">All statuses</option>
+              <option value="completed">Completed</option>
+              <option value="ongoing">Ongoing</option>
+              <option value="cancelled">Cancelled</option>
+              <option value="pending">Pending</option>
+            </select>
+          </div>
+        </div>
 
-        {loading && <p style={styles.info}>Loading...</p>}
+        {loading && (
+          <div style={styles.skeletonWrapper}>
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} style={styles.skeletonRow}>
+                {Array.from({ length: 10 }).map((__, cellIndex) => (
+                  <div key={cellIndex} style={styles.skeletonCell} />
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
         {error && <p style={styles.error}>{error}</p>}
-        {!loading && !error && trips.length === 0 && (
+        {!loading && !error && visibleTrips.length === 0 && (
           <p style={styles.info}>No trips recorded yet.</p>
         )}
 
-        {!loading && trips.length > 0 && (
+        {!loading && visibleTrips.length > 0 && (
           <div style={styles.tableWrap}>
-            <table style={styles.table}>
+            <table style={styles.table} className="trip-table">
               <thead>
                 <tr style={styles.thead}>
                   <th style={styles.th}>Driver</th>
@@ -78,7 +142,7 @@ export default function Trips() {
                 </tr>
               </thead>
               <tbody>
-                {trips.map((t) => (
+                {visibleTrips.map((t) => (
                   <tr key={t._id} style={styles.tr}>
                     <td style={styles.td}>
                       <div style={{ fontWeight: 500 }}>{t.driver?.name || '—'}</div>
@@ -120,8 +184,15 @@ const styles = {
     cursor: 'pointer', marginLeft: '1rem', fontSize: '0.95rem',
   },
   content: { padding: '2rem' },
-  pageTitle: { fontSize: '1.4rem', color: '#1a1a2e', marginBottom: '1.5rem' },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' },
+  headerActions: { display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' },
+  pageTitle: { fontSize: '1.4rem', color: '#1a1a2e', marginBottom: 0 },
+  searchInput: { padding: '0.45rem 0.8rem', border: '1px solid #ccc', borderRadius: '4px', minWidth: '220px' },
+  select: { padding: '0.45rem 0.8rem', border: '1px solid #ccc', borderRadius: '4px', background: '#fff' },
   tableWrap: { overflowX: 'auto', background: '#fff', borderRadius: '8px', boxShadow: '0 1px 6px rgba(0,0,0,0.08)' },
+  skeletonWrapper: { background: '#fff', borderRadius: '16px', border: '1px solid rgba(206, 216, 240, 0.9)', padding: '1rem', boxShadow: '0 14px 36px rgba(20, 35, 90, 0.06)', display: 'grid', gap: '0.85rem', animation: 'fadeUp 0.35s ease-out' },
+  skeletonRow: { display: 'grid', gridTemplateColumns: 'repeat(10, minmax(0, 1fr))', gap: '0.75rem', alignItems: 'center' },
+  skeletonCell: { height: '1rem', borderRadius: '999px', background: 'linear-gradient(90deg, #eef2ff 0%, #f6f8ff 50%, #eef2ff 100%)', animation: 'shimmer 1.6s ease-in-out infinite' },
   table: { width: '100%', borderCollapse: 'collapse' },
   thead: { background: '#f7f8fa' },
   th: { padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.85rem', color: '#555', borderBottom: '1px solid #eee' },
