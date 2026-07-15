@@ -9,14 +9,12 @@ class AuthProvider extends ChangeNotifier {
   String? _token;
   bool _loading = false;
   String? _error;
-  String? _latestDevOtp;
 
   CustomerModel? get customer => _customer;
   String? get token => _token;
   bool get isLoggedIn => _token != null;
   bool get loading => _loading;
   String? get error => _error;
-  String? get latestDevOtp => _latestDevOtp;
 
   /// Restore session from persistent storage on app start.
   /// This is called before the app UI is rendered to ensure seamless login state.
@@ -54,18 +52,11 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> requestOtp(String phone) async {
     _setLoading(true);
     try {
-      final response = await ApiService.customerRequestOtp(phone);
-      final data = response.data;
-      if (data is Map) {
-        _latestDevOtp = data['devOtp']?.toString();
-      } else {
-        _latestDevOtp = null;
-      }
+      await ApiService.customerRequestOtp(phone);
       _error = null;
       notifyListeners();
       return true;
     } on DioException catch (e) {
-      _latestDevOtp = null;
       _error = _extractMessage(e) ?? 'Failed to send OTP';
       notifyListeners();
       return false;
@@ -85,7 +76,6 @@ class AuthProvider extends ChangeNotifier {
       final refreshToken = data['refreshToken'] as String?;
       final customerData = data['customer'] as Map<String, dynamic>;
       _customer = CustomerModel.fromJson(customerData);
-      _latestDevOtp = null;
 
       try {
         await ApiService.saveSession(
@@ -163,7 +153,6 @@ class AuthProvider extends ChangeNotifier {
       final refreshToken = data['refreshToken'] as String?;
       final customerData = data['customer'] as Map<String, dynamic>;
       _customer = CustomerModel.fromJson(customerData);
-      _latestDevOtp = null;
 
       await ApiService.saveSession(
         accessToken: _token!,
@@ -237,7 +226,6 @@ class AuthProvider extends ChangeNotifier {
     await ApiService.clearToken();
     _token = null;
     _customer = null;
-    _latestDevOtp = null;
     _error = null;
     notifyListeners();
   }

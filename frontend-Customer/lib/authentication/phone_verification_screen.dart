@@ -216,18 +216,6 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
                       height: 1.35,
                     ),
                   ),
-                  if (auth.latestDevOtp != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      'Development OTP: ${auth.latestDevOtp}',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: AppTheme.successGreen,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
                   const SizedBox(height: 42),
                   if (_requesting || _verifying)
                     const Center(
