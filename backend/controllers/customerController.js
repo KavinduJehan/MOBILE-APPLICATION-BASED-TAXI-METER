@@ -56,11 +56,10 @@ const register = async (req, res) => {
   const lastName = String(req.body.lastName || '').trim();
   const email = normalizeEmail(req.body.email);
   const phone = normalizePhone(req.body.phone);
-  const password = String(req.body.password || '');
 
-  if (!firstName || !lastName || !email || !phone || !password) {
+  if (!firstName || !lastName || !email || !phone) {
     return res.status(400).json({
-      message: 'firstName, lastName, email, phone, and password are required',
+      message: 'firstName, lastName, email, and phone are required',
     });
   }
   if (!isValidEmail(email)) {
@@ -71,12 +70,6 @@ const register = async (req, res) => {
       .status(400)
       .json({ message: 'Valid Sri Lankan phone number is required' });
   }
-  if (password.length < 6) {
-    return res
-      .status(400)
-      .json({ message: 'Password must be at least 6 characters' });
-  }
-
   try {
     const existing = await Customer.findOne({ $or: [{ phone }, { email }] });
     if (existing) {
@@ -94,7 +87,6 @@ const register = async (req, res) => {
       name: `${firstName} ${lastName}`.trim(),
       email,
       phone,
-      password,
     });
     res.status(201).json(publicCustomer(customer));
   } catch (err) {

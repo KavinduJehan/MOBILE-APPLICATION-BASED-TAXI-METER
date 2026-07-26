@@ -88,7 +88,7 @@ class AuthProvider extends ChangeNotifier {
           print('Session persistence failed after OTP verification: $e');
         }
       }
-      
+
       _error = null;
       notifyListeners();
       return true;
@@ -115,7 +115,6 @@ class AuthProvider extends ChangeNotifier {
     required String lastName,
     required String email,
     required String phone,
-    required String password,
   }) async {
     _setLoading(true);
     try {
@@ -124,7 +123,6 @@ class AuthProvider extends ChangeNotifier {
         lastName: lastName,
         email: email,
         phone: phone,
-        password: password,
       );
       _error = null;
       notifyListeners();
