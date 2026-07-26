@@ -93,54 +93,152 @@ class _WelcomeButton extends StatefulWidget {
   State<_WelcomeButton> createState() => _WelcomeButtonState();
 }
 
-class _WelcomeButtonState extends State<_WelcomeButton> {
+class _WelcomeButtonState extends State<_WelcomeButton>
+    with SingleTickerProviderStateMixin {
   bool _isHovered = false;
   bool _isFocused = false;
   bool _isPressed = false;
+  late final AnimationController _shineController;
+  late final Animation<double> _shineOpacity;
 
   bool get _isActive => _isHovered || _isFocused || _isPressed;
 
   @override
-  Widget build(BuildContext context) {
-    final backgroundColor = _isActive
-        ? AppTheme.primaryBlue
-        : AppTheme.primaryBlue.withValues(alpha: 0.18);
-    final textColor = _isActive ? Colors.white : AppTheme.primaryBlue;
+  void initState() {
+    super.initState();
+    _shineController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+    _shineOpacity = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(
+          begin: 0.0,
+          end: 1.0,
+        ).chain(CurveTween(curve: Curves.easeIn)),
+        weight: 50,
+      ),
+      TweenSequenceItem(
+        tween: Tween(
+          begin: 1.0,
+          end: 0.0,
+        ).chain(CurveTween(curve: Curves.easeOut)),
+        weight: 50,
+      ),
+    ]).animate(_shineController);
+  }
 
-    return FocusableActionDetector(
-      onShowFocusHighlight: (focused) => setState(() => _isFocused = focused),
-      mouseCursor: SystemMouseCursors.click,
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _isHovered = true),
-        onExit: (_) => setState(() {
-          _isHovered = false;
-          _isPressed = false;
-        }),
-        child: GestureDetector(
-          onTapDown: (_) => setState(() => _isPressed = true),
-          onTapCancel: () => setState(() => _isPressed = false),
-          onTapUp: (_) => setState(() => _isPressed = false),
-          onTap: widget.onTap,
-          child: AnimatedContainer(
-            height: 56,
-            duration: const Duration(milliseconds: 140),
-            curve: Curves.easeOut,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: backgroundColor,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: _isActive
-                    ? AppTheme.primaryBlue
-                    : AppTheme.primaryBlue.withValues(alpha: 0.34),
+  @override
+  void dispose() {
+    _shineController.dispose();
+    super.dispose();
+  }
+
+  void _playShine() {
+    _shineController.forward(from: 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: widget.label,
+      child: FocusableActionDetector(
+        onShowFocusHighlight: (focused) {
+          setState(() => _isFocused = focused);
+          if (focused) _playShine();
+        },
+        mouseCursor: SystemMouseCursors.click,
+        child: MouseRegion(
+          onEnter: (_) {
+            setState(() => _isHovered = true);
+            _playShine();
+          },
+          onExit: (_) => setState(() {
+            _isHovered = false;
+            _isPressed = false;
+          }),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapDown: (_) {
+              setState(() => _isPressed = true);
+              _playShine();
+            },
+            onTapCancel: () => setState(() => _isPressed = false),
+            onTapUp: (_) => setState(() => _isPressed = false),
+            onTap: widget.onTap,
+            child: AnimatedContainer(
+              height: 56,
+              duration: const Duration(milliseconds: 200),
+              curve: _isActive ? Curves.easeOut : Curves.easeIn,
+              decoration: BoxDecoration(
+                color: _isActive ? AppTheme.primaryBlue : Colors.transparent,
+                borderRadius: BorderRadius.circular(7),
+                border: Border.all(color: AppTheme.primaryBlue),
+                boxShadow: _isActive && !_isPressed
+                    ? [
+                        BoxShadow(
+                          color: const Color(
+                            0xFF008EEC,
+                          ).withValues(alpha: 0.82),
+                          blurRadius: 30,
+                          spreadRadius: 5,
+                        ),
+                      ]
+                    : const [],
               ),
-            ),
-            child: Text(
-              widget.label,
-              style: TextStyle(
-                color: textColor,
-                fontSize: 17,
-                fontWeight: FontWeight.w800,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        AnimatedBuilder(
+                          animation: _shineController,
+                          builder: (context, child) {
+                            return Positioned(
+                              left:
+                                  -40 +
+                                  (constraints.maxWidth + 80) *
+                                      _shineController.value,
+                              top: 4,
+                              bottom: 4,
+                              child: Opacity(
+                                opacity: _shineOpacity.value,
+                                child: Transform(
+                                  transform: Matrix4.skewX(-0.35),
+                                  child: Container(
+                                    width: 3,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.white,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.white,
+                                          blurRadius: 30,
+                                          spreadRadius: 20,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        Text(
+                          widget.label.toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 2,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
               ),
             ),
           ),
