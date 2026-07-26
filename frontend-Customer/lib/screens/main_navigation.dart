@@ -6,7 +6,7 @@ import '../providers/trip_provider.dart';
 import '../theme.dart';
 import 'home_tab.dart';
 import 'profile_tab.dart';
-import 'receipts_tab.dart';
+import 'qr_scan.dart';
 import 'trips_tab.dart';
 
 class MainNavigation extends StatefulWidget {
@@ -18,12 +18,13 @@ class MainNavigation extends StatefulWidget {
 
 class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
+  final _qrTabActive = ValueNotifier<bool>(false);
   final _navigatorKeys = List.generate(4, (_) => GlobalKey<NavigatorState>());
 
   late final List<Widget> _screens = [
     const HomeTab(),
     const TripsTab(),
-    const ReceiptsTab(),
+    QRScan(activeListenable: _qrTabActive),
     const ProfileTab(),
   ];
 
@@ -63,60 +64,206 @@ class _MainNavigationState extends State<MainNavigation> {
             ),
           ),
         ),
-        bottomNavigationBar: Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFF070B12),
-            border: Border(
-              top: BorderSide(color: Color(0xFF333336), width: 1.2),
+        bottomNavigationBar: _FooterNavigationBar(
+          selectedIndex: _currentIndex,
+          hasOngoingTrip: hasOngoingTrip,
+          onSelected: _selectDestination,
+        ),
+      ),
+    );
+  }
+
+  void _selectDestination(int index) {
+    _qrTabActive.value = index == 2;
+    if (index == _currentIndex) {
+      _navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
+      return;
+    }
+    setState(() => _currentIndex = index);
+  }
+
+  @override
+  void dispose() {
+    _qrTabActive.dispose();
+    super.dispose();
+  }
+}
+
+class _FooterNavigationBar extends StatelessWidget {
+  const _FooterNavigationBar({
+    required this.selectedIndex,
+    required this.hasOngoingTrip,
+    required this.onSelected,
+  });
+
+  final int selectedIndex;
+  final bool hasOngoingTrip;
+  final ValueChanged<int> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+      child: Container(
+        height: 62,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.black,
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: Colors.white),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x66000000),
+              blurRadius: 18,
+              offset: Offset(0, 8),
             ),
-          ),
-          child: NavigationBar(
-            height: 74,
-            selectedIndex: _currentIndex,
-            backgroundColor: const Color(0xFF070B12),
-            indicatorColor: AppTheme.primaryBlue.withValues(alpha: 0.22),
-            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-            onDestinationSelected: (index) {
-              if (index == _currentIndex) {
-                _navigatorKeys[index].currentState?.popUntil(
-                  (route) => route.isFirst,
-                );
-                return;
-              }
-              setState(() {
-                _currentIndex = index;
-              });
-            },
-            destinations: [
-              const NavigationDestination(
-                selectedIcon: Icon(Icons.home_rounded, size: 28),
-                icon: Icon(Icons.home_outlined, size: 26),
-                label: 'Home',
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _FooterNavigationItem(
+              label: 'Home',
+              selected: selectedIndex == 0,
+              onTap: () => onSelected(0),
+              icon: const Icon(Icons.home_rounded, size: 22),
+            ),
+            _FooterNavigationItem(
+              label: 'Trips',
+              selected: selectedIndex == 1,
+              onTap: () => onSelected(1),
+              icon: _TripNavigationIcon(
+                icon: Icons.directions_car_rounded,
+                size: 22,
+                showOngoing: hasOngoingTrip,
               ),
-              NavigationDestination(
-                selectedIcon: _TripNavigationIcon(
-                  icon: Icons.directions_car_rounded,
-                  size: 28,
-                  showOngoing: hasOngoingTrip,
-                ),
-                icon: _TripNavigationIcon(
-                  icon: Icons.directions_car_outlined,
-                  size: 26,
-                  showOngoing: hasOngoingTrip,
-                ),
-                label: 'Trips',
+            ),
+            _FooterNavigationItem(
+              label: 'QR',
+              selected: selectedIndex == 2,
+              onTap: () => onSelected(2),
+              icon: const Icon(Icons.qr_code_scanner_rounded, size: 22),
+            ),
+            _FooterNavigationItem(
+              label: 'Profile',
+              selected: selectedIndex == 3,
+              onTap: () => onSelected(3),
+              icon: const Icon(Icons.person_rounded, size: 22),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FooterNavigationItem extends StatefulWidget {
+  const _FooterNavigationItem({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final Widget icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  State<_FooterNavigationItem> createState() => _FooterNavigationItemState();
+}
+
+class _FooterNavigationItemState extends State<_FooterNavigationItem> {
+  bool _hovered = false;
+  bool _focused = false;
+
+  bool get _highlighted => widget.selected || _hovered || _focused;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Semantics(
+        button: true,
+        selected: widget.selected,
+        label: widget.label,
+        child: FocusableActionDetector(
+          mouseCursor: SystemMouseCursors.click,
+          onShowFocusHighlight: (value) => setState(() => _focused = value),
+          child: MouseRegion(
+            onEnter: (_) => setState(() => _hovered = true),
+            onExit: (_) => setState(() => _hovered = false),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: widget.onTap,
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
+                children: [
+                  Positioned(
+                    bottom: 50,
+                    child: IgnorePointer(
+                      child: AnimatedOpacity(
+                        opacity: _hovered || _focused ? 1 : 0,
+                        duration: const Duration(milliseconds: 300),
+                        child: AnimatedScale(
+                          scale: _hovered || _focused ? 1 : 0.5,
+                          duration: const Duration(milliseconds: 500),
+                          curve: Curves.easeOutBack,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black,
+                              borderRadius: BorderRadius.circular(7),
+                              border: Border.all(color: Colors.white24),
+                            ),
+                            child: Text(
+                              widget.label,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 500),
+                    curve: Curves.easeInOut,
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: _highlighted
+                          ? const Color(0xFF1E293B)
+                          : Colors.transparent,
+                      shape: BoxShape.circle,
+                      border: widget.selected
+                          ? Border.all(
+                              color: AppTheme.primaryBlue.withValues(
+                                alpha: 0.55,
+                              ),
+                            )
+                          : null,
+                    ),
+                    child: IconTheme(
+                      data: IconThemeData(
+                        color: widget.selected
+                            ? AppTheme.primaryBlue
+                            : Colors.white,
+                      ),
+                      child: Center(child: widget.icon),
+                    ),
+                  ),
+                ],
               ),
-              const NavigationDestination(
-                selectedIcon: Icon(Icons.receipt_long_rounded, size: 28),
-                icon: Icon(Icons.receipt_long_outlined, size: 26),
-                label: 'Receipts',
-              ),
-              const NavigationDestination(
-                selectedIcon: Icon(Icons.person_rounded, size: 28),
-                icon: Icon(Icons.person_outline_rounded, size: 26),
-                label: 'Profile',
-              ),
-            ],
+            ),
           ),
         ),
       ),
