@@ -6,9 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../models/trip_model.dart';
 import '../providers/auth_provider.dart';
-import '../providers/trip_provider.dart';
 import '../screens/welcome_screen.dart';
 import '../services/api_service.dart';
 import '../theme.dart';
@@ -285,15 +283,13 @@ class _ProfileTabState extends State<ProfileTab> {
               ),
               const SizedBox(height: 12),
               _profileMenuItem(
-                icon: Icons.help,
-                title: 'Help & Support',
-                subtitle: 'Recent activities and support topics',
+                icon: Icons.groups_outlined,
+                title: 'TEAM RideX',
+                subtitle: 'Meet our team on LinkedIn',
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (_) => const HelpSupportScreen(),
-                    ),
+                    MaterialPageRoute(builder: (_) => const FollowUsScreen()),
                   );
                 },
               ),
@@ -1084,125 +1080,125 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
   }
 }
 
-class HelpSupportScreen extends StatelessWidget {
-  const HelpSupportScreen({super.key});
+class FollowUsScreen extends StatelessWidget {
+  const FollowUsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final trips = context.watch<TripProvider>().trips.take(5).toList();
-    final activities = trips.isEmpty
-        ? _fallbackActivities
-        : trips.map(_activityFromTrip).toList();
-
     return Scaffold(
       backgroundColor: AppTheme.background,
-      appBar: AppBar(title: const Text('Help & Support')),
+      appBar: AppBar(title: const Text('Follow Us')),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
           const Text(
-            'Last 5 activities',
+            'Connect with our team',
             style: TextStyle(
               color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 12),
-          ...activities.map(
-            (activity) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _supportCard(
-                icon: activity.icon,
-                title: activity.title,
-                subtitle: activity.subtitle,
-              ),
-            ),
-          ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 8),
           const Text(
-            'Other topics',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
+            'Follow the people behind RideX on LinkedIn.',
+            style: TextStyle(color: Color(0xFF8A8A8A), fontSize: 14),
+          ),
+          const SizedBox(height: 24),
+          ..._linkedInProfiles.map(
+            (profile) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _linkedInCard(context, profile),
             ),
           ),
-          const SizedBox(height: 12),
-          _supportTopic(context, Icons.receipt_long, 'Trip and receipt help'),
-          _supportTopic(context, Icons.account_circle_outlined, 'Account help'),
-          _supportTopic(context, Icons.bug_report_outlined, 'App issues'),
         ],
       ),
     );
   }
 
-  static SupportActivity _activityFromTrip(TripModel trip) {
-    return SupportActivity(
-      icon: Icons.local_taxi,
-      title: trip.status.isEmpty ? 'Taxi trip' : 'Trip ${trip.status}',
-      subtitle: '${trip.pickupLocation} to ${trip.dropLocation}',
-    );
-  }
-
-  static Widget _supportTopic(
-    BuildContext context,
-    IconData icon,
-    String title,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: _supportCard(
-        icon: icon,
-        title: title,
-        subtitle: 'Tap to contact support about $title',
-        onTap: () {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('$title support selected')));
-        },
-      ),
-    );
-  }
-
-  static Widget _supportCard({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    VoidCallback? onTap,
-  }) {
+  static Widget _linkedInCard(BuildContext context, LinkedInProfile profile) {
     return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      onTap: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${profile.name} LinkedIn link will be added soon'),
+          ),
+        );
+      },
+      borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: AppTheme.surface,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(color: const Color(0xFF333336)),
         ),
         child: Row(
           children: [
-            Icon(icon, color: AppTheme.primaryBlue),
-            const SizedBox(width: 14),
+            CircleAvatar(
+              radius: 32,
+              backgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.14),
+              backgroundImage: profile.imageAsset == null
+                  ? null
+                  : AssetImage(profile.imageAsset!),
+              child: profile.imageAsset == null
+                  ? const Icon(
+                      Icons.person_outline,
+                      color: AppTheme.primaryBlue,
+                      size: 34,
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    title,
+                    profile.name,
                     style: const TextStyle(
                       color: Colors.white,
+                      fontSize: 16,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(subtitle, style: const TextStyle(color: Colors.white70)),
+                  Text(
+                    profile.role,
+                    style: const TextStyle(
+                      color: Color(0xFF8A8A8A),
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'View LinkedIn profile',
+                    style: TextStyle(
+                      color: AppTheme.primaryBlue,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ],
               ),
             ),
-            if (onTap != null)
-              const Icon(Icons.chevron_right, color: Colors.white38),
+            Container(
+              width: 34,
+              height: 34,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: const Color(0xFF0A66C2),
+                borderRadius: BorderRadius.circular(7),
+              ),
+              child: const Text(
+                'in',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -1348,15 +1344,17 @@ double? _savedAddressDouble(Object? value) {
   return null;
 }
 
-class SupportActivity {
-  final IconData icon;
-  final String title;
-  final String subtitle;
+class LinkedInProfile {
+  final String name;
+  final String role;
+  final String? imageAsset;
+  final String? url;
 
-  const SupportActivity({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
+  const LinkedInProfile({
+    required this.name,
+    required this.role,
+    this.imageAsset,
+    this.url,
   });
 }
 
@@ -1398,30 +1396,9 @@ String _initials(String name) {
   return parts.take(2).map((part) => part[0].toUpperCase()).join();
 }
 
-const _fallbackActivities = [
-  SupportActivity(
-    icon: Icons.login,
-    title: 'Signed in to RideX',
-    subtitle: 'Your customer account is active on this device',
-  ),
-  SupportActivity(
-    icon: Icons.search,
-    title: 'Browsed nearby drivers',
-    subtitle: 'Checked drivers around your current area',
-  ),
-  SupportActivity(
-    icon: Icons.compare_arrows,
-    title: 'Viewed rate comparison',
-    subtitle: 'Compared available taxi meter rates',
-  ),
-  SupportActivity(
-    icon: Icons.qr_code_scanner,
-    title: 'Opened QR scanner',
-    subtitle: 'Ready to scan a taxi meter QR code',
-  ),
-  SupportActivity(
-    icon: Icons.person,
-    title: 'Opened profile',
-    subtitle: 'Managed customer information and saved places',
-  ),
+const _linkedInProfiles = [
+  LinkedInProfile(name: 'LinkedIn Profile 1', role: 'RideX team member'),
+  LinkedInProfile(name: 'LinkedIn Profile 2', role: 'RideX team member'),
+  LinkedInProfile(name: 'LinkedIn Profile 3', role: 'RideX team member'),
+  LinkedInProfile(name: 'LinkedIn Profile 4', role: 'RideX team member'),
 ];
