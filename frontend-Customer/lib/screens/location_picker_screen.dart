@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import '../theme.dart';
+import '../utils/google_maps_availability.dart';
 import 'profile_tab.dart';
 
 const _defaultCenter = LatLng(6.9271, 79.8612);
@@ -671,33 +672,36 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       backgroundColor: AppTheme.background,
       body: Stack(
         children: [
-          GoogleMap(
-            initialCameraPosition: CameraPosition(target: _pickup, zoom: 15),
-            onMapCreated: _handleMapCreated,
-            onTap: (point) {
-              _handleMapTap(point);
-              setState(() => _showMap = true);
-            },
-            markers: {
-              if (_liveLocation != null)
+          if (isGoogleMapsAvailable)
+            GoogleMap(
+              initialCameraPosition: CameraPosition(target: _pickup, zoom: 15),
+              onMapCreated: _handleMapCreated,
+              onTap: (point) {
+                _handleMapTap(point);
+                setState(() => _showMap = true);
+              },
+              markers: {
+                if (_liveLocation != null)
+                  Marker(
+                    markerId: const MarkerId('live-location'),
+                    position: _liveLocation!,
+                    icon: BitmapDescriptor.defaultMarkerWithHue(
+                      BitmapDescriptor.hueAzure,
+                    ),
+                  ),
                 Marker(
-                  markerId: const MarkerId('live-location'),
-                  position: _liveLocation!,
+                  markerId: const MarkerId('pickup'),
+                  position: _pickup,
                   icon: BitmapDescriptor.defaultMarkerWithHue(
-                    BitmapDescriptor.hueAzure,
+                    BitmapDescriptor.hueGreen,
                   ),
                 ),
-              Marker(
-                markerId: const MarkerId('pickup'),
-                position: _pickup,
-                icon: BitmapDescriptor.defaultMarkerWithHue(
-                  BitmapDescriptor.hueGreen,
-                ),
-              ),
-            },
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-          ),
+              },
+              myLocationButtonEnabled: false,
+              zoomControlsEnabled: false,
+            )
+          else
+            const _MapUnavailableBackground(),
           SafeArea(
             child: Align(
               alignment: Alignment.topLeft,
@@ -919,38 +923,41 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       ),
       body: Stack(
         children: [
-          GoogleMap(
-            initialCameraPosition: CameraPosition(target: _pickup, zoom: 13),
-            onMapCreated: _handleMapCreated,
-            onTap: _handleMapTap,
-            markers: {
-              if (_liveLocation != null)
+          if (isGoogleMapsAvailable)
+            GoogleMap(
+              initialCameraPosition: CameraPosition(target: _pickup, zoom: 13),
+              onMapCreated: _handleMapCreated,
+              onTap: _handleMapTap,
+              markers: {
+                if (_liveLocation != null)
+                  Marker(
+                    markerId: const MarkerId('live-location'),
+                    position: _liveLocation!,
+                    icon: BitmapDescriptor.defaultMarkerWithHue(
+                      BitmapDescriptor.hueAzure,
+                    ),
+                  ),
                 Marker(
-                  markerId: const MarkerId('live-location'),
-                  position: _liveLocation!,
+                  markerId: const MarkerId('pickup'),
+                  position: _pickup,
                   icon: BitmapDescriptor.defaultMarkerWithHue(
-                    BitmapDescriptor.hueAzure,
+                    BitmapDescriptor.hueGreen,
                   ),
                 ),
-              Marker(
-                markerId: const MarkerId('pickup'),
-                position: _pickup,
-                icon: BitmapDescriptor.defaultMarkerWithHue(
-                  BitmapDescriptor.hueGreen,
-                ),
-              ),
-              if (_destination != null)
-                Marker(
-                  markerId: const MarkerId('destination'),
-                  position: _destination!,
-                  icon: BitmapDescriptor.defaultMarkerWithHue(
-                    BitmapDescriptor.hueRed,
+                if (_destination != null)
+                  Marker(
+                    markerId: const MarkerId('destination'),
+                    position: _destination!,
+                    icon: BitmapDescriptor.defaultMarkerWithHue(
+                      BitmapDescriptor.hueRed,
+                    ),
                   ),
-                ),
-            },
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-          ),
+              },
+              myLocationButtonEnabled: false,
+              zoomControlsEnabled: false,
+            )
+          else
+            const _MapUnavailableBackground(),
           Positioned(
             left: 16,
             right: 16,
@@ -976,6 +983,27 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _MapUnavailableBackground extends StatelessWidget {
+  const _MapUnavailableBackground();
+
+  @override
+  Widget build(BuildContext context) {
+    return const ColoredBox(
+      color: AppTheme.background,
+      child: Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'Map preview is unavailable. You can still choose a location below.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white70, fontSize: 13),
+          ),
+        ),
       ),
     );
   }

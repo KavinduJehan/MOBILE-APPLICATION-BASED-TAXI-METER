@@ -47,3 +47,6 @@ frontend/windows/flutter/ephemeral/
 frontend-Customer/.dart_tool/
 frontend-Customer/build/
 frontend-Customer/.idea/
+
+# Local Google Maps browser configuration
+frontend-Customer/web/maps_config.js

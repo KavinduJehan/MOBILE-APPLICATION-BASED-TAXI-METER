@@ -55,12 +55,11 @@ dependencies:
   package_info_plus: ^10.2.0
 
   # Map and live location picker
-  flutter_map: ^8.2.2
-  latlong2: ^0.10.1
   geolocator: ^14.0.2
 
   # Camera and gallery profile image selection
   image_picker: ^1.1.2
+  google_maps_flutter: 2.18.0
 
   # Firebase — skipped for now, add when OTP login is needed
   # firebase_core: ^3.13.0
