@@ -33,14 +33,39 @@
   <link rel="manifest" href="manifest.json">
 
   <!--
-    Google Maps for Flutter Web requires the Maps JavaScript API.
-    Replace YOUR_WEB_MAPS_API_KEY with a website-restricted browser key.
+    Google Maps for Flutter Web requires a valid Maps JavaScript API browser key.
+    Replace the placeholder below with your own website-restricted key.
   -->
-  <script
-    src="https://maps.googleapis.com/maps/api/js?key=YOUR_WEB_MAPS_API_KEY">
+  <script src="maps_config.js"></script>
+  <script>
+    function startFlutter() {
+      if (!document.body) {
+        window.addEventListener('DOMContentLoaded', startFlutter, { once: true });
+        return;
+      }
+      const bootstrap = document.createElement('script');
+      bootstrap.src = 'flutter_bootstrap.js';
+      bootstrap.async = true;
+      document.body.appendChild(bootstrap);
+    }
+
+    const mapsApiKey = window.__GOOGLE_MAPS_API_KEY__ || "";
+
+    if (!mapsApiKey) {
+      console.error(
+        "Google Maps could not be loaded because no valid API key is configured. " +
+        "Set window.__GOOGLE_MAPS_API_KEY__ in this page or replace the placeholder in web/index.html with your Google Maps browser key."
+      );
+      window.addEventListener('DOMContentLoaded', startFlutter, { once: true });
+    } else {
+      const script = document.createElement("script");
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${mapsApiKey}`;
+      script.onload = startFlutter;
+      script.onerror = startFlutter;
+      document.head.appendChild(script);
+    }
   </script>
 </head>
 <body>
-  <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
