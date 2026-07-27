@@ -244,6 +244,31 @@ class ApiService {
     return _dio.get('/drivers/nearby', queryParameters: queryParameters);
   }
 
+  static Future<Response> autocompletePlaces({
+    required String input,
+    required String sessionToken,
+    double? latitude,
+    double? longitude,
+  }) {
+    final queryParameters = <String, dynamic>{
+      'input': input,
+      'sessionToken': sessionToken,
+    };
+    if (latitude != null) queryParameters['lat'] = latitude;
+    if (longitude != null) queryParameters['lng'] = longitude;
+    return _dio.get(
+      '/locations/autocomplete',
+      queryParameters: queryParameters,
+    );
+  }
+
+  static Future<Response> getPlaceDetails({
+    required String placeId,
+    required String sessionToken,
+  }) => _dio.get(
+    '/locations/details/${Uri.encodeComponent(placeId)}',
+    queryParameters: {'sessionToken': sessionToken},
+  );
   static Future<Response> getDriverByQR(String qrToken) =>
       _dio.get('/drivers/qr/$qrToken');
 

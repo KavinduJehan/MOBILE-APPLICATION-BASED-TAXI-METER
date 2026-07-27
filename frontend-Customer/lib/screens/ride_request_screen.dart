@@ -1,8 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../services/api_service.dart';
 import '../theme.dart';
@@ -208,51 +207,41 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
       backgroundColor: AppTheme.background,
       body: Stack(
         children: [
-          FlutterMap(
-            options: MapOptions(initialCenter: center, initialZoom: 13),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.ridex.customer',
+          GoogleMap(
+            initialCameraPosition: CameraPosition(target: center, zoom: 13),
+            markers: {
+              Marker(
+                markerId: const MarkerId('pickup'),
+                position: pickupPoint,
+                icon: BitmapDescriptor.defaultMarkerWithHue(
+                  BitmapDescriptor.hueGreen,
+                ),
               ),
-              PolylineLayer(
-                polylines: [
-                  Polyline(
-                    points: [pickupPoint, destinationPoint],
-                    strokeWidth: 4,
-                    color: AppTheme.primary,
-                  ),
-                ],
+              Marker(
+                markerId: const MarkerId('destination'),
+                position: destinationPoint,
+                icon: BitmapDescriptor.defaultMarkerWithHue(
+                  BitmapDescriptor.hueRed,
+                ),
               ),
-              MarkerLayer(
-                markers: [
-                  Marker(
-                    point: pickupPoint,
-                    width: 44,
-                    height: 44,
-                    child: const _MapPin(
-                      color: AppTheme.successGreen,
-                      icon: Icons.trip_origin,
-                    ),
-                  ),
-                  Marker(
-                    point: destinationPoint,
-                    width: 44,
-                    height: 44,
-                    child: const _MapPin(
-                      color: AppTheme.dangerRed,
-                      icon: Icons.location_on,
-                    ),
-                  ),
-                  Marker(
-                    point: center,
-                    width: 48,
-                    height: 48,
-                    child: const _DriverMapMarker(),
-                  ),
-                ],
+              Marker(
+                markerId: const MarkerId('driver'),
+                position: center,
+                icon: BitmapDescriptor.defaultMarkerWithHue(
+                  BitmapDescriptor.hueOrange,
+                ),
               ),
-            ],
+            },
+            polylines: {
+              Polyline(
+                polylineId: const PolylineId('ride-preview'),
+                points: [pickupPoint, destinationPoint],
+                width: 4,
+                color: AppTheme.primary,
+              ),
+            },
+            myLocationButtonEnabled: false,
+            zoomControlsEnabled: false,
           ),
           SafeArea(
             child: Padding(
@@ -309,55 +298,6 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _MapPin extends StatelessWidget {
-  const _MapPin({required this.color, required this.icon});
-
-  final Color color;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        shape: BoxShape.circle,
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x33000000),
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
-        border: Border.all(color: color, width: 3),
-      ),
-      child: Icon(icon, color: color, size: 22),
-    );
-  }
-}
-
-class _DriverMapMarker extends StatelessWidget {
-  const _DriverMapMarker();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.background,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white, width: 3),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x33000000),
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: const Icon(Icons.local_taxi, color: Colors.white, size: 24),
     );
   }
 }

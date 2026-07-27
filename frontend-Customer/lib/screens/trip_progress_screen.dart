@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../models/trip_model.dart';
+import '../providers/trip_provider.dart';
 import '../repositories/trip_repository.dart';
 import 'trip_summary_screen.dart';
 
@@ -34,8 +36,11 @@ class _TripProgressScreenState extends State<TripProgressScreen> {
   @override
   Widget build(BuildContext context) {
     final driverName =
-        widget.trip?.driverName ?? (widget.driver['name'] as String?) ?? 'Driver';
-    final vehicleNumber = widget.trip?.vehicleNumber ??
+        widget.trip?.driverName ??
+        (widget.driver['name'] as String?) ??
+        'Driver';
+    final vehicleNumber =
+        widget.trip?.vehicleNumber ??
         (widget.driver['vehicleNumber'] as String?) ??
         '-';
     final distanceKm = widget.trip?.distanceKm ?? widget.distanceKm;
@@ -106,7 +111,9 @@ class _TripProgressScreenState extends State<TripProgressScreen> {
 
   void _confirmEndTrip(BuildContext context) {
     if (widget.trip == null || widget.trip!.id.isEmpty) {
-      setState(() => _error = 'Trip details are not available yet. Please try again.');
+      setState(
+        () => _error = 'Trip details are not available yet. Please try again.',
+      );
       return;
     }
 
@@ -144,6 +151,7 @@ class _TripProgressScreenState extends State<TripProgressScreen> {
     try {
       final (trip, receipt) = await _repository.endTrip(widget.trip!.id);
       if (!mounted) return;
+      context.read<TripProvider>().upsertTrip(trip);
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(

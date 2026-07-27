@@ -8,7 +8,7 @@ class TripProvider extends ChangeNotifier {
   final TripRepository _repository;
 
   TripProvider({TripRepository repository = const TripRepository()})
-      : _repository = repository;
+    : _repository = repository;
 
   final List<TripModel> _trips = [];
   bool _loading = false;
@@ -18,16 +18,17 @@ class TripProvider extends ChangeNotifier {
   int _page = 1;
 
   List<TripModel> get trips => List.unmodifiable(_trips);
+  bool get hasOngoingTrip => _trips.any((trip) => trip.status == 'ongoing');
   bool get loading => _loading;
   bool get loadingMore => _loadingMore;
   bool get hasMore => _hasMore;
   String? get error => _error;
 
   Future<void> load({bool refresh = false}) async {
+    if (_loading) return;
     if (refresh) {
       _page = 1;
       _hasMore = true;
-      _trips.clear();
     }
     _loading = true;
     _error = null;
@@ -47,6 +48,16 @@ class TripProvider extends ChangeNotifier {
       _loading = false;
       notifyListeners();
     }
+  }
+
+  void upsertTrip(TripModel trip) {
+    final index = _trips.indexWhere((item) => item.id == trip.id);
+    if (index == -1) {
+      _trips.insert(0, trip);
+    } else {
+      _trips[index] = trip;
+    }
+    notifyListeners();
   }
 
   Future<void> loadMore() async {

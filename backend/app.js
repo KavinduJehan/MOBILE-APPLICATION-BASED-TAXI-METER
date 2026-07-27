@@ -10,6 +10,7 @@ const adminRoutes = require('./routes/admin');
 const rideRequestRoutes = require('./routes/rideRequests');
 const customerRoutes = require('./routes/customerRoutes');
 const receiptRoutes = require('./routes/receipts');
+const locationRoutes = require('./routes/locations');
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/ride-requests', rideRequestRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/receipts', receiptRoutes);
+app.use('/api/locations', locationRoutes);
 
 app.get('/api', (req, res) => res.json({
   status: 'ok',
