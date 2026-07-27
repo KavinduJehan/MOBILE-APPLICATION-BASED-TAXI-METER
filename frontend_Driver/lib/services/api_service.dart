@@ -12,12 +12,27 @@ import '../models/trip_record.dart';
 import 'session_store.dart';
 
 class ApiService {
-  ApiService({String? baseUrl}) : _dio = Dio(BaseOptions(baseUrl: baseUrl ?? AppConfig.baseUrl, connectTimeout: const Duration(seconds: 20), receiveTimeout: const Duration(seconds: 20)));
+  ApiService({String? baseUrl})
+    : _dio = Dio(
+        BaseOptions(
+          baseUrl: baseUrl ?? AppConfig.baseUrl,
+          connectTimeout: const Duration(seconds: 20),
+          receiveTimeout: const Duration(seconds: 20),
+        ),
+      );
 
   final Dio _dio;
 
-  Future<AuthResult> login({required String email, required String password}) async {
-    final response = await _request('POST', '/auth/login', auth: false, data: {'email': email, 'password': password});
+  Future<AuthResult> login({
+    required String email,
+    required String password,
+  }) async {
+    final response = await _request(
+      'POST',
+      '/auth/login',
+      auth: false,
+      data: {'email': email, 'password': password},
+    );
     final data = _asMap(response.data);
     final token = _readString(data, ['token', 'jwt', 'accessToken']);
     if (token.isEmpty) {
@@ -67,7 +82,10 @@ class ApiService {
   Future<QrResult> generateQr() async {
     final response = await _request('POST', '/drivers/generate-qr');
     final data = _asMap(response.data);
-    return QrResult(qrCode: _readString(data, ['qrCode', 'qr_code', 'image']), token: _readString(data, ['token'], fallback: ''));
+    return QrResult(
+      qrCode: _readString(data, ['qrCode', 'qr_code', 'image']),
+      token: _readString(data, ['token'], fallback: ''),
+    );
   }
 
   Future<void> updateRate(double ratePerKm) async {
@@ -75,7 +93,12 @@ class ApiService {
   }
 
   Future<double> getAreaRate(String area) async {
-    final response = await _request('GET', '/rates/area', auth: false, queryParameters: {'area': area});
+    final response = await _request(
+      'GET',
+      '/rates/area',
+      auth: false,
+      queryParameters: {'area': area},
+    );
     final data = _asMap(response.data);
     return _readDouble(data, ['ratePerKm', 'averageRate', 'rate', 'value']);
   }
@@ -83,6 +106,17 @@ class ApiService {
   Future<Map<String, dynamic>> getPublicConfig() async {
     final response = await _request('GET', '/config/public', auth: false);
     return _asMap(response.data);
+  }
+
+  Future<void> updateLocation({
+    required double lat,
+    required double lng,
+  }) async {
+    await _request(
+      'PATCH',
+      '/drivers/location',
+      data: {'lat': lat, 'lng': lng},
+    );
   }
 
   Future<List<RideRequest>> getIncomingRequests() async {
@@ -100,12 +134,20 @@ class ApiService {
     if (agreedRatePerKm != null) {
       data['agreedRatePerKm'] = agreedRatePerKm;
     }
-    final response = await _request('PATCH', '/ride-requests/$requestId/respond', data: data);
+    final response = await _request(
+      'PATCH',
+      '/ride-requests/$requestId/respond',
+      data: data,
+    );
     return _asMap(response.data);
   }
 
   Future<Map<String, dynamic>> createTrip({required String requestId}) async {
-    final response = await _request('POST', '/trips', data: {'requestId': requestId});
+    final response = await _request(
+      'POST',
+      '/trips',
+      data: {'requestId': requestId},
+    );
     return _asMap(response.data);
   }
 
@@ -115,7 +157,11 @@ class ApiService {
     final tripMap = _readMap(data, ['trip']) ?? data;
     return TripCompletionResult(
       trip: TripRecord.fromJson(tripMap),
-      receiptNumber: _readString(data, ['receipt', 'receiptNumber', 'receiptId'], fallback: ''),
+      receiptNumber: _readString(data, [
+        'receipt',
+        'receiptNumber',
+        'receiptId',
+      ], fallback: ''),
     );
   }
 
@@ -170,7 +216,11 @@ class ApiService {
     return <String, dynamic>{};
   }
 
-  String _readString(Map<String, dynamic> data, List<String> keys, {String fallback = ''}) {
+  String _readString(
+    Map<String, dynamic> data,
+    List<String> keys, {
+    String fallback = '',
+  }) {
     for (final key in keys) {
       final value = data[key];
       if (value is String && value.trim().isNotEmpty) {
@@ -183,7 +233,11 @@ class ApiService {
     return fallback;
   }
 
-  double _readDouble(Map<String, dynamic> data, List<String> keys, {double fallback = 0}) {
+  double _readDouble(
+    Map<String, dynamic> data,
+    List<String> keys, {
+    double fallback = 0,
+  }) {
     for (final key in keys) {
       final value = data[key];
       if (value is num) {
@@ -218,21 +272,30 @@ class ApiService {
   // - nested under common keys provided in `keys`
   List<Map<String, dynamic>> _extractList(dynamic data, List<String> keys) {
     if (data is List) {
-      return data.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+      return data
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
     }
 
     if (data is Map<String, dynamic>) {
       for (final key in keys) {
         final value = data[key];
         if (value is List) {
-          return value.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+          return value
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
         }
       }
 
       // fallback: if any value is a List, return the first one
       for (final entry in data.entries) {
         if (entry.value is List) {
-          return (entry.value as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+          return (entry.value as List)
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
         }
       }
 
@@ -246,19 +309,6 @@ class ApiService {
       return _extractList(m, keys);
     }
 
-    return const [];
-  }
-
-  List<Map<String, dynamic>> _readMapList(Map<String, dynamic> data, List<String> keys) {
-    for (final key in keys) {
-      final value = data[key];
-      if (value is List) {
-        return value.whereType<Map>().map((entry) => Map<String, dynamic>.from(entry)).toList();
-      }
-    }
-    if (data.isNotEmpty) {
-      return [data];
-    }
     return const [];
   }
 

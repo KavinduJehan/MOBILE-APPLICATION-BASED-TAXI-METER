@@ -4,7 +4,10 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-const String _baseUrl = kIsWeb
+const String _configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
+const String _baseUrl = _configuredBaseUrl != ''
+    ? _configuredBaseUrl
+    : kIsWeb
     ? 'http://localhost:5000/api'
     : 'http://10.0.2.2:5000/api';
 

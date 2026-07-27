@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
-import '../services/session_store.dart';
-import '../models/driver_profile.dart';
 import '../widgets/app_widgets.dart';
 import 'home_screen.dart';
 import 'register_screen.dart';
@@ -129,39 +127,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           );
                         }
                       },
-                    ),
-                    const SizedBox(height: 8),
-                    TextButton(
-                      onPressed: () async {
-                        final messenger = ScaffoldMessenger.of(context);
-                        final navigator = Navigator.of(context);
-                        // Save a fake token so the session looks authenticated locally
-                        await SessionStore.saveToken('offline-demo-token');
-                        // Also save a minimal mock DriverProfile so the app behaves as authenticated
-                        final mock = DriverProfile(
-                          name: 'Demo Driver',
-                          phone: '+10000000000',
-                          email: 'demo@driver.local',
-                          licenseNumber: 'DL-00000',
-                          vehicleNumber: 'VEH-000',
-                          area: 'Demo City',
-                          ratePerKm: 1.5,
-                          isVerified: true,
-                          qrCode: 'demo-qrcode',
-                        );
-                        await SessionStore.saveProfile(mock);
-                        if (!mounted) return;
-                        messenger.showSnackBar(
-                          const SnackBar(content: Text('Offline mode enabled')),
-                        );
-                        navigator.pushAndRemoveUntil(
-                          MaterialPageRoute(
-                            builder: (_) => const DriverHomeScreen(),
-                          ),
-                          (route) => false,
-                        );
-                      },
-                      child: const Text('Continue in Offline Mode'),
                     ),
                   ],
                 ),

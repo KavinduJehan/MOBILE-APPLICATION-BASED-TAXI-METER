@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
-import { buildAnalyticsData } from '../utils/adminAnalytics';
+import { buildAnalyticsData, getWeeklyTripsByDay } from '../utils/adminAnalytics';
 
 export default function Dashboard() {
   const [drivers, setDrivers] = useState([]);
@@ -10,6 +10,8 @@ export default function Dashboard() {
   const [error, setError] = useState('');
   const [showAllDrivers, setShowAllDrivers] = useState(false);
   const [hoveredHour, setHoveredHour] = useState(null);
+  const [selectedWeekDate, setSelectedWeekDate] = useState(new Date());
+  const [hoveredDay, setHoveredDay] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -32,6 +34,7 @@ export default function Dashboard() {
   }, []);
 
   const analytics = useMemo(() => buildAnalyticsData(drivers || [], trips || []), [drivers, trips]);
+  const weeklyTrips = useMemo(() => getWeeklyTripsByDay(trips || [], selectedWeekDate), [trips, selectedWeekDate]);
   const summary = analytics?.summary || {};
   const tripTrend = analytics?.tripTrend || {};
   const peakHours = Array.isArray(analytics?.peakHours) ? analytics.peakHours : [];
@@ -52,6 +55,29 @@ export default function Dashboard() {
   const trendPath = trendPoints.map((point) => `${point.x},${point.y}`).join(' ');
   const areaPath = `M ${padding},${chartHeight - padding} L ${trendPoints.map((point) => `${point.x},${point.y}`).join(' L ')} L ${chartWidth - padding},${chartHeight - padding} Z`;
   const linePath = trendPoints.map((point) => `${point.x},${point.y}`).join(' ');
+
+  const handlePreviousWeek = () => {
+    const newDate = new Date(selectedWeekDate);
+    newDate.setDate(newDate.getDate() - 7);
+    setSelectedWeekDate(newDate);
+  };
+
+  const handleNextWeek = () => {
+    const newDate = new Date(selectedWeekDate);
+    newDate.setDate(newDate.getDate() + 7);
+    setSelectedWeekDate(newDate);
+  };
+
+  const handleToday = () => {
+    setSelectedWeekDate(new Date());
+  };
+
+  const formatWeekRange = (startDate, endDate) => {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const monthYear = start.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    return `${start.getDate()} - ${end.getDate()} ${monthYear}`;
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('adminToken');
@@ -87,7 +113,6 @@ export default function Dashboard() {
             <p style={styles.eyebrow}>Operations overview</p>
             <h2 style={styles.pageTitle}>Admin Dashboard</h2>
           </div>
-          <div style={styles.heroBadge}>Live insights</div>
         </div>
 
         {loading && <p style={styles.info}>Loading analytics...</p>}
@@ -117,35 +142,45 @@ export default function Dashboard() {
             <div style={styles.panelGrid}>
               <div style={styles.panel}>
                 <div style={styles.panelHeader}>
-                  <h3 style={styles.panelTitle}>Trip trend</h3>
-                  <span style={styles.panelPill}>Weekly view</span>
+                  <h3 style={styles.panelTitle}>Weekly Trips</h3>
+                  <span style={styles.panelPill}>By day of week</span>
                 </div>
-                {trendEntries.length > 0 ? (
-                  <>
-                    <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} style={styles.chartSvg}>
-                      <defs>
-                        <linearGradient id="trendFill" x1="0%" y1="0%" x2="0%" y2="100%">
-                          <stop offset="0%" stopColor="#6c7cff" stopOpacity="0.35" />
-                          <stop offset="100%" stopColor="#6c7cff" stopOpacity="0.04" />
-                        </linearGradient>
-                      </defs>
-                      <path d={areaPath} fill="url(#trendFill)" />
-                      <polyline points={linePath} fill="none" stroke="#5b6cff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-                      {trendPoints.map((point) => (
-                        <circle key={point.label} cx={point.x} cy={point.y} r="5" fill="#ffffff" stroke="#5b6cff" strokeWidth="3" />
-                      ))}
-                    </svg>
-                    <div style={styles.chartLegend}>
-                      {trendPoints.map((point) => (
-                        <div key={point.label} style={styles.chartLegendItem}>
-                          <span style={styles.legendDot} />
-                          <span>{point.label}</span>
+                <div style={styles.weekSelectorContainer}>
+                  <button style={styles.weekNavBtn} onClick={handlePreviousWeek}>← Previous</button>
+                  <div style={styles.weekRangeDisplay}>
+                    {formatWeekRange(weeklyTrips.startDate, weeklyTrips.endDate)}
+                  </div>
+                  <button style={styles.weekNavBtn} onClick={handleNextWeek}>Next →</button>
+                </div>
+                <button style={styles.todayBtn} onClick={handleToday}>Jump to this week</button>
+                <div style={styles.cardLabel} style={{ marginTop: '0.8rem' }}>Trips by day</div>
+                {weeklyTrips.data && weeklyTrips.data.length > 0 ? (
+                  <div style={styles.barChart}>
+                    {weeklyTrips.data.map((dayData, index) => {
+                      const maxValue = Math.max(...weeklyTrips.data.map((entry) => entry.count), 1);
+                      const height = Math.max(18, (dayData.count / maxValue) * 100);
+                      return (
+                        <div
+                          key={dayData.day}
+                          style={styles.barColumn}
+                          onMouseEnter={() => setHoveredDay(dayData.day)}
+                          onMouseLeave={() => setHoveredDay(null)}
+                        >
+                          <div style={styles.barTooltipWrapper}>
+                            {hoveredDay === dayData.day && (
+                              <div style={styles.barTooltip}>{dayData.count} trips</div>
+                            )}
+                            <div style={styles.barTrackShell}>
+                              <div style={{ ...styles.barFill, height: `${height}%` }} />
+                            </div>
+                          </div>
+                          <span style={styles.barLabel}>{dayData.day.slice(0, 3)}</span>
                         </div>
-                      ))}
-                    </div>
-                  </>
+                      );
+                    })}
+                  </div>
                 ) : (
-                  <div style={styles.info}>No trend data available yet.</div>
+                  <div style={styles.info}>No trip data for this week.</div>
                 )}
               </div>
 
@@ -331,4 +366,8 @@ const styles = {
   actionBtn: { background: 'linear-gradient(135deg, #1a1a2e, #27314d)', color: '#fff', border: 'none', padding: '0.7rem 0.95rem', borderRadius: '10px', cursor: 'pointer', transition: 'transform 0.2s ease, box-shadow 0.2s ease' },
   info: { color: '#888', marginTop: '1rem' },
   error: { color: '#c0392b', marginTop: '1rem' },
+  weekSelectorContainer: { display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.8rem', padding: '0.8rem', background: '#f8fafb', borderRadius: '12px', justifyContent: 'center' },
+  weekNavBtn: { background: '#fff', border: '1px solid #d9e2ff', color: '#5b6cff', cursor: 'pointer', fontWeight: 600, padding: '0.45rem 0.7rem', borderRadius: '8px', fontSize: '0.85rem', transition: 'all 0.2s ease' },
+  weekRangeDisplay: { fontSize: '0.95rem', fontWeight: 600, color: '#1a1a2e', minWidth: '140px', textAlign: 'center' },
+  todayBtn: { background: 'linear-gradient(135deg, #6c7cff, #8b95ff)', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', boxShadow: '0 6px 16px rgba(108, 124, 255, 0.2)', transition: 'all 0.2s ease' },
 };
