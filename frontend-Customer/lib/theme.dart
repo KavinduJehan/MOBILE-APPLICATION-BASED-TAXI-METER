@@ -17,7 +17,9 @@ class AppTheme {
   static const darkBlue = background;
 
   static const double radius = 12;
-  static const double buttonRadius = 12;
+  // Keep every app action consistent with the Sign Up button.
+  static const double buttonHeight = 58;
+  static const double buttonRadius = 18;
 
   static ThemeData get theme {
     final base = ThemeData.dark(useMaterial3: true);
@@ -87,9 +89,10 @@ class AppTheme {
           foregroundColor: Colors.white,
           disabledBackgroundColor: const Color(0xFF334155),
           disabledForegroundColor: mutedText,
-          minimumSize: const Size(double.infinity, 48),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+          elevation: 0,
+          minimumSize: const Size(double.infinity, buttonHeight),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(buttonRadius),
           ),
@@ -98,11 +101,19 @@ class AppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: Colors.white,
-          minimumSize: const Size(double.infinity, 48),
+          minimumSize: const Size(double.infinity, buttonHeight),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
           side: const BorderSide(color: border),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(buttonRadius),
           ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: primary,
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
