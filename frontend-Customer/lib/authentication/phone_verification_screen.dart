@@ -327,7 +327,9 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
                         disabledBackgroundColor: _inactiveDark,
                         disabledForegroundColor: const Color(0xFF77777A),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(32),
+                          borderRadius: BorderRadius.circular(
+                            AppTheme.buttonRadius,
+                          ),
                         ),
                       ),
                       onPressed: (_isComplete && !auth.loading && !_verifying)
@@ -345,7 +347,7 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
                           : const Text(
                               'Verify Now',
                               style: TextStyle(
-                                fontSize: 19,
+                                fontSize: 17,
                                 fontWeight: FontWeight.w800,
                               ),
                             ),

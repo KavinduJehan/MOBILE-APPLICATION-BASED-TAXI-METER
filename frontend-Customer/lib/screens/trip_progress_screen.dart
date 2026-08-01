@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/trip_model.dart';
 import '../providers/trip_provider.dart';
 import '../repositories/trip_repository.dart';
+import '../theme.dart';
 import 'trip_summary_screen.dart';
 
 class TripProgressScreen extends StatefulWidget {
@@ -94,7 +95,7 @@ class _TripProgressScreenState extends State<TripProgressScreen> {
             const Spacer(),
             SizedBox(
               width: double.infinity,
-              height: 50,
+              height: AppTheme.buttonHeight,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
                 onPressed: _ending ? null : () => _confirmEndTrip(context),

@@ -104,54 +104,70 @@ class _FooterNavigationBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return SafeArea(
       top: false,
-      minimum: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+      minimum: const EdgeInsets.fromLTRB(16, 6, 16, 12),
       child: Container(
-        height: 62,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        height: 74,
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: Colors.black,
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: Colors.white),
+          color: const Color(0xFF1F2937),
+          borderRadius: BorderRadius.circular(10),
           boxShadow: const [
             BoxShadow(
-              color: Color(0x66000000),
-              blurRadius: 18,
-              offset: Offset(0, 8),
+              color: Color(0x80000000),
+              blurRadius: 10,
+              offset: Offset(0, 4),
+            ),
+            BoxShadow(
+              color: Color(0x4D000000),
+              blurRadius: 4,
+              offset: Offset(0, 2),
             ),
           ],
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _FooterNavigationItem(
-              label: 'Home',
-              selected: selectedIndex == 0,
-              onTap: () => onSelected(0),
-              icon: const Icon(Icons.home_rounded, size: 22),
-            ),
-            _FooterNavigationItem(
-              label: 'Trips',
-              selected: selectedIndex == 1,
-              onTap: () => onSelected(1),
-              icon: _TripNavigationIcon(
-                icon: Icons.directions_car_rounded,
-                size: 22,
-                showOngoing: hasOngoingTrip,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x33000000),
+                blurRadius: 4,
+                offset: Offset(0, 2),
               ),
-            ),
-            _FooterNavigationItem(
-              label: 'QR',
-              selected: selectedIndex == 2,
-              onTap: () => onSelected(2),
-              icon: const Icon(Icons.qr_code_scanner_rounded, size: 22),
-            ),
-            _FooterNavigationItem(
-              label: 'Profile',
-              selected: selectedIndex == 3,
-              onTap: () => onSelected(3),
-              icon: const Icon(Icons.person_rounded, size: 22),
-            ),
-          ],
+            ],
+          ),
+          child: Row(
+            children: [
+              _FooterNavigationItem(
+                label: 'Home',
+                selected: selectedIndex == 0,
+                onTap: () => onSelected(0),
+                icon: const Icon(Icons.home_rounded, size: 22),
+              ),
+              _FooterNavigationItem(
+                label: 'Trips',
+                selected: selectedIndex == 1,
+                onTap: () => onSelected(1),
+                icon: _TripNavigationIcon(
+                  icon: Icons.directions_car_rounded,
+                  size: 22,
+                  showOngoing: hasOngoingTrip,
+                ),
+              ),
+              _FooterNavigationItem(
+                label: 'Scan QR',
+                selected: selectedIndex == 2,
+                onTap: () => onSelected(2),
+                icon: const Icon(Icons.qr_code_scanner_rounded, size: 22),
+              ),
+              _FooterNavigationItem(
+                label: 'Profile',
+                selected: selectedIndex == 3,
+                onTap: () => onSelected(3),
+                icon: const Icon(Icons.person_rounded, size: 22),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -178,90 +194,73 @@ class _FooterNavigationItem extends StatefulWidget {
 class _FooterNavigationItemState extends State<_FooterNavigationItem> {
   bool _hovered = false;
   bool _focused = false;
+  bool _pressed = false;
 
-  bool get _highlighted => widget.selected || _hovered || _focused;
+  bool get _highlighted => widget.selected || _hovered || _focused || _pressed;
 
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: Semantics(
-        button: true,
-        selected: widget.selected,
-        label: widget.label,
-        child: FocusableActionDetector(
-          mouseCursor: SystemMouseCursors.click,
-          onShowFocusHighlight: (value) => setState(() => _focused = value),
-          child: MouseRegion(
-            onEnter: (_) => setState(() => _hovered = true),
-            onExit: (_) => setState(() => _hovered = false),
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: widget.onTap,
-              child: Stack(
-                clipBehavior: Clip.none,
-                alignment: Alignment.center,
-                children: [
-                  Positioned(
-                    bottom: 50,
-                    child: IgnorePointer(
-                      child: AnimatedOpacity(
-                        opacity: _hovered || _focused ? 1 : 0,
-                        duration: const Duration(milliseconds: 300),
-                        child: AnimatedScale(
-                          scale: _hovered || _focused ? 1 : 0.5,
-                          duration: const Duration(milliseconds: 500),
-                          curve: Curves.easeOutBack,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 9,
-                              vertical: 5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.black,
-                              borderRadius: BorderRadius.circular(7),
-                              border: Border.all(color: Colors.white24),
-                            ),
-                            child: Text(
-                              widget.label,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 5),
+        child: Semantics(
+          button: true,
+          selected: widget.selected,
+          label: widget.label,
+          child: Tooltip(
+            message: widget.label,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: widget.onTap,
+                onHover: (value) => setState(() => _hovered = value),
+                onFocusChange: (value) => setState(() => _focused = value),
+                onHighlightChanged: (value) => setState(() => _pressed = value),
+                borderRadius: BorderRadius.circular(999),
+                splashColor: AppTheme.primary.withValues(alpha: 0.12),
+                highlightColor: Colors.transparent,
+                hoverColor: Colors.transparent,
+                child: Center(
+                  child: AnimatedScale(
+                    scale: _pressed ? 0.94 : 1,
+                    duration: const Duration(milliseconds: 120),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      curve: Curves.easeOut,
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: _highlighted
+                            ? const Color(0xFF4B5563)
+                            : const Color(0xFF374151),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: widget.selected || _hovered || _focused
+                              ? AppTheme.primary
+                              : Colors.transparent,
+                          width: 2,
                         ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(
+                              alpha: _highlighted ? 0.24 : 0.14,
+                            ),
+                            blurRadius: _highlighted ? 6 : 3,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: IconTheme(
+                        data: IconThemeData(
+                          color: widget.selected
+                              ? AppTheme.accent
+                              : AppTheme.mutedText,
+                        ),
+                        child: Center(child: widget.icon),
                       ),
                     ),
                   ),
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 500),
-                    curve: Curves.easeInOut,
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: _highlighted
-                          ? const Color(0xFF1E293B)
-                          : Colors.transparent,
-                      shape: BoxShape.circle,
-                      border: widget.selected
-                          ? Border.all(
-                              color: AppTheme.primaryBlue.withValues(
-                                alpha: 0.55,
-                              ),
-                            )
-                          : null,
-                    ),
-                    child: IconTheme(
-                      data: IconThemeData(
-                        color: widget.selected
-                            ? AppTheme.primaryBlue
-                            : Colors.white,
-                      ),
-                      child: Center(child: widget.icon),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
