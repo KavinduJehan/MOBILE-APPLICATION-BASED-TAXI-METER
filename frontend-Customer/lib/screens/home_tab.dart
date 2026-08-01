@@ -88,6 +88,8 @@ class HomeTab extends StatelessWidget {
               ],
             ),
             const SizedBox(height: AppSpacing.lg),
+            _OfferTicket(onTap: () => _startBooking(context)),
+            const SizedBox(height: AppSpacing.lg),
             Semantics(
               button: true,
               label: 'Choose pickup and destination',
@@ -317,4 +319,378 @@ class _TrustRow extends StatelessWidget {
       ],
     );
   }
+}
+
+class _OfferTicket extends StatelessWidget {
+  const _OfferTicket({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Limited offer: 20 percent off your next ride. Use code RIDEX20.',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppTheme.buttonRadius),
+          child: Ink(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppTheme.buttonRadius),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.primary.withValues(alpha: 0.18),
+                  blurRadius: 24,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(AppTheme.buttonRadius),
+              child: Column(
+                children: [
+                  Container(
+                    width: double.infinity,
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color(0xFF1A2233), Color(0xFF111722)],
+                      ),
+                    ),
+                    child: Stack(
+                      children: [
+                        const Positioned.fill(
+                          child: CustomPaint(painter: _TicketGridPainter()),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 34,
+                                    height: 34,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.primary.withValues(
+                                        alpha: 0.16,
+                                      ),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: const Icon(
+                                      Icons.local_taxi_rounded,
+                                      color: AppTheme.accent,
+                                      size: 20,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  const Expanded(
+                                    child: Text(
+                                      'RIDEX REWARDS',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 0.8,
+                                      ),
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      border: Border.all(
+                                        color: AppTheme.accent,
+                                      ),
+                                      borderRadius: BorderRadius.circular(99),
+                                    ),
+                                    child: const Text(
+                                      'LIMITED OFFER',
+                                      style: TextStyle(
+                                        color: AppTheme.accent,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0.8,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 22),
+                              const Text(
+                                '20% OFF',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 34,
+                                  height: 1,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: -1,
+                                ),
+                              ),
+                              const SizedBox(height: 7),
+                              const Text(
+                                'Your next metered ride is on us — almost.',
+                                style: TextStyle(
+                                  color: AppTheme.mutedText,
+                                  fontSize: 14,
+                                  height: 1.35,
+                                ),
+                              ),
+                              const SizedBox(height: 22),
+                              const Row(
+                                children: [
+                                  Expanded(
+                                    child: _OfferDetail(
+                                      label: 'PROMO CODE',
+                                      value: 'RIDEX20',
+                                    ),
+                                  ),
+                                  SizedBox(width: 16),
+                                  Expanded(
+                                    child: _OfferDetail(
+                                      label: 'SAVE UP TO',
+                                      value: 'Rs. 500',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const _TicketPerforation(),
+                  Container(
+                    color: AppTheme.surfaceAlt,
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
+                    child: Row(
+                      children: [
+                        const SizedBox(
+                          width: 88,
+                          height: 34,
+                          child: CustomPaint(painter: _BarcodePainter()),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'ONE RIDE\nPER ACCOUNT',
+                            style: TextStyle(
+                              color: AppTheme.mutedText,
+                              fontSize: 9,
+                              height: 1.35,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.7,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primary,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'BOOK NOW',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              SizedBox(width: 5),
+                              Icon(
+                                Icons.arrow_forward_rounded,
+                                color: Colors.white,
+                                size: 15,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OfferDetail extends StatelessWidget {
+  const _OfferDetail({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppTheme.mutedText,
+            fontSize: 9,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TicketPerforation extends StatelessWidget {
+  const _TicketPerforation();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 18,
+      color: AppTheme.surfaceAlt,
+      child: Row(
+        children: [
+          Transform.translate(
+            offset: const Offset(-9, 0),
+            child: const CircleAvatar(
+              radius: 9,
+              backgroundColor: AppTheme.background,
+            ),
+          ),
+          const Expanded(
+            child: SizedBox(
+              height: 2,
+              child: CustomPaint(painter: _DashedLinePainter()),
+            ),
+          ),
+          Transform.translate(
+            offset: const Offset(9, 0),
+            child: const CircleAvatar(
+              radius: 9,
+              backgroundColor: AppTheme.background,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TicketGridPainter extends CustomPainter {
+  const _TicketGridPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = AppTheme.primary.withValues(alpha: 0.12)
+      ..strokeWidth = 1;
+    const spacing = 24.0;
+
+    for (double x = 0; x <= size.width; x += spacing) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+    for (double y = 0; y <= size.height; y += spacing) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _DashedLinePainter extends CustomPainter {
+  const _DashedLinePainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.2)
+      ..strokeWidth = 1.5;
+    const dashWidth = 6.0;
+    const dashSpace = 5.0;
+    for (double x = 0; x < size.width; x += dashWidth + dashSpace) {
+      canvas.drawLine(
+        Offset(x, size.height / 2),
+        Offset((x + dashWidth).clamp(0, size.width), size.height / 2),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _BarcodePainter extends CustomPainter {
+  const _BarcodePainter();
+
+  static const _bars = <double>[
+    2,
+    1,
+    3,
+    1,
+    2,
+    4,
+    1,
+    3,
+    2,
+    1,
+    4,
+    2,
+    1,
+    3,
+    1,
+    2,
+    3,
+    1,
+    4,
+    2,
+  ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = Colors.white.withValues(alpha: 0.78);
+    var x = 0.0;
+    var drawBar = true;
+    for (final unit in _bars) {
+      final width = unit * 1.6;
+      if (drawBar) {
+        canvas.drawRect(Rect.fromLTWH(x, 0, width, size.height), paint);
+      }
+      x += width;
+      drawBar = !drawBar;
+      if (x >= size.width) break;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
