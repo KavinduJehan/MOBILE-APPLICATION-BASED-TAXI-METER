@@ -295,40 +295,152 @@ class _ProfileTabState extends State<ProfileTab> {
               ),
               const SizedBox(height: 12),
               _profileMenuItem(
-                icon: Icons.info,
-                title: 'About RideX',
-                subtitle: 'Learn about our app',
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('RideX taxi meter customer app'),
-                    ),
-                  );
-                },
+                icon: Icons.feedback_outlined,
+                title: 'Send Feedback',
+                subtitle: 'Tell us about your RideX experience',
+                onTap: _showFeedbackDialog,
               ),
               const SizedBox(height: 32),
               if (auth.isLoggedIn)
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color.fromARGB(
-                      255,
-                      126,
-                      122,
-                      161,
-                    ).withValues(alpha: 0.2),
-                    foregroundColor: Colors.redAccent,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
+                _AnimatedSignOutButton(
                   onPressed: () => _confirmSignOut(context, auth),
-                  child: const Text('Sign Out'),
                 ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Future<void> _showFeedbackDialog() async {
+    final feedbackController = TextEditingController();
+    int? selectedMood;
+    bool showError = false;
+
+    final submitted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final hasFeedback = feedbackController.text.trim().isNotEmpty;
+
+          return Dialog(
+            backgroundColor: AppTheme.surface,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppTheme.buttonRadius),
+              side: const BorderSide(color: AppTheme.border),
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Send Feedback',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 21,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(dialogContext, false),
+                          icon: const Icon(Icons.close_rounded),
+                          color: AppTheme.mutedText,
+                          tooltip: 'Close',
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: feedbackController,
+                      autofocus: true,
+                      minLines: 4,
+                      maxLines: 5,
+                      maxLength: 500,
+                      onChanged: (_) {
+                        setDialogState(() => showError = false);
+                      },
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'Your feedback...',
+                        errorText: showError
+                            ? 'Please enter your feedback before sending.'
+                            : null,
+                        filled: true,
+                        fillColor: AppTheme.surfaceAlt,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'How was your experience?',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppTheme.mutedText,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        _FeedbackMoodButton(
+                          icon: Icons.sentiment_satisfied_alt_rounded,
+                          label: 'Good',
+                          selected: selectedMood == 1,
+                          onPressed: () {
+                            setDialogState(() => selectedMood = 1);
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        _FeedbackMoodButton(
+                          icon: Icons.sentiment_dissatisfied_rounded,
+                          label: 'Bad',
+                          selected: selectedMood == -1,
+                          onPressed: () {
+                            setDialogState(() => selectedMood = -1);
+                          },
+                        ),
+                        const Spacer(),
+                        SizedBox(
+                          width: 58,
+                          height: 52,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              if (!hasFeedback) {
+                                setDialogState(() => showError = true);
+                                return;
+                              }
+                              Navigator.pop(dialogContext, true);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size(58, 52),
+                              padding: EdgeInsets.zero,
+                            ),
+                            child: const Icon(Icons.send_rounded, size: 23),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+
+    feedbackController.dispose();
+    if (!mounted || submitted != true) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Thank you for your feedback!')),
     );
   }
 
@@ -1402,3 +1514,141 @@ const _linkedInProfiles = [
   LinkedInProfile(name: 'LinkedIn Profile 3', role: 'RideX team member'),
   LinkedInProfile(name: 'LinkedIn Profile 4', role: 'RideX team member'),
 ];
+
+class _FeedbackMoodButton extends StatelessWidget {
+  const _FeedbackMoodButton({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? AppTheme.primary : AppTheme.mutedText;
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '$label experience',
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          width: 52,
+          height: 52,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected
+                ? AppTheme.primary.withValues(alpha: 0.16)
+                : AppTheme.surfaceAlt,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected ? AppTheme.primary : AppTheme.border,
+            ),
+          ),
+          child: Icon(icon, color: color, size: 25),
+        ),
+      ),
+    );
+  }
+}
+
+class _AnimatedSignOutButton extends StatefulWidget {
+  const _AnimatedSignOutButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  State<_AnimatedSignOutButton> createState() => _AnimatedSignOutButtonState();
+}
+
+class _AnimatedSignOutButtonState extends State<_AnimatedSignOutButton> {
+  bool _hovered = false;
+  bool _focused = false;
+  bool _pressed = false;
+  bool _activationPending = false;
+
+  bool get _active => _hovered || _focused || _pressed;
+
+  void _handleTap() {
+    if (_activationPending) return;
+    _activationPending = true;
+    setState(() => _pressed = true);
+    Future<void>.delayed(const Duration(milliseconds: 180), () {
+      if (!mounted) return;
+      setState(() => _pressed = false);
+      _activationPending = false;
+      widget.onPressed();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final active = _active;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 15),
+      child: AnimatedScale(
+        scale: _pressed ? 0.9 : 1,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: _handleTap,
+            onTapDown: (_) => setState(() => _pressed = true),
+            onTapCancel: () => setState(() => _pressed = false),
+            onHover: (hovered) => setState(() => _hovered = hovered),
+            onFocusChange: (focused) => setState(() => _focused = focused),
+            hoverColor: Colors.transparent,
+            focusColor: Colors.transparent,
+            splashColor: Colors.transparent,
+            highlightColor: Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              height: AppTheme.buttonHeight,
+              decoration: BoxDecoration(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.dangerRed, width: 2),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  AnimatedPositioned(
+                    duration: const Duration(milliseconds: 500),
+                    curve: Curves.easeOut,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    height: active ? AppTheme.buttonHeight : 0,
+                    child: const ColoredBox(color: AppTheme.dangerRed),
+                  ),
+                  AnimatedDefaultTextStyle(
+                    duration: const Duration(milliseconds: 500),
+                    curve: Curves.easeOut,
+                    style: TextStyle(
+                      color: active ? Colors.white : AppTheme.dangerRed,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1,
+                    ),
+                    child: const Text('Sign Out'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
