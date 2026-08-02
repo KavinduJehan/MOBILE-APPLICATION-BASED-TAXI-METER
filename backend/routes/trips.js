@@ -5,6 +5,7 @@ const {
   createTrip,
   startTrip,
   endTrip,
+  cancelTrip,
   getTripDetails,
   getMyTrips,
   getIncome,
@@ -13,6 +14,7 @@ const {
 router.post('/', protect, createTrip);
 router.patch('/:id/start', protect, startTrip);
 router.patch('/:id/end', protect, endTrip);
+router.patch('/:id/cancel', protect, cancelTrip);
 router.get('/my', protect, getMyTrips);
 router.get('/income', protect, getIncome);
 router.get('/:id', protect, getTripDetails);

@@ -20,27 +20,6 @@ const _defaultCenter = LatLng(6.9271, 79.8612);
 String _newPlacesSessionToken() =>
     '${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(0x7fffffff)}';
 
-const _places = <String, LatLng>{
-  'Colombo': LatLng(6.9271, 79.8612),
-  'Galle': LatLng(6.0535, 80.2210),
-  'Kandy': LatLng(7.2906, 80.6337),
-  'Matara': LatLng(5.9549, 80.5550),
-  'Negombo': LatLng(7.2096, 79.8378),
-  'Jaffna': LatLng(9.6615, 80.0255),
-  'Trincomalee': LatLng(8.5874, 81.2152),
-  'Badulla': LatLng(6.9934, 81.0550),
-  'Ratnapura': LatLng(6.7056, 80.3847),
-  'Kurunegala': LatLng(7.4867, 80.3647),
-  'Nugegoda': LatLng(6.8649, 79.8997),
-  'Dehiwala': LatLng(6.8566, 79.8655),
-  'Mount Lavinia': LatLng(6.8301, 79.8801),
-  'Maharagama': LatLng(6.8480, 79.9265),
-  'Battaramulla': LatLng(6.9006, 79.9186),
-  'Katunayake': LatLng(7.1697, 79.8841),
-  'Kiribathgoda': LatLng(6.9804, 79.9297),
-  'Gampaha': LatLng(7.0873, 80.0144),
-};
-
 class LocationSelectionResult {
   const LocationSelectionResult({
     required this.pickupAddress,
@@ -82,11 +61,13 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   int _placeSearchGeneration = 0;
   String? _placeSearchError;
   String _placesSessionToken = _newPlacesSessionToken();
+  List<_RecentPlace> _recentPlaces = const [];
+  bool _resolvingLiveAddress = false;
 
   LatLng _pickup = _defaultCenter;
   LatLng? _destination;
   LatLng? _liveLocation;
-  String _pickupAddress = 'Your location';
+  String _pickupAddress = 'Detecting live location...';
   String? _destinationAddress;
   bool _editingPickup = false;
   bool _pickupChangedManually = false;
@@ -105,9 +86,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     _dropFocusNode.addListener(_handleDropFocus);
     _startLocation();
     _refreshSavedPlaces();
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _dropFocusNode.requestFocus(),
-    );
+    _loadRecentPlaces();
   }
 
   @override
@@ -131,17 +110,19 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   }
 
   void _handlePickupFocus() {
-    if (_pickupFocusNode.hasFocus && !_editingPickup) {
-      setState(() => _editingPickup = true);
-      _schedulePlaceSearch();
-    }
+    if (!mounted) return;
+    setState(() {
+      if (_pickupFocusNode.hasFocus) _editingPickup = true;
+    });
+    if (_pickupFocusNode.hasFocus) _schedulePlaceSearch();
   }
 
   void _handleDropFocus() {
-    if (_dropFocusNode.hasFocus && _editingPickup) {
-      setState(() => _editingPickup = false);
-      _schedulePlaceSearch();
-    }
+    if (!mounted) return;
+    setState(() {
+      if (_dropFocusNode.hasFocus) _editingPickup = false;
+    });
+    if (_dropFocusNode.hasFocus) _schedulePlaceSearch();
   }
 
   void _handleSearchTextChanged() {
@@ -235,7 +216,17 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   Future<void> _selectPlaceSuggestion(_PlaceSuggestion suggestion) async {
     final point = suggestion.point;
     if (point != null) {
-      _selectResolvedPlace(suggestion.title, point, _editingPickup);
+      unawaited(
+        _rememberRecent(
+          _RecentPlace(
+            title: suggestion.title,
+            address: suggestion.description,
+            point: point,
+            placeId: suggestion.placeId,
+          ),
+        ),
+      );
+      _selectResolvedPlace(suggestion.description, point, _editingPickup);
       return;
     }
 
@@ -261,6 +252,16 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
           (data['address'] ?? data['name'] ?? suggestion.description)
               .toString();
       if (!mounted) return;
+      unawaited(
+        _rememberRecent(
+          _RecentPlace(
+            title: (data['name'] ?? suggestion.title).toString(),
+            address: address,
+            point: LatLng(latitude, longitude),
+            placeId: placeId,
+          ),
+        ),
+      );
       _selectResolvedPlace(
         address,
         LatLng(latitude, longitude),
@@ -348,18 +349,106 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   void _applyLiveLocation(Position position, {bool moveMap = false}) {
     final point = LatLng(position.latitude, position.longitude);
     if (!mounted) return;
+    final shouldResolveAddress =
+        !_pickupChangedManually &&
+        (_pickupAddress == 'Detecting live location...' ||
+            _pickupAddress == 'Location fetched');
     setState(() {
       _liveLocation = point;
       _locating = false;
       _locationMessage = null;
       if (!_pickupChangedManually) {
         _pickup = point;
-        _pickupAddress = 'Your location';
+        _pickupAddress = 'Location fetched';
       }
     });
-    if (moveMap && _showMap) {
-      _moveMap(point, 15);
+    if (shouldResolveAddress) unawaited(_resolveLivePickupAddress(point));
+    if (moveMap) _moveMap(point, 15);
+  }
+
+  Future<void> _resolveLivePickupAddress(LatLng point) async {
+    if (_resolvingLiveAddress) return;
+    _resolvingLiveAddress = true;
+    try {
+      final response = await ApiService.reverseGeocode(
+        latitude: point.latitude,
+        longitude: point.longitude,
+      );
+      final data = response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : <String, dynamic>{};
+      final address = data['address']?.toString().trim();
+      if (!mounted ||
+          _pickupChangedManually ||
+          address == null ||
+          address.isEmpty) {
+        return;
+      }
+      final isCurrentPoint =
+          (_pickup.latitude - point.latitude).abs() < 0.0005 &&
+          (_pickup.longitude - point.longitude).abs() < 0.0005;
+      if (isCurrentPoint) setState(() => _pickupAddress = address);
+    } catch (_) {
+      // Coordinates remain a valid pickup even when an address is unavailable.
+    } finally {
+      _resolvingLiveAddress = false;
     }
+  }
+
+  String get _recentPlacesCacheKey {
+    final customerId = context.read<AuthProvider>().customer?.id ?? 'guest';
+    return 'location_picker_recent_places_$customerId';
+  }
+
+  Future<void> _loadRecentPlaces() async {
+    final cacheKey = _recentPlacesCacheKey;
+    final prefs = await SharedPreferences.getInstance();
+    final source = prefs.getString(cacheKey);
+    if (!mounted || source == null) return;
+    try {
+      final decoded = jsonDecode(source);
+      if (decoded is! List) return;
+      setState(() {
+        _recentPlaces = decoded
+            .whereType<Map>()
+            .map(
+              (item) => _RecentPlace.fromJson(Map<String, dynamic>.from(item)),
+            )
+            .toList();
+      });
+    } catch (_) {
+      // Ignore invalid local history.
+    }
+  }
+
+  Future<void> _rememberRecent(_RecentPlace place) async {
+    final cacheKey = _recentPlacesCacheKey;
+    final updated = [
+      place,
+      ..._recentPlaces.where(
+        (item) => place.placeId == null
+            ? item.address.toLowerCase() != place.address.toLowerCase()
+            : item.placeId != place.placeId,
+      ),
+    ].take(8).toList();
+    if (mounted) setState(() => _recentPlaces = updated);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      cacheKey,
+      jsonEncode(updated.map((item) => item.toJson()).toList()),
+    );
+  }
+
+  Future<void> _clearRecentPlaces() async {
+    final cacheKey = _recentPlacesCacheKey;
+    setState(() => _recentPlaces = const []);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(cacheKey);
+  }
+
+  void _selectRecentPlace(_RecentPlace place) {
+    unawaited(_rememberRecent(place));
+    _selectResolvedPlace(place.address, place.point, _editingPickup);
   }
 
   void _handleMapTap(LatLng point) {
@@ -499,7 +588,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   }
 
   void _selectSavedPlace(_SavedPlace place) {
-    final point = place.point ?? _pointForSavedPlace(place);
+    final point = place.point;
     if (point == null) {
       if (_editingPickup) {
         _setSearchText(_pickupSearchController, place.address);
@@ -526,14 +615,6 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     } else {
       _selectDestination(place.address, point);
     }
-  }
-
-  LatLng? _pointForSavedPlace(_SavedPlace place) {
-    final source = '${place.label} ${place.address}'.toLowerCase();
-    for (final entry in _places.entries) {
-      if (source.contains(entry.key.toLowerCase())) return entry.value;
-    }
-    return null;
   }
 
   void _selectPickup(String name, LatLng point) {
@@ -587,10 +668,15 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     final liveLocation = _liveLocation;
     setState(() {
       _pickup = liveLocation ?? _defaultCenter;
-      _pickupAddress = liveLocation == null ? 'Choose pickup' : 'Your location';
+      _pickupAddress = liveLocation == null
+          ? 'Choose pickup'
+          : 'Location fetched';
       _pickupChangedManually = false;
       _editingPickup = true;
     });
+    if (liveLocation != null) {
+      unawaited(_resolveLivePickupAddress(liveLocation));
+    }
     _pickupFocusNode.requestFocus();
   }
 
@@ -631,31 +717,10 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         ? _pickupSearchController
         : _searchController;
     final query = activeController.text.trim().toLowerCase();
-    final localSuggestions = _places.entries
-        .where(
-          (entry) => query.isEmpty || entry.key.toLowerCase().contains(query),
-        )
-        .map(
-          (entry) => _PlaceSuggestion.local(
-            title: entry.key,
-            subtitle: 'Sri Lanka',
-            point: entry.value,
-          ),
-        );
-
-    if (query.length < 2 || _remoteSuggestions.isEmpty) {
-      return localSuggestions.take(7).toList();
-    }
-
-    final remoteNames = _remoteSuggestions
-        .map((item) => item.title.toLowerCase())
-        .toSet();
-    return [
-      ..._remoteSuggestions,
-      ...localSuggestions.where(
-        (item) => !remoteNames.contains(item.title.toLowerCase()),
-      ),
-    ].take(7).toList();
+    if (query.length < 2) return const [];
+    // Typed results must come from Google Places. The old local fallback only
+    // contained districts and made valid roads, shops, and landmarks invisible.
+    return _remoteSuggestions.take(8).toList();
   }
 
   @override
@@ -666,6 +731,14 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
   Widget _buildSearchView() {
     final quickPlaces = _savedPlaces.take(3).toList();
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    final searchMode = _pickupFocusNode.hasFocus || _dropFocusNode.hasFocus;
+    final activeSearchText = _editingPickup
+        ? _pickupSearchController.text
+        : _searchController.text;
+    // Keep the route selector higher over the map like the booking reference.
+    // Remove the extra lift while typing so the keyboard cannot squeeze it.
+    final panelLift = !searchMode && keyboardInset == 0 ? 56.0 : 0.0;
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
@@ -708,46 +781,51 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Material(
-                  color: Colors.white,
+                  color: AppTheme.surface,
                   shape: const CircleBorder(),
                   elevation: 4,
                   child: IconButton(
                     onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.arrow_back, color: Colors.black87),
+                    icon: const Icon(Icons.arrow_back, color: Colors.white),
                     tooltip: 'Back',
                   ),
                 ),
               ),
             ),
           ),
-          Positioned(
-            right: 16,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 190,
-            child: Material(
-              color: Colors.white,
-              shape: const CircleBorder(),
-              elevation: 4,
-              child: IconButton(
-                onPressed: _openMapForPinning,
-                icon: const Icon(
-                  Icons.my_location,
-                  color: AppTheme.primaryBlue,
+          if (!searchMode)
+            Positioned(
+              right: 16,
+              bottom: keyboardInset + panelLift + 190,
+              child: Material(
+                color: AppTheme.surface,
+                shape: const CircleBorder(),
+                elevation: 4,
+                child: IconButton(
+                  onPressed: _openMapForPinning,
+                  icon: const Icon(
+                    Icons.my_location,
+                    color: AppTheme.primaryBlue,
+                  ),
+                  tooltip: 'Set on map',
                 ),
-                tooltip: 'Set on map',
               ),
             ),
-          ),
           Align(
-            alignment: Alignment.bottomCenter,
+            alignment: searchMode
+                ? Alignment.topCenter
+                : Alignment.bottomCenter,
             child: SafeArea(
-              top: false,
+              top: searchMode,
               child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                  16,
-                  0,
-                  16,
-                  16 + MediaQuery.of(context).viewInsets.bottom,
-                ),
+                padding: searchMode
+                    ? EdgeInsets.fromLTRB(16, 72, 16, 12 + keyboardInset)
+                    : EdgeInsets.fromLTRB(
+                        16,
+                        0,
+                        16,
+                        16 + keyboardInset + panelLift,
+                      ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -797,8 +875,9 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                         constraints: const BoxConstraints(maxHeight: 220),
                         margin: const EdgeInsets.only(top: 8),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: AppTheme.surface,
                           borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: AppTheme.border),
                           boxShadow: const [
                             BoxShadow(
                               color: Color(0x22000000),
@@ -812,7 +891,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                 padding: EdgeInsets.all(16),
                                 child: Text(
                                   'No matching locations found',
-                                  style: TextStyle(color: Colors.black54),
+                                  style: TextStyle(color: AppTheme.mutedText),
                                 ),
                               )
                             : ListView.separated(
@@ -848,51 +927,59 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                           ),
                         ),
                       ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _QuickDestinationCard(
-                            icon: Icons.home_outlined,
-                            label: quickPlaces.isNotEmpty
-                                ? quickPlaces[0].label
-                                : 'Home',
-                            subtitle: quickPlaces.isNotEmpty
-                                ? quickPlaces[0].address
-                                : 'Saved places',
-                            onTap: quickPlaces.isNotEmpty
-                                ? () => _selectSavedPlace(quickPlaces[0])
-                                : _openSavedPlaces,
+                    if (searchMode && activeSearchText.trim().isEmpty)
+                      _RecentPlacesPanel(
+                        places: _recentPlaces,
+                        onSelected: _selectRecentPlace,
+                        onClear: _clearRecentPlaces,
+                      ),
+                    if (!searchMode) ...[
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _QuickDestinationCard(
+                              icon: Icons.home_outlined,
+                              label: quickPlaces.isNotEmpty
+                                  ? quickPlaces[0].label
+                                  : 'Home',
+                              subtitle: quickPlaces.isNotEmpty
+                                  ? quickPlaces[0].address
+                                  : 'Saved places',
+                              onTap: quickPlaces.isNotEmpty
+                                  ? () => _selectSavedPlace(quickPlaces[0])
+                                  : _openSavedPlaces,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _QuickDestinationCard(
-                            icon: Icons.work_outline,
-                            label: quickPlaces.length > 1
-                                ? quickPlaces[1].label
-                                : 'Work',
-                            subtitle: quickPlaces.length > 1
-                                ? quickPlaces[1].address
-                                : 'Add work',
-                            onTap: quickPlaces.length > 1
-                                ? () => _selectSavedPlace(quickPlaces[1])
-                                : _openSavedPlaces,
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _QuickDestinationCard(
+                              icon: Icons.work_outline,
+                              label: quickPlaces.length > 1
+                                  ? quickPlaces[1].label
+                                  : 'Work',
+                              subtitle: quickPlaces.length > 1
+                                  ? quickPlaces[1].address
+                                  : 'Add work',
+                              onTap: quickPlaces.length > 1
+                                  ? () => _selectSavedPlace(quickPlaces[1])
+                                  : _openSavedPlaces,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _QuickDestinationCard(
-                            icon: Icons.favorite_border,
-                            label: 'Saved',
-                            subtitle: _loadingSavedPlaces
-                                ? 'Loading...'
-                                : '${_savedPlaces.length} places',
-                            onTap: _openSavedPlaces,
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _QuickDestinationCard(
+                              icon: Icons.favorite_border,
+                              label: 'Saved',
+                              subtitle: _loadingSavedPlaces
+                                  ? 'Loading...'
+                                  : '${_savedPlaces.length} places',
+                              onTap: _openSavedPlaces,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -916,9 +1003,9 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
             );
           },
         ),
-        title: const Text('Set location on map'),
+        title: const Text('Confirm locations'),
         actions: [
-          TextButton(onPressed: _confirm, child: const Text('Confirm')),
+          TextButton(onPressed: _confirm, child: const Text('Find Driver')),
         ],
       ),
       body: Stack(
@@ -1041,18 +1128,18 @@ class _MapSearchPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const inputStyle = TextStyle(
-      color: Colors.black87,
+      color: Colors.white,
       fontSize: 15,
       fontWeight: FontWeight.w600,
     );
     const hintStyle = TextStyle(
-      color: Color(0xFF9AA0A6),
+      color: AppTheme.mutedText,
       fontSize: 15,
       fontWeight: FontWeight.w500,
     );
 
     return Material(
-      color: Colors.white,
+      color: AppTheme.surface,
       borderRadius: BorderRadius.circular(16),
       elevation: 8,
       child: Padding(
@@ -1062,18 +1149,18 @@ class _MapSearchPanel extends StatelessWidget {
           children: [
             const Column(
               children: [
-                Icon(Icons.circle, color: Color(0xFF24B36B), size: 10),
+                Icon(Icons.circle, color: AppTheme.actionBlue, size: 10),
                 SizedBox(height: 12),
                 SizedBox(
                   height: 40,
                   child: VerticalDivider(
-                    color: Color(0xFFE0E3E7),
+                    color: AppTheme.border,
                     thickness: 2,
                     width: 8,
                   ),
                 ),
                 SizedBox(height: 10),
-                Icon(Icons.trip_origin, color: Color(0xFFFFB33F), size: 15),
+                Icon(Icons.trip_origin, color: AppTheme.accent, size: 15),
               ],
             ),
             const SizedBox(width: 12),
@@ -1084,7 +1171,7 @@ class _MapSearchPanel extends StatelessWidget {
                   Text(
                     'Pick up',
                     style: TextStyle(
-                      color: Colors.grey.shade500,
+                      color: AppTheme.mutedText,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
@@ -1128,7 +1215,7 @@ class _MapSearchPanel extends StatelessWidget {
                           pickupController.text.isEmpty
                               ? Icons.map_outlined
                               : Icons.close,
-                          color: Colors.black54,
+                          color: AppTheme.accent,
                         ),
                         tooltip: pickupController.text.isEmpty
                             ? 'Set pickup on map'
@@ -1136,11 +1223,11 @@ class _MapSearchPanel extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const Divider(height: 18, color: Color(0xFFE8EAEE)),
+                  const Divider(height: 18, color: AppTheme.border),
                   Text(
                     'Drop off',
                     style: TextStyle(
-                      color: Colors.grey.shade500,
+                      color: AppTheme.mutedText,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
@@ -1175,7 +1262,7 @@ class _MapSearchPanel extends StatelessWidget {
                           dropController.text.isEmpty
                               ? Icons.map_outlined
                               : Icons.close,
-                          color: Colors.black54,
+                          color: AppTheme.accent,
                         ),
                         tooltip: dropController.text.isEmpty
                             ? 'Set destination on map'
@@ -1188,6 +1275,125 @@ class _MapSearchPanel extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _RecentPlacesPanel extends StatelessWidget {
+  const _RecentPlacesPanel({
+    required this.places,
+    required this.onSelected,
+    required this.onClear,
+  });
+
+  final List<_RecentPlace> places;
+  final ValueChanged<_RecentPlace> onSelected;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      constraints: const BoxConstraints(maxHeight: 250),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.border),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x22000000),
+            blurRadius: 16,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 8, 6),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Recent',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                if (places.isNotEmpty)
+                  TextButton(
+                    onPressed: onClear,
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(64, 34),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    child: const Text(
+                      'Clear all',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (places.isEmpty)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 8, 16, 18),
+              child: Text(
+                'Places you search and select will appear here.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppTheme.mutedText, fontSize: 12),
+              ),
+            )
+          else
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                padding: const EdgeInsets.only(bottom: 8),
+                itemCount: places.length,
+                separatorBuilder: (_, _) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final place = places[index];
+                  return ListTile(
+                    dense: true,
+                    onTap: () => onSelected(place),
+                    leading: const CircleAvatar(
+                      radius: 15,
+                      backgroundColor: AppTheme.surfaceAlt,
+                      child: Icon(
+                        Icons.history_rounded,
+                        size: 17,
+                        color: AppTheme.primaryBlue,
+                      ),
+                    ),
+                    title: Text(
+                      place.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    subtitle: Text(
+                      place.address,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppTheme.mutedText,
+                        fontSize: 11,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -1209,7 +1415,7 @@ class _QuickDestinationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: AppTheme.surface,
       borderRadius: BorderRadius.circular(14),
       elevation: 4,
       child: InkWell(
@@ -1222,10 +1428,8 @@ class _QuickDestinationCard extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 18,
-                backgroundColor: const Color(
-                  0xFFFFB33F,
-                ).withValues(alpha: 0.16),
-                child: Icon(icon, color: const Color(0xFFFFA51F), size: 20),
+                backgroundColor: AppTheme.primary.withValues(alpha: 0.16),
+                child: Icon(icon, color: AppTheme.accent, size: 20),
               ),
               const SizedBox(height: 8),
               Text(
@@ -1234,7 +1438,7 @@ class _QuickDestinationCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  color: Colors.black87,
+                  color: Colors.white,
                   fontSize: 13,
                   fontWeight: FontWeight.w800,
                 ),
@@ -1245,7 +1449,7 @@ class _QuickDestinationCard extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.black45, fontSize: 11),
+                style: const TextStyle(color: AppTheme.mutedText, fontSize: 11),
               ),
             ],
           ),
@@ -1264,32 +1468,73 @@ class _PlaceSuggestion {
     this.point,
   });
 
-  factory _PlaceSuggestion.local({
-    required String title,
-    required String subtitle,
-    required LatLng point,
-  }) => _PlaceSuggestion(
-    title: title,
-    subtitle: subtitle,
-    description: title,
-    point: point,
-  );
-
   factory _PlaceSuggestion.fromJson(Map<String, dynamic> json) {
     final description = (json['description'] ?? '').toString();
+    final secondaryText = (json['secondaryText'] ?? 'Sri Lanka').toString();
+    final distanceMeters = _readJsonDouble(json['distanceMeters']);
+    final latitude = _readJsonDouble(json['lat']);
+    final longitude = _readJsonDouble(json['lng']);
     return _PlaceSuggestion(
       title: (json['mainText'] ?? description).toString(),
-      subtitle: (json['secondaryText'] ?? 'Sri Lanka').toString(),
+      subtitle: distanceMeters == null
+          ? secondaryText
+          : '$secondaryText  •  ${_formatDistance(distanceMeters)}',
       description: description,
       placeId: json['placeId']?.toString(),
+      point: latitude == null || longitude == null
+          ? null
+          : LatLng(latitude, longitude),
     );
   }
+
+  static double? _readJsonDouble(Object? value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '');
+  }
+
+  static String _formatDistance(double meters) => meters < 1000
+      ? '${meters.round()} m'
+      : '${(meters / 1000).toStringAsFixed(1)} km';
 
   final String title;
   final String subtitle;
   final String description;
   final String? placeId;
   final LatLng? point;
+}
+
+class _RecentPlace {
+  const _RecentPlace({
+    required this.title,
+    required this.address,
+    required this.point,
+    this.placeId,
+  });
+
+  factory _RecentPlace.fromJson(Map<String, dynamic> json) => _RecentPlace(
+    title: (json['title'] ?? json['address'] ?? 'Selected place').toString(),
+    address: (json['address'] ?? '').toString(),
+    point: LatLng(_readDouble(json['lat']), _readDouble(json['lng'])),
+    placeId: json['placeId']?.toString(),
+  );
+
+  final String title;
+  final String address;
+  final LatLng point;
+  final String? placeId;
+
+  Map<String, dynamic> toJson() => {
+    'title': title,
+    'address': address,
+    'lat': point.latitude,
+    'lng': point.longitude,
+    if (placeId != null) 'placeId': placeId,
+  };
+
+  static double _readDouble(Object? value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
 }
 
 class _LightSuggestionTile extends StatelessWidget {
@@ -1308,16 +1553,19 @@ class _LightSuggestionTile extends StatelessWidget {
     return ListTile(
       onTap: onTap,
       dense: true,
-      leading: const Icon(Icons.place_outlined, color: AppTheme.primaryBlue),
+      leading: const Icon(Icons.place_outlined, color: AppTheme.accent),
       title: Text(
         title,
         style: const TextStyle(
-          color: Colors.black87,
+          color: Colors.white,
           fontWeight: FontWeight.w700,
         ),
       ),
-      subtitle: Text(subtitle, style: const TextStyle(color: Colors.black45)),
-      trailing: const Icon(Icons.chevron_right, color: Colors.black38),
+      subtitle: Text(
+        subtitle,
+        style: const TextStyle(color: AppTheme.mutedText),
+      ),
+      trailing: const Icon(Icons.chevron_right, color: AppTheme.mutedText),
     );
   }
 }
@@ -1464,10 +1712,10 @@ class _MapConfirmPanel extends StatelessWidget {
                   child: ElevatedButton(
                     onPressed: onConfirm,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primaryBlue,
+                      backgroundColor: AppTheme.actionBlue,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    child: const Text('Confirm locations'),
+                    child: const Text('Find Driver'),
                   ),
                 ),
               ],

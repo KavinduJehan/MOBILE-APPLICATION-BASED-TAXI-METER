@@ -7,6 +7,7 @@ import '../theme.dart';
 import 'home_tab.dart';
 import 'profile_tab.dart';
 import 'qr_scan.dart';
+import 'settings_tab.dart';
 import 'trips_tab.dart';
 
 class MainNavigation extends StatefulWidget {
@@ -17,15 +18,16 @@ class MainNavigation extends StatefulWidget {
 }
 
 class _MainNavigationState extends State<MainNavigation> {
-  int _currentIndex = 0;
+  int _currentIndex = 2;
   final _qrTabActive = ValueNotifier<bool>(false);
-  final _navigatorKeys = List.generate(4, (_) => GlobalKey<NavigatorState>());
+  final _navigatorKeys = List.generate(5, (_) => GlobalKey<NavigatorState>());
 
   late final List<Widget> _screens = [
+    const ProfileTab(),
+    QRScan(activeListenable: _qrTabActive),
     const HomeTab(),
     const TripsTab(),
-    QRScan(activeListenable: _qrTabActive),
-    const ProfileTab(),
+    const SettingsTab(),
   ];
 
   @override
@@ -74,7 +76,7 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 
   void _selectDestination(int index) {
-    _qrTabActive.value = index == 2;
+    _qrTabActive.value = index == 1;
     if (index == _currentIndex) {
       _navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
       return;
@@ -139,15 +141,27 @@ class _FooterNavigationBar extends StatelessWidget {
           child: Row(
             children: [
               _FooterNavigationItem(
-                label: 'Home',
+                label: 'Profile',
                 selected: selectedIndex == 0,
                 onTap: () => onSelected(0),
+                icon: const Icon(Icons.person_rounded, size: 22),
+              ),
+              _FooterNavigationItem(
+                label: 'QR',
+                selected: selectedIndex == 1,
+                onTap: () => onSelected(1),
+                icon: const Icon(Icons.qr_code_scanner_rounded, size: 22),
+              ),
+              _FooterNavigationItem(
+                label: 'Home',
+                selected: selectedIndex == 2,
+                onTap: () => onSelected(2),
                 icon: const Icon(Icons.home_rounded, size: 22),
               ),
               _FooterNavigationItem(
                 label: 'Trips',
-                selected: selectedIndex == 1,
-                onTap: () => onSelected(1),
+                selected: selectedIndex == 3,
+                onTap: () => onSelected(3),
                 icon: _TripNavigationIcon(
                   icon: Icons.directions_car_rounded,
                   size: 22,
@@ -155,16 +169,10 @@ class _FooterNavigationBar extends StatelessWidget {
                 ),
               ),
               _FooterNavigationItem(
-                label: 'Scan QR',
-                selected: selectedIndex == 2,
-                onTap: () => onSelected(2),
-                icon: const Icon(Icons.qr_code_scanner_rounded, size: 22),
-              ),
-              _FooterNavigationItem(
-                label: 'Profile',
-                selected: selectedIndex == 3,
-                onTap: () => onSelected(3),
-                icon: const Icon(Icons.person_rounded, size: 22),
+                label: 'Settings',
+                selected: selectedIndex == 4,
+                onTap: () => onSelected(4),
+                icon: const Icon(Icons.settings_rounded, size: 22),
               ),
             ],
           ),
@@ -202,7 +210,7 @@ class _FooterNavigationItemState extends State<_FooterNavigationItem> {
   Widget build(BuildContext context) {
     return Expanded(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 2),
         child: Semantics(
           button: true,
           selected: widget.selected,
@@ -216,50 +224,68 @@ class _FooterNavigationItemState extends State<_FooterNavigationItem> {
                 onHover: (value) => setState(() => _hovered = value),
                 onFocusChange: (value) => setState(() => _focused = value),
                 onHighlightChanged: (value) => setState(() => _pressed = value),
-                borderRadius: BorderRadius.circular(999),
+                borderRadius: BorderRadius.circular(12),
                 splashColor: AppTheme.primary.withValues(alpha: 0.12),
                 highlightColor: Colors.transparent,
                 hoverColor: Colors.transparent,
-                child: Center(
-                  child: AnimatedScale(
-                    scale: _pressed ? 0.94 : 1,
-                    duration: const Duration(milliseconds: 120),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      curve: Curves.easeOut,
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: _highlighted
-                            ? const Color(0xFF4B5563)
-                            : const Color(0xFF374151),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: widget.selected || _hovered || _focused
-                              ? AppTheme.primary
-                              : Colors.transparent,
-                          width: 2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(
-                              alpha: _highlighted ? 0.24 : 0.14,
-                            ),
-                            blurRadius: _highlighted ? 6 : 3,
-                            offset: const Offset(0, 2),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    AnimatedScale(
+                      scale: _pressed ? 0.94 : 1,
+                      duration: const Duration(milliseconds: 120),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOut,
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: _highlighted
+                              ? const Color(0xFF4B5563)
+                              : const Color(0xFF374151),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: widget.selected || _hovered || _focused
+                                ? AppTheme.primary
+                                : Colors.transparent,
+                            width: 2,
                           ),
-                        ],
-                      ),
-                      child: IconTheme(
-                        data: IconThemeData(
-                          color: widget.selected
-                              ? AppTheme.accent
-                              : AppTheme.mutedText,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(
+                                alpha: _highlighted ? 0.24 : 0.14,
+                              ),
+                              blurRadius: _highlighted ? 6 : 3,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                         ),
-                        child: Center(child: widget.icon),
+                        child: IconTheme(
+                          data: IconThemeData(
+                            color: widget.selected
+                                ? AppTheme.accent
+                                : AppTheme.mutedText,
+                          ),
+                          child: Center(child: widget.icon),
+                        ),
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 2),
+                    Text(
+                      widget.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: widget.selected
+                            ? AppTheme.accent
+                            : AppTheme.mutedText,
+                        fontSize: 9,
+                        fontWeight: widget.selected
+                            ? FontWeight.w800
+                            : FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
