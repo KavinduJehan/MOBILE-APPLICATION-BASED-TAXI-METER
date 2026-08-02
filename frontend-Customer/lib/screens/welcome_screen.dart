@@ -190,23 +190,37 @@ class _WelcomeButtonState extends State<_WelcomeButton>
             onTap: widget.onTap,
             child: AnimatedContainer(
               height: 56,
-              duration: const Duration(milliseconds: 200),
+              duration: const Duration(milliseconds: 500),
               curve: _isActive ? Curves.easeOut : Curves.easeIn,
               decoration: BoxDecoration(
-                color: _isActive ? AppTheme.primaryBlue : Colors.transparent,
+                color: AppTheme.actionBlue,
                 borderRadius: BorderRadius.circular(7),
-                border: Border.all(color: AppTheme.primaryBlue),
+                border: Border.all(color: AppTheme.actionBlue),
                 boxShadow: _isActive && !_isPressed
                     ? [
                         BoxShadow(
-                          color: const Color(
-                            0xFF008EEC,
-                          ).withValues(alpha: 0.82),
-                          blurRadius: 30,
-                          spreadRadius: 5,
+                          color: AppTheme.actionBlue.withValues(alpha: 0.9),
+                          blurRadius: 5,
+                        ),
+                        BoxShadow(
+                          color: AppTheme.actionBlue.withValues(alpha: 0.7),
+                          blurRadius: 25,
+                        ),
+                        BoxShadow(
+                          color: AppTheme.actionBlue.withValues(alpha: 0.5),
+                          blurRadius: 50,
+                        ),
+                        BoxShadow(
+                          color: AppTheme.actionBlue.withValues(alpha: 0.28),
+                          blurRadius: 100,
                         ),
                       ]
-                    : const [],
+                    : [
+                        BoxShadow(
+                          color: AppTheme.actionBlue.withValues(alpha: 0.72),
+                          blurRadius: 25,
+                        ),
+                      ],
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(6),
@@ -251,9 +265,9 @@ class _WelcomeButtonState extends State<_WelcomeButton>
                           widget.label.toUpperCase(),
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 2,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 4,
                           ),
                         ),
                       ],

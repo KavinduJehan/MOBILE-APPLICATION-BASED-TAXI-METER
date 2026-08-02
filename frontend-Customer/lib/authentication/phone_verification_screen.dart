@@ -318,12 +318,11 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _isComplete
-                            ? AppTheme.primaryBlue
+                            ? AppTheme.actionBlue
                             : _inactiveDark,
                         foregroundColor: _isComplete
                             ? Colors.white
                             : const Color(0xFF77777A),
-                        elevation: 0,
                         disabledBackgroundColor: _inactiveDark,
                         disabledForegroundColor: const Color(0xFF77777A),
                         shape: RoundedRectangleBorder(
@@ -345,7 +344,7 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
                               ),
                             )
                           : const Text(
-                              'Verify Now',
+                              'VERIFY NOW',
                               style: TextStyle(
                                 fontSize: 17,
                                 fontWeight: FontWeight.w800,

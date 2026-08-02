@@ -97,7 +97,11 @@ class _TripProgressScreenState extends State<TripProgressScreen> {
               width: double.infinity,
               height: AppTheme.buttonHeight,
               child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  shadowColor: Colors.transparent,
+                  elevation: 0,
+                ),
                 onPressed: _ending ? null : () => _confirmEndTrip(context),
                 child: _ending
                     ? const CircularProgressIndicator(color: Colors.white)
@@ -131,7 +135,11 @@ class _TripProgressScreenState extends State<TripProgressScreen> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              shadowColor: Colors.transparent,
+              elevation: 0,
+            ),
             onPressed: () async {
               Navigator.pop(ctx);
               await _endTrip();

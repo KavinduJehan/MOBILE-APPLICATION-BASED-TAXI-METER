@@ -179,7 +179,7 @@ class _WaitingForDriverScreenState extends State<WaitingForDriverScreen> {
               else
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryBlue,
+                    backgroundColor: AppTheme.actionBlue,
                   ),
                   onPressed: () => Navigator.pop(context),
                   child: const Text('Go Back'),

@@ -171,11 +171,12 @@ class _CustomerSignupScreenState extends State<CustomerSignupScreen> {
                   height: 58,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primaryBlue,
+                      backgroundColor: AppTheme.actionBlue,
                       foregroundColor: Colors.white,
-                      elevation: 0,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
+                        borderRadius: BorderRadius.circular(
+                          AppTheme.buttonRadius,
+                        ),
                       ),
                     ),
                     onPressed: auth.loading ? null : _submit,
@@ -189,7 +190,7 @@ class _CustomerSignupScreenState extends State<CustomerSignupScreen> {
                             ),
                           )
                         : const Text(
-                            'Sign Up',
+                            'SIGN UP',
                             style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w800,
