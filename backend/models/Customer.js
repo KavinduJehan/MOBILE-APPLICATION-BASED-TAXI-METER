@@ -28,6 +28,13 @@ const customerSchema = new mongoose.Schema(
     otp: { type: String },
     otpDebug: { type: String },
     otpExpiry: { type: Date },
+    birthday: { type: String, trim: true, maxlength: 30, default: '' },
+    gender: { type: String, trim: true, maxlength: 30, default: '' },
+    profileImage: {
+      type: String,
+      maxlength: 1100000,
+      default: '',
+    },
     savedPlaces: { type: [savedPlaceSchema], default: [] },
   },
   { timestamps: true }
