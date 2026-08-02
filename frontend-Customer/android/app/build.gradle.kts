@@ -3,6 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("dev.flutter.flutter-gradle-plugin")
     id("com.google.android.libraries.mapsplatform.secrets-gradle-plugin")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -36,4 +37,13 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+  
+     implementation(platform("com.google.firebase:firebase-bom:34.16.0"))
+     implementation("com.google.firebase:firebase-auth")
+     implementation("com.google.firebase:firebase-analytics")
+
+
 }

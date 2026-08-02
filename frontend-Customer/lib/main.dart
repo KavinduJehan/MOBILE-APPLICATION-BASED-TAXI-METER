@@ -7,6 +7,7 @@ import 'providers/nearby_drivers_provider.dart';
 import 'providers/rate_provider.dart';
 import 'providers/trip_provider.dart';
 
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
