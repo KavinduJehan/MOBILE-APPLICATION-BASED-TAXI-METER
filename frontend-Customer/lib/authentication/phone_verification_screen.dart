@@ -1,18 +1,21 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
 import '../screens/main_navigation.dart';
+import '../screens/onboarding_screen.dart';
 import '../theme.dart';
 import '../widgets/brand_logo.dart';
 
 class PhoneVerificationScreen extends StatefulWidget {
   final String phoneNumber;
+  final bool isNewUser;
 
   const PhoneVerificationScreen({
     super.key,
     required this.phoneNumber,
+    this.isNewUser = false,
   });
 
   @override
@@ -119,9 +122,12 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
       final ok = await auth.verifyOtp(widget.phoneNumber, _otp);
       if (!mounted) return;
       if (ok) {
+        final destination = widget.isNewUser
+            ? const OnboardingScreen()
+            : const MainNavigation();
         Navigator.pushAndRemoveUntil(
           context,
-          MaterialPageRoute(builder: (_) => const MainNavigation()),
+          MaterialPageRoute(builder: (_) => destination),
           (_) => false,
         );
         return;
@@ -174,26 +180,26 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Align(
-                alignment: Alignment.centerLeft,
-                child: InkWell(
-                  onTap: () => Navigator.maybePop(context),
-                  borderRadius: BorderRadius.circular(28),
-                  child: Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: _surfaceDark,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: const Color(0xFF333336)),
-                    ),
-                    child: const Icon(
-                      Icons.chevron_left,
-                      color: AppTheme.primaryBlue,
-                      size: 34,
+                    alignment: Alignment.centerLeft,
+                    child: InkWell(
+                      onTap: () => Navigator.maybePop(context),
+                      borderRadius: BorderRadius.circular(28),
+                      child: Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: _surfaceDark,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: const Color(0xFF333336)),
+                        ),
+                        child: const Icon(
+                          Icons.chevron_left,
+                          color: AppTheme.primaryBlue,
+                          size: 34,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
                   const SizedBox(height: 8),
                   const RideXLogo(size: 74, textSize: 32),
                   const SizedBox(height: 30),
@@ -270,8 +276,10 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
                     onPressed: () => Navigator.maybePop(context),
                     child: const Text(
                       'Need to Change the mobile number?',
-                      style:
-                          TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -279,8 +287,9 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
                     child: TextButton(
                       style: TextButton.styleFrom(
                         backgroundColor: _surfaceDark,
-                        foregroundColor:
-                            _requesting ? _mutedText : AppTheme.primaryBlue,
+                        foregroundColor: _requesting
+                            ? _mutedText
+                            : AppTheme.primaryBlue,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 18,
                           vertical: 9,
@@ -291,7 +300,9 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                      onPressed: (_requesting || _verifying) ? null : _resendOtp,
+                      onPressed: (_requesting || _verifying)
+                          ? null
+                          : _resendOtp,
                       child: Text(
                         _requesting ? 'Sending...' : 'Resend code',
                         style: const TextStyle(
@@ -303,42 +314,43 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
                   ),
                   const Spacer(),
                   SizedBox(
-                height: 58,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _isComplete
-                        ? AppTheme.primaryBlue
-                        : _inactiveDark,
-                    foregroundColor: _isComplete
-                        ? Colors.white
-                        : const Color(0xFF77777A),
-                    elevation: 0,
-                    disabledBackgroundColor: _inactiveDark,
-                    disabledForegroundColor: const Color(0xFF77777A),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(32),
-                    ),
-                  ),
-                  onPressed: (_isComplete && !auth.loading && !_verifying)
-                      ? _verifyCode
-                      : null,
-                  child: auth.loading
-                      ? const SizedBox(
-                          height: 22,
-                          width: 22,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2.5,
-                          ),
-                        )
-                      : const Text(
-                          'Verify Now',
-                          style: TextStyle(
-                            fontSize: 19,
-                            fontWeight: FontWeight.w800,
+                    height: 58,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _isComplete
+                            ? AppTheme.actionBlue
+                            : _inactiveDark,
+                        foregroundColor: _isComplete
+                            ? Colors.white
+                            : const Color(0xFF77777A),
+                        disabledBackgroundColor: _inactiveDark,
+                        disabledForegroundColor: const Color(0xFF77777A),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(
+                            AppTheme.buttonRadius,
                           ),
                         ),
-                ),
+                      ),
+                      onPressed: (_isComplete && !auth.loading && !_verifying)
+                          ? _verifyCode
+                          : null,
+                      child: auth.loading
+                          ? const SizedBox(
+                              height: 22,
+                              width: 22,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2.5,
+                              ),
+                            )
+                          : const Text(
+                              'VERIFY NOW',
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                    ),
                   ),
                 ],
               ),

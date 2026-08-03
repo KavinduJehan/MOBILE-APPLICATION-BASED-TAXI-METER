@@ -6,7 +6,8 @@ import '../providers/trip_provider.dart';
 import '../theme.dart';
 import 'home_tab.dart';
 import 'profile_tab.dart';
-import 'receipts_tab.dart';
+import 'qr_scan.dart';
+import 'settings_tab.dart';
 import 'trips_tab.dart';
 
 class MainNavigation extends StatefulWidget {
@@ -17,14 +18,16 @@ class MainNavigation extends StatefulWidget {
 }
 
 class _MainNavigationState extends State<MainNavigation> {
-  int _currentIndex = 0;
-  final _navigatorKeys = List.generate(4, (_) => GlobalKey<NavigatorState>());
+  int _currentIndex = 2;
+  final _qrTabActive = ValueNotifier<bool>(false);
+  final _navigatorKeys = List.generate(5, (_) => GlobalKey<NavigatorState>());
 
   late final List<Widget> _screens = [
+    const ProfileTab(),
+    QRScan(activeListenable: _qrTabActive),
     const HomeTab(),
     const TripsTab(),
-    const ReceiptsTab(),
-    const ProfileTab(),
+    const SettingsTab(),
   ];
 
   @override
@@ -63,60 +66,229 @@ class _MainNavigationState extends State<MainNavigation> {
             ),
           ),
         ),
-        bottomNavigationBar: Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFF070B12),
-            border: Border(
-              top: BorderSide(color: Color(0xFF333336), width: 1.2),
+        bottomNavigationBar: _FooterNavigationBar(
+          selectedIndex: _currentIndex,
+          hasOngoingTrip: hasOngoingTrip,
+          onSelected: _selectDestination,
+        ),
+      ),
+    );
+  }
+
+  void _selectDestination(int index) {
+    _qrTabActive.value = index == 1;
+    if (index == _currentIndex) {
+      _navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
+      return;
+    }
+    setState(() => _currentIndex = index);
+  }
+
+  @override
+  void dispose() {
+    _qrTabActive.dispose();
+    super.dispose();
+  }
+}
+
+class _FooterNavigationBar extends StatelessWidget {
+  const _FooterNavigationBar({
+    required this.selectedIndex,
+    required this.hasOngoingTrip,
+    required this.onSelected,
+  });
+
+  final int selectedIndex;
+  final bool hasOngoingTrip;
+  final ValueChanged<int> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.fromLTRB(16, 6, 16, 12),
+      child: Container(
+        height: 74,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1F2937),
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x80000000),
+              blurRadius: 10,
+              offset: Offset(0, 4),
             ),
-          ),
-          child: NavigationBar(
-            height: 74,
-            selectedIndex: _currentIndex,
-            backgroundColor: const Color(0xFF070B12),
-            indicatorColor: AppTheme.primaryBlue.withValues(alpha: 0.22),
-            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-            onDestinationSelected: (index) {
-              if (index == _currentIndex) {
-                _navigatorKeys[index].currentState?.popUntil(
-                  (route) => route.isFirst,
-                );
-                return;
-              }
-              setState(() {
-                _currentIndex = index;
-              });
-            },
-            destinations: [
-              const NavigationDestination(
-                selectedIcon: Icon(Icons.home_rounded, size: 28),
-                icon: Icon(Icons.home_outlined, size: 26),
-                label: 'Home',
-              ),
-              NavigationDestination(
-                selectedIcon: _TripNavigationIcon(
-                  icon: Icons.directions_car_rounded,
-                  size: 28,
-                  showOngoing: hasOngoingTrip,
-                ),
-                icon: _TripNavigationIcon(
-                  icon: Icons.directions_car_outlined,
-                  size: 26,
-                  showOngoing: hasOngoingTrip,
-                ),
-                label: 'Trips',
-              ),
-              const NavigationDestination(
-                selectedIcon: Icon(Icons.receipt_long_rounded, size: 28),
-                icon: Icon(Icons.receipt_long_outlined, size: 26),
-                label: 'Receipts',
-              ),
-              const NavigationDestination(
-                selectedIcon: Icon(Icons.person_rounded, size: 28),
-                icon: Icon(Icons.person_outline_rounded, size: 26),
-                label: 'Profile',
+            BoxShadow(
+              color: Color(0x4D000000),
+              blurRadius: 4,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x33000000),
+                blurRadius: 4,
+                offset: Offset(0, 2),
               ),
             ],
+          ),
+          child: Row(
+            children: [
+              _FooterNavigationItem(
+                label: 'Profile',
+                selected: selectedIndex == 0,
+                onTap: () => onSelected(0),
+                icon: const Icon(Icons.person_rounded, size: 22),
+              ),
+              _FooterNavigationItem(
+                label: 'QR',
+                selected: selectedIndex == 1,
+                onTap: () => onSelected(1),
+                icon: const Icon(Icons.qr_code_scanner_rounded, size: 22),
+              ),
+              _FooterNavigationItem(
+                label: 'Home',
+                selected: selectedIndex == 2,
+                onTap: () => onSelected(2),
+                icon: const Icon(Icons.home_rounded, size: 22),
+              ),
+              _FooterNavigationItem(
+                label: 'Trips',
+                selected: selectedIndex == 3,
+                onTap: () => onSelected(3),
+                icon: _TripNavigationIcon(
+                  icon: Icons.directions_car_rounded,
+                  size: 22,
+                  showOngoing: hasOngoingTrip,
+                ),
+              ),
+              _FooterNavigationItem(
+                label: 'Settings',
+                selected: selectedIndex == 4,
+                onTap: () => onSelected(4),
+                icon: const Icon(Icons.settings_rounded, size: 22),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FooterNavigationItem extends StatefulWidget {
+  const _FooterNavigationItem({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final Widget icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  State<_FooterNavigationItem> createState() => _FooterNavigationItemState();
+}
+
+class _FooterNavigationItemState extends State<_FooterNavigationItem> {
+  bool _hovered = false;
+  bool _focused = false;
+  bool _pressed = false;
+
+  bool get _highlighted => widget.selected || _hovered || _focused || _pressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: Semantics(
+          button: true,
+          selected: widget.selected,
+          label: widget.label,
+          child: Tooltip(
+            message: widget.label,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: widget.onTap,
+                onHover: (value) => setState(() => _hovered = value),
+                onFocusChange: (value) => setState(() => _focused = value),
+                onHighlightChanged: (value) => setState(() => _pressed = value),
+                borderRadius: BorderRadius.circular(12),
+                splashColor: AppTheme.primary.withValues(alpha: 0.12),
+                highlightColor: Colors.transparent,
+                hoverColor: Colors.transparent,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    AnimatedScale(
+                      scale: _pressed ? 0.94 : 1,
+                      duration: const Duration(milliseconds: 120),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOut,
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: _highlighted
+                              ? const Color(0xFF4B5563)
+                              : const Color(0xFF374151),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: widget.selected || _hovered || _focused
+                                ? AppTheme.primary
+                                : Colors.transparent,
+                            width: 2,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(
+                                alpha: _highlighted ? 0.24 : 0.14,
+                              ),
+                              blurRadius: _highlighted ? 6 : 3,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: IconTheme(
+                          data: IconThemeData(
+                            color: widget.selected
+                                ? AppTheme.accent
+                                : AppTheme.mutedText,
+                          ),
+                          child: Center(child: widget.icon),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      widget.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: widget.selected
+                            ? AppTheme.accent
+                            : AppTheme.mutedText,
+                        fontSize: 9,
+                        fontWeight: widget.selected
+                            ? FontWeight.w800
+                            : FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
       ),

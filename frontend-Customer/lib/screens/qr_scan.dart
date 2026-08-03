@@ -1,6 +1,7 @@
 // ignore_for_file: file_names
 
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../services/api_service.dart';
@@ -8,7 +9,9 @@ import '../theme.dart';
 import 'driver_verification.dart';
 
 class QRScan extends StatefulWidget {
-  const QRScan({super.key});
+  const QRScan({super.key, this.activeListenable});
+
+  final ValueListenable<bool>? activeListenable;
 
   @override
   State<QRScan> createState() => _QRScanState();
@@ -66,6 +69,17 @@ class _QRScanState extends State<QRScan> {
 
   @override
   Widget build(BuildContext context) {
+    final activeListenable = widget.activeListenable;
+    if (activeListenable == null) return _buildScanner(context);
+    return ValueListenableBuilder<bool>(
+      valueListenable: activeListenable,
+      builder: (context, isActive, child) {
+        return isActive ? _buildScanner(context) : const SizedBox.shrink();
+      },
+    );
+  }
+
+  Widget _buildScanner(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(title: const Text('Scan Driver QR')),

@@ -1,12 +1,13 @@
 plugins {
-    id("com.google.android.libraries.mapsplatform.secrets-gradle-plugin")
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("dev.flutter.flutter-gradle-plugin")
+    id("com.google.android.libraries.mapsplatform.secrets-gradle-plugin")
+    id("com.google.gms.google-services")
 }
 
 android {
-    namespace = "com.example.taxi_meter_app"
+    namespace = "com.ridex_customer"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -20,7 +21,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.taxi_meter_app"
+        applicationId = "com.ridex_customer"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -36,4 +37,13 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+  
+     implementation(platform("com.google.firebase:firebase-bom:34.16.0"))
+     implementation("com.google.firebase:firebase-auth")
+     implementation("com.google.firebase:firebase-analytics")
+
+
 }

@@ -24,59 +24,80 @@ class WelcomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.sizeOf(context);
+    final logoSize = (screenSize.width * 0.22).clamp(68.0, 84.0);
+    final logoTextSize = (screenSize.width * 0.097).clamp(30.0, 38.0);
+    final horizontalPadding = (screenSize.width * 0.07).clamp(20.0, 28.0);
+
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(28, 40, 28, 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Spacer(),
-              const RideXLogo(size: 84, textSize: 38),
-              const SizedBox(height: 30),
-              const Text(
-                'Welcome to RideX',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 32,
-                  fontWeight: FontWeight.w800,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                24,
+                horizontalPadding,
+                24,
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - 48,
+                ),
+                child: IntrinsicHeight(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Spacer(),
+                      RideXLogo(size: logoSize, textSize: logoTextSize),
+                      const SizedBox(height: 24),
+                      const Text(
+                        'Welcome to RideX',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 32,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 36),
+                      const Text(
+                        "I'm new to RideX",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white60,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      _WelcomeButton(
+                        label: 'Get Started',
+                        onTap: () => _openCreateAccount(context),
+                      ),
+                      const SizedBox(height: 24),
+                      const Text(
+                        'Already connected?',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white60,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      _WelcomeButton(
+                        label: 'Sign In',
+                        onTap: () => _openSignIn(context),
+                      ),
+                      const Spacer(flex: 2),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 56),
-              const Text(
-                "I'm new to RideX",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white60,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 14),
-              _WelcomeButton(
-                label: 'Get Started',
-                onTap: () => _openCreateAccount(context),
-              ),
-              const SizedBox(height: 34),
-              const Text(
-                'Already connected?',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white60,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 14),
-              _WelcomeButton(
-                label: 'Sign In',
-                onTap: () => _openSignIn(context),
-              ),
-              const Spacer(flex: 2),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
@@ -169,23 +190,37 @@ class _WelcomeButtonState extends State<_WelcomeButton>
             onTap: widget.onTap,
             child: AnimatedContainer(
               height: 56,
-              duration: const Duration(milliseconds: 200),
+              duration: const Duration(milliseconds: 500),
               curve: _isActive ? Curves.easeOut : Curves.easeIn,
               decoration: BoxDecoration(
-                color: _isActive ? AppTheme.primaryBlue : Colors.transparent,
+                color: AppTheme.actionBlue,
                 borderRadius: BorderRadius.circular(7),
-                border: Border.all(color: AppTheme.primaryBlue),
+                border: Border.all(color: AppTheme.actionBlue),
                 boxShadow: _isActive && !_isPressed
                     ? [
                         BoxShadow(
-                          color: const Color(
-                            0xFF008EEC,
-                          ).withValues(alpha: 0.82),
-                          blurRadius: 30,
-                          spreadRadius: 5,
+                          color: AppTheme.actionBlue.withValues(alpha: 0.9),
+                          blurRadius: 5,
+                        ),
+                        BoxShadow(
+                          color: AppTheme.actionBlue.withValues(alpha: 0.7),
+                          blurRadius: 25,
+                        ),
+                        BoxShadow(
+                          color: AppTheme.actionBlue.withValues(alpha: 0.5),
+                          blurRadius: 50,
+                        ),
+                        BoxShadow(
+                          color: AppTheme.actionBlue.withValues(alpha: 0.28),
+                          blurRadius: 100,
                         ),
                       ]
-                    : const [],
+                    : [
+                        BoxShadow(
+                          color: AppTheme.actionBlue.withValues(alpha: 0.72),
+                          blurRadius: 25,
+                        ),
+                      ],
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(6),
@@ -230,9 +265,9 @@ class _WelcomeButtonState extends State<_WelcomeButton>
                           widget.label.toUpperCase(),
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 2,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 4,
                           ),
                         ),
                       ],

@@ -117,7 +117,7 @@ class PrimaryActionButton extends StatelessWidget {
                 color: Colors.white,
               ),
             )
-          : Text(label),
+          : Text(label.toUpperCase()),
     );
   }
 }

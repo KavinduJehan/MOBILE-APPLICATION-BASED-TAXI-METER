@@ -5,11 +5,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 const String _configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
-const String _baseUrl = _configuredBaseUrl != ''
-    ? _configuredBaseUrl
-    : kIsWeb
-    ? 'http://localhost:5000/api'
-    : 'http://10.0.2.2:5000/api';
+
+String get _baseUrl {
+  if (_configuredBaseUrl.isNotEmpty) return _configuredBaseUrl;
+  return kIsWeb ? 'http://localhost:5000/api' : 'http://172.20.10.3:5000/api';
+}
 
 const String _tokenKey = 'auth_token';
 const String _refreshTokenKey = 'refresh_token';
@@ -181,7 +181,6 @@ class ApiService {
     required String lastName,
     required String email,
     required String phone,
-    required String password,
   }) {
     final name = [
       firstName.trim(),
@@ -196,7 +195,6 @@ class ApiService {
         'lastName': lastName,
         'email': email,
         'phone': phone,
-        'password': password,
       },
     );
   }
@@ -269,6 +267,14 @@ class ApiService {
     '/locations/details/${Uri.encodeComponent(placeId)}',
     queryParameters: {'sessionToken': sessionToken},
   );
+
+  static Future<Response> reverseGeocode({
+    required double latitude,
+    required double longitude,
+  }) => _dio.get(
+    '/locations/reverse',
+    queryParameters: {'lat': latitude, 'lng': longitude},
+  );
   static Future<Response> getDriverByQR(String qrToken) =>
       _dio.get('/drivers/qr/$qrToken');
 
@@ -292,6 +298,9 @@ class ApiService {
 
   static Future<Response> getTripDetails(String tripId) =>
       _dio.get('/trips/$tripId');
+
+  static Future<Response> cancelTrip(String tripId) =>
+      _dio.patch('/trips/$tripId/cancel');
 
   static Future<Response> getMyTrips({int page = 1, int limit = 20}) =>
       _dio.get('/trips/my', queryParameters: {'page': page, 'limit': limit});

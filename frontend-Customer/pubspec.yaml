@@ -31,6 +31,9 @@ dependencies:
   flutter:
     sdk: flutter
 
+  firebase_core: ^4.12.1
+  firebase_auth: ^6.5.6
+
   cupertino_icons: ^1.0.8
 
   # HTTP client
@@ -55,12 +58,11 @@ dependencies:
   package_info_plus: ^10.2.0
 
   # Map and live location picker
-  flutter_map: ^8.2.2
-  latlong2: ^0.10.1
   geolocator: ^14.0.2
 
   # Camera and gallery profile image selection
   image_picker: ^1.1.2
+  google_maps_flutter: 2.18.0
 
   # Firebase — skipped for now, add when OTP login is needed
   # firebase_core: ^3.13.0
@@ -87,9 +89,6 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
-
-  assets:
-    - assets/ads/
 
   # To add assets to your application, add an assets section, like this:
   # assets:
@@ -123,4 +122,3 @@ flutter:
   # see https://flutter.dev/to/font-from-package
 
   
-

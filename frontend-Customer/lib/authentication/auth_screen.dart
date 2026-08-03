@@ -112,11 +112,12 @@ class _AuthScreenState extends State<AuthScreen> {
                 height: 58,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryBlue,
+                    backgroundColor: AppTheme.actionBlue,
                     foregroundColor: Colors.white,
-                    elevation: 0,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18),
+                      borderRadius: BorderRadius.circular(
+                        AppTheme.buttonRadius,
+                      ),
                     ),
                   ),
                   onPressed: auth.loading ? null : _continueWithOtp,
@@ -130,7 +131,7 @@ class _AuthScreenState extends State<AuthScreen> {
                           ),
                         )
                       : const Text(
-                          'Send OTP',
+                          'SEND OTP',
                           style: TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w800,
