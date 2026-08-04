@@ -1,5 +1,6 @@
 const GOOGLE_PLACES_BASE_URL = 'https://places.googleapis.com/v1';
 const GOOGLE_GEOCODING_URL = 'https://maps.googleapis.com/maps/api/geocode/json';
+const GOOGLE_ROUTES_URL = 'https://routes.googleapis.com/directions/v2:computeRoutes';
 const REQUEST_TIMEOUT_MS = 8000;
 
 const getApiKey = () => String(process.env.GOOGLE_MAPS_API_KEY || '').trim();
@@ -31,6 +32,40 @@ const fetchGooglePlaces = async (url, options) => {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = new Error(describeGooglePlacesError(data, response.status));
+    error.status = response.status;
+    error.details = data;
+    throw error;
+  }
+  return data;
+};
+
+const describeGoogleRoutesError = (data, status) => {
+  const message = data?.error?.message || data?.message || 'Google Routes request failed';
+  const statusCode = data?.error?.status || data?.status;
+
+  if (status === 403 || statusCode === 'PERMISSION_DENIED' || /key|permission|forbidden/i.test(message)) {
+    return 'Google Maps API key is invalid or does not have Routes API access.';
+  }
+
+  if (status === 429 || /quota|rate limit/i.test(message)) {
+    return 'Google Maps Routes quota has been exceeded. Please try again later.';
+  }
+
+  if (status === 400 || /invalid|bad request/i.test(message)) {
+    return 'Google Maps could not calculate a route for these locations.';
+  }
+
+  return 'Road route is temporarily unavailable. Please try again in a moment.';
+};
+
+const fetchGoogleRoute = async (options) => {
+  const response = await fetch(GOOGLE_ROUTES_URL, {
+    ...options,
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(describeGoogleRoutesError(data, response.status));
     error.status = response.status;
     error.details = data;
     throw error;
@@ -263,4 +298,92 @@ const reverseGeocode = async (req, res) => {
   }
 };
 
-module.exports = { autocompletePlaces, getPlaceDetails, reverseGeocode };
+const getDrivingRoute = async (req, res) => {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    return res.status(503).json({
+      message: 'Road routing is not configured. Set GOOGLE_MAPS_API_KEY on the backend.',
+    });
+  }
+
+  const pickupLat = Number(req.body?.pickupLat);
+  const pickupLng = Number(req.body?.pickupLng);
+  const destinationLat = Number(req.body?.destinationLat);
+  const destinationLng = Number(req.body?.destinationLng);
+  const validCoordinates = [
+    [pickupLat, -90, 90],
+    [pickupLng, -180, 180],
+    [destinationLat, -90, 90],
+    [destinationLng, -180, 180],
+  ].every(([value, minimum, maximum]) => (
+    Number.isFinite(value) && value >= minimum && value <= maximum
+  ));
+
+  if (!validCoordinates) {
+    return res.status(400).json({
+      message: 'Valid pickup and destination coordinates are required',
+    });
+  }
+
+  try {
+    const data = await fetchGoogleRoute({
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': [
+          'routes.distanceMeters',
+          'routes.duration',
+          'routes.polyline.encodedPolyline',
+        ].join(','),
+      },
+      body: JSON.stringify({
+        origin: {
+          location: {
+            latLng: { latitude: pickupLat, longitude: pickupLng },
+          },
+        },
+        destination: {
+          location: {
+            latLng: { latitude: destinationLat, longitude: destinationLng },
+          },
+        },
+        travelMode: 'DRIVE',
+        routingPreference: 'TRAFFIC_AWARE',
+        polylineQuality: 'OVERVIEW',
+        polylineEncoding: 'ENCODED_POLYLINE',
+        languageCode: 'en-US',
+        units: 'METRIC',
+      }),
+    });
+
+    const route = Array.isArray(data.routes) ? data.routes[0] : null;
+    const encodedPolyline = route?.polyline?.encodedPolyline;
+    if (!encodedPolyline) {
+      return res.status(404).json({
+        message: 'No drivable route was found between these locations.',
+      });
+    }
+
+    res.set('Cache-Control', 'no-store');
+    return res.json({
+      encodedPolyline,
+      distanceMeters: Number.isFinite(route.distanceMeters)
+        ? route.distanceMeters
+        : null,
+      duration: route.duration || null,
+    });
+  } catch (error) {
+    const status = error.name === 'TimeoutError' ? 504 : 502;
+    const message = error.message || 'Could not calculate the road route';
+    const httpStatus = error.status === 403 ? 503 : status;
+    return res.status(httpStatus).json({ message });
+  }
+};
+
+module.exports = {
+  autocompletePlaces,
+  getPlaceDetails,
+  reverseGeocode,
+  getDrivingRoute,
+};
