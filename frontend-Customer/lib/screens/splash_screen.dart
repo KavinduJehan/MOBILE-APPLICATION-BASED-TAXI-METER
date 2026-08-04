@@ -22,17 +22,17 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _initializeApp() async {
     // Wait a moment for the AuthProvider to restore session
-    await Future.delayed(const Duration(milliseconds: 500));
+    await Future.delayed(const Duration(seconds: 2));
 
     if (!mounted) return;
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    
+
     // Check if session was successfully restored
     final nextScreen = authProvider.isLoggedIn
         ? const MainNavigation()
         : const WelcomeScreen();
-    
+
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (_) => nextScreen),
@@ -50,18 +50,19 @@ class _SplashScreenState extends State<SplashScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                RideXLogo(size: 50),
+                RideXLogo(size: 150, textSize: 48),
+                SizedBox(height: 40),
                 Text(
                   'Fair rides, clear fares, safer trips',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white54, fontSize: 16),
+                  style: TextStyle(color: Colors.white54, fontSize: 18),
                 ),
-                SizedBox(height: 32),
+                SizedBox(height: 38),
                 SizedBox(
-                  width: 22,
-                  height: 22,
+                  width: 30,
+                  height: 30,
                   child: CircularProgressIndicator(
-                    strokeWidth: 2.3,
+                    strokeWidth: 2.5,
                     valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
                   ),
                 ),
