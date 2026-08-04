@@ -50,8 +50,7 @@ class _SplashScreenState extends State<SplashScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                RideXLogo(size: 120),
-                SizedBox(height: 24),
+                RideXLogo(size: 50),
                 Text(
                   'Fair rides, clear fares, safer trips',
                   textAlign: TextAlign.center,
