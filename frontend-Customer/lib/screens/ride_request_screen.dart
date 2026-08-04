@@ -1,23 +1,40 @@
 import 'dart:math';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../services/api_service.dart';
 import '../theme.dart';
+import '../utils/google_polyline.dart';
 import 'waiting_for_driver_screen.dart';
 
-const _cities = <String, (double, double)>{
+const _districts = <String, (double, double)>{
+  'Ampara': (7.2975, 81.6820),
+  'Anuradhapura': (8.3114, 80.4037),
+  'Badulla': (6.9934, 81.0550),
+  'Batticaloa': (7.7102, 81.6924),
   'Colombo': (6.9271, 79.8612),
   'Galle': (6.0535, 80.2210),
-  'Kandy': (7.2906, 80.6337),
-  'Matara': (5.9549, 80.5550),
-  'Negombo': (7.2096, 79.8378),
+  'Gampaha': (7.0917, 79.9997),
+  'Hambantota': (6.1241, 81.1185),
   'Jaffna': (9.6615, 80.0255),
-  'Trinco': (8.5874, 81.2152),
-  'Badulla': (6.9934, 81.0550),
-  'Ratnapura': (6.7056, 80.3847),
+  'Kalutara': (6.5854, 79.9607),
+  'Kandy': (7.2906, 80.6337),
+  'Kegalle': (7.2513, 80.3464),
+  'Kilinochchi': (9.3803, 80.4093),
   'Kurunegala': (7.4867, 80.3647),
+  'Mannar': (8.9770, 79.9044),
+  'Matale': (7.4675, 80.6234),
+  'Matara': (5.9549, 80.5550),
+  'Monaragala': (6.8728, 81.3507),
+  'Mullaitivu': (9.2671, 80.8142),
+  'Nuwara Eliya': (6.9497, 80.7891),
+  'Polonnaruwa': (7.9403, 81.0188),
+  'Puttalam': (8.0362, 79.8283),
+  'Ratnapura': (6.7056, 80.3847),
+  'Trincomalee': (8.5874, 81.2152),
+  'Vavuniya': (8.7514, 80.4971),
 };
 
 double _haversineKm(double lat1, double lng1, double lat2, double lng2) {
@@ -64,6 +81,10 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
   String _dest = 'Galle';
   bool _loading = false;
   String? _error;
+  List<LatLng> _routePoints = const [];
+  bool _loadingRoute = false;
+  String? _routeError;
+  double? _routeDistanceKm;
 
   bool get _hasMapSelection =>
       widget.initialPickupLat != null &&
@@ -76,18 +97,20 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
     super.initState();
     final initialPickup = widget.initialPickup?.trim().toLowerCase();
     if (initialPickup != null && initialPickup.isNotEmpty) {
-      final matchedPickup = _cities.keys.where(
+      final matchedPickup = _districts.keys.where(
         (city) => city.toLowerCase() == initialPickup,
       );
       if (matchedPickup.isNotEmpty) _pickup = matchedPickup.first;
     }
 
     final initialDestination = widget.initialDestination?.trim().toLowerCase();
-    if (initialDestination == null || initialDestination.isEmpty) return;
-    final matchedCity = _cities.keys.where(
-      (city) => city.toLowerCase() == initialDestination,
-    );
-    if (matchedCity.isNotEmpty) _dest = matchedCity.first;
+    if (initialDestination != null && initialDestination.isNotEmpty) {
+      final matchedCity = _districts.keys.where(
+        (city) => city.toLowerCase() == initialDestination,
+      );
+      if (matchedCity.isNotEmpty) _dest = matchedCity.first;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadRoadRoute());
   }
 
   double get _rate =>
@@ -96,6 +119,9 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
       0.0;
 
   double get _distanceKm {
+    final routeDistanceKm = _routeDistanceKm;
+    if (routeDistanceKm != null) return routeDistanceKm;
+
     if (_hasMapSelection) {
       return _haversineKm(
             widget.initialPickupLat!,
@@ -106,15 +132,15 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
           1.25;
     }
 
-    final (lat1, lng1) = _cities[_pickup]!;
-    final (lat2, lng2) = _cities[_dest]!;
+    final (lat1, lng1) = _districts[_pickup]!;
+    final (lat2, lng2) = _districts[_dest]!;
     return _haversineKm(lat1, lng1, lat2, lng2) * 1.25;
   }
 
   double get _estimatedFare => _distanceKm * _rate;
 
   LatLng get _pickupPoint {
-    final (cityLat, cityLng) = _cities[_pickup]!;
+    final (cityLat, cityLng) = _districts[_pickup]!;
     return LatLng(
       widget.initialPickupLat ?? cityLat,
       widget.initialPickupLng ?? cityLng,
@@ -122,11 +148,66 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
   }
 
   LatLng get _destinationPoint {
-    final (cityLat, cityLng) = _cities[_dest]!;
+    final (cityLat, cityLng) = _districts[_dest]!;
     return LatLng(
       widget.initialDestinationLat ?? cityLat,
       widget.initialDestinationLng ?? cityLng,
     );
+  }
+
+  Future<void> _loadRoadRoute() async {
+    final pickup = _pickupPoint;
+    final destination = _destinationPoint;
+    if (pickup.latitude == destination.latitude &&
+        pickup.longitude == destination.longitude) {
+      return;
+    }
+
+    setState(() {
+      _loadingRoute = true;
+      _routeError = null;
+      _routePoints = const [];
+    });
+    try {
+      final response = await ApiService.getDrivingRoute(
+        pickupLatitude: pickup.latitude,
+        pickupLongitude: pickup.longitude,
+        destinationLatitude: destination.latitude,
+        destinationLongitude: destination.longitude,
+      );
+      final data = response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : <String, dynamic>{};
+      final points = decodeGooglePolyline(
+        data['encodedPolyline']?.toString() ?? '',
+      );
+      if (points.length < 2) {
+        throw const FormatException('The route contains no map path');
+      }
+      final distanceMeters = data['distanceMeters'];
+      if (!mounted) return;
+      setState(() {
+        _routePoints = points;
+        _routeDistanceKm = distanceMeters is num
+            ? distanceMeters.toDouble() / 1000
+            : null;
+        _loadingRoute = false;
+        _routeError = null;
+      });
+    } on DioException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadingRoute = false;
+        _routeError =
+            error.error?.toString() ?? 'Could not load the road route';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loadingRoute = false;
+        _routeError = 'Could not load the road route';
+      });
+    }
   }
 
   Future<void> _sendRequest() async {
@@ -144,8 +225,8 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
     });
 
     try {
-      final (cityPickupLat, cityPickupLng) = _cities[_pickup]!;
-      final (cityDestLat, cityDestLng) = _cities[_dest]!;
+      final (cityPickupLat, cityPickupLng) = _districts[_pickup]!;
+      final (cityDestLat, cityDestLng) = _districts[_dest]!;
       final pickupLat = widget.initialPickupLat ?? cityPickupLat;
       final pickupLng = widget.initialPickupLng ?? cityPickupLng;
       final destLat = widget.initialDestinationLat ?? cityDestLat;
@@ -232,14 +313,19 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
                 ),
               ),
             },
-            polylines: {
-              Polyline(
-                polylineId: const PolylineId('ride-preview'),
-                points: [pickupPoint, destinationPoint],
-                width: 4,
-                color: AppTheme.primary,
-              ),
-            },
+            polylines: _routePoints.length < 2
+                ? const <Polyline>{}
+                : {
+                    Polyline(
+                      polylineId: const PolylineId('ride-preview'),
+                      points: _routePoints,
+                      width: 5,
+                      color: AppTheme.primary,
+                      jointType: JointType.round,
+                      startCap: Cap.roundCap,
+                      endCap: Cap.roundCap,
+                    ),
+                  },
             myLocationButtonEnabled: false,
             zoomControlsEnabled: false,
           ),
@@ -259,6 +345,17 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
               ),
             ),
           ),
+          if (_loadingRoute || _routeError != null)
+            Positioned(
+              top: 78,
+              left: 16,
+              right: 16,
+              child: _MapPill(
+                label: _loadingRoute
+                    ? 'Calculating road route...'
+                    : _routeError!,
+              ),
+            ),
           Align(
             alignment: Alignment.bottomCenter,
             child: SafeArea(
