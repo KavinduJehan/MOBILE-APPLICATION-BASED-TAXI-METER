@@ -5,7 +5,7 @@ import '../models/ride_request.dart';
 import '../models/trip_record.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/app_widgets.dart';
-import 'active_trip_screen.dart';
+import 'driver_navigation_screen.dart';
 
 class RequestDetailScreen extends StatefulWidget {
   const RequestDetailScreen({super.key, required this.request});
@@ -85,8 +85,9 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
                   if (!mounted) return;
                   navigator.pushReplacement(
                     MaterialPageRoute(
-                      builder: (_) => ActiveTripScreen(
+                      builder: (_) => DriverNavigationScreen(
                         trip: trip,
+                        request: request,
                         receiptNumber: _readReceipt(response),
                       ),
                     ),
