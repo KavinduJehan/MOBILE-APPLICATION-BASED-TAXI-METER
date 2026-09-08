@@ -103,6 +103,42 @@ describe('PATCH /api/trips/:id/end', () => {
   });
 });
 
+describe('PATCH /api/trips/:id/cancel', () => {
+  it('moves an ongoing trip to cancelled', async () => {
+    const token = await registerAndLogin();
+    const createRes = await request(app)
+      .post('/api/trips')
+      .set('Authorization', 'Bearer ' + token)
+      .send(tripPayload);
+
+    const cancelRes = await request(app)
+      .patch('/api/trips/' + createRes.body._id + '/cancel')
+      .set('Authorization', 'Bearer ' + token);
+
+    expect(cancelRes.statusCode).toBe(200);
+    expect(cancelRes.body.trip.status).toBe('cancelled');
+    expect(cancelRes.body.trip.endTime).toBeTruthy();
+  });
+
+  it('does not allow a cancelled trip to be started again', async () => {
+    const token = await registerAndLogin();
+    const createRes = await request(app)
+      .post('/api/trips')
+      .set('Authorization', 'Bearer ' + token)
+      .send(tripPayload);
+    const tripId = createRes.body._id;
+
+    await request(app)
+      .patch('/api/trips/' + tripId + '/cancel')
+      .set('Authorization', 'Bearer ' + token);
+    const startRes = await request(app)
+      .patch('/api/trips/' + tripId + '/start')
+      .set('Authorization', 'Bearer ' + token);
+
+    expect(startRes.statusCode).toBe(409);
+  });
+});
+
 describe('GET /api/trips/my', () => {
   it('returns only the logged-in driver\'s trips', async () => {
     const token = await registerAndLogin();

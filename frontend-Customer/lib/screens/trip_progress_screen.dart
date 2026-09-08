@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../models/trip_model.dart';
+import '../providers/trip_provider.dart';
 import '../repositories/trip_repository.dart';
+import '../theme.dart';
 import 'trip_summary_screen.dart';
 
 class TripProgressScreen extends StatefulWidget {
@@ -34,8 +37,11 @@ class _TripProgressScreenState extends State<TripProgressScreen> {
   @override
   Widget build(BuildContext context) {
     final driverName =
-        widget.trip?.driverName ?? (widget.driver['name'] as String?) ?? 'Driver';
-    final vehicleNumber = widget.trip?.vehicleNumber ??
+        widget.trip?.driverName ??
+        (widget.driver['name'] as String?) ??
+        'Driver';
+    final vehicleNumber =
+        widget.trip?.vehicleNumber ??
         (widget.driver['vehicleNumber'] as String?) ??
         '-';
     final distanceKm = widget.trip?.distanceKm ?? widget.distanceKm;
@@ -89,9 +95,13 @@ class _TripProgressScreenState extends State<TripProgressScreen> {
             const Spacer(),
             SizedBox(
               width: double.infinity,
-              height: 50,
+              height: AppTheme.buttonHeight,
               child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  shadowColor: Colors.transparent,
+                  elevation: 0,
+                ),
                 onPressed: _ending ? null : () => _confirmEndTrip(context),
                 child: _ending
                     ? const CircularProgressIndicator(color: Colors.white)
@@ -106,7 +116,9 @@ class _TripProgressScreenState extends State<TripProgressScreen> {
 
   void _confirmEndTrip(BuildContext context) {
     if (widget.trip == null || widget.trip!.id.isEmpty) {
-      setState(() => _error = 'Trip details are not available yet. Please try again.');
+      setState(
+        () => _error = 'Trip details are not available yet. Please try again.',
+      );
       return;
     }
 
@@ -123,7 +135,11 @@ class _TripProgressScreenState extends State<TripProgressScreen> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              shadowColor: Colors.transparent,
+              elevation: 0,
+            ),
             onPressed: () async {
               Navigator.pop(ctx);
               await _endTrip();
@@ -144,6 +160,7 @@ class _TripProgressScreenState extends State<TripProgressScreen> {
     try {
       final (trip, receipt) = await _repository.endTrip(widget.trip!.id);
       if (!mounted) return;
+      context.read<TripProvider>().upsertTrip(trip);
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(

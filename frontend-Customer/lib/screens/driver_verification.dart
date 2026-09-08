@@ -81,10 +81,8 @@ class DriverVerificationScreen extends StatelessWidget {
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => RateComparison(
-                        area: area,
-                        driverRate: rate,
-                      ),
+                      builder: (_) =>
+                          RateComparison(area: area, driverRate: rate),
                     ),
                   ),
                   child: const Text('Compare Rate'),
@@ -122,6 +120,8 @@ class DriverVerificationScreen extends StatelessWidget {
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
+                    shadowColor: Colors.transparent,
+                    elevation: 0,
                   ),
                   onPressed: isVerified
                       ? () => Navigator.push(

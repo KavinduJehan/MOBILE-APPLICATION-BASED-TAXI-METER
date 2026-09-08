@@ -37,6 +37,63 @@ const signRefreshToken = (customer) =>
 const isProduction = () => process.env.NODE_ENV === 'production';
 const normalizePhone = (phone) => String(phone || '').trim();
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
+const allowedProfileImageHeaders = new Set([
+  'data:image/jpeg;base64',
+  'data:image/png;base64',
+  'data:image/webp;base64',
+]);
+const maxProfileImageBytes = 750 * 1024;
+
+const hasExpectedImageSignature = (header, bytes) => {
+  if (header === 'data:image/jpeg;base64') {
+    return bytes.length >= 3 &&
+      bytes[0] === 0xff &&
+      bytes[1] === 0xd8 &&
+      bytes[2] === 0xff;
+  }
+  if (header === 'data:image/png;base64') {
+    const pngSignature = '89504e470d0a1a0a';
+    return bytes.length >= 8 &&
+      bytes.subarray(0, 8).toString('hex') === pngSignature;
+  }
+  return bytes.length >= 12 &&
+    bytes.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    bytes.subarray(8, 12).toString('ascii') === 'WEBP';
+};
+
+const validateProfileImage = (value) => {
+  if (value === '') return { valid: true, value: '' };
+  if (typeof value !== 'string') {
+    return { valid: false, message: 'Profile image must be an image data URL' };
+  }
+  const separator = value.indexOf(',');
+  const header = value.slice(0, separator);
+  const payload = value.slice(separator + 1);
+  if (
+    separator < 0 ||
+    !allowedProfileImageHeaders.has(header) ||
+    !payload ||
+    payload.length % 4 !== 0
+  ) {
+    return {
+      valid: false,
+      message: 'Only valid JPEG, PNG, or WebP profile images are allowed',
+    };
+  }
+  const bytes = Buffer.from(payload, 'base64');
+  if (
+    bytes.length === 0 ||
+    bytes.length > maxProfileImageBytes ||
+    bytes.toString('base64') !== payload ||
+    !hasExpectedImageSignature(header, bytes)
+  ) {
+    return {
+      valid: false,
+      message: 'Profile image must be valid and smaller than 750 KB',
+    };
+  }
+  return { valid: true, value };
+};
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 const isValidSriLankanPhone = (phone) => /^0[1-9]\d{8}$/.test(phone);
 
@@ -56,11 +113,10 @@ const register = async (req, res) => {
   const lastName = String(req.body.lastName || '').trim();
   const email = normalizeEmail(req.body.email);
   const phone = normalizePhone(req.body.phone);
-  const password = String(req.body.password || '');
 
-  if (!firstName || !lastName || !email || !phone || !password) {
+  if (!firstName || !lastName || !email || !phone) {
     return res.status(400).json({
-      message: 'firstName, lastName, email, phone, and password are required',
+      message: 'firstName, lastName, email, and phone are required',
     });
   }
   if (!isValidEmail(email)) {
@@ -71,12 +127,6 @@ const register = async (req, res) => {
       .status(400)
       .json({ message: 'Valid Sri Lankan phone number is required' });
   }
-  if (password.length < 6) {
-    return res
-      .status(400)
-      .json({ message: 'Password must be at least 6 characters' });
-  }
-
   try {
     const existing = await Customer.findOne({ $or: [{ phone }, { email }] });
     if (existing) {
@@ -94,7 +144,6 @@ const register = async (req, res) => {
       name: `${firstName} ${lastName}`.trim(),
       email,
       phone,
-      password,
     });
     res.status(201).json(publicCustomer(customer));
   } catch (err) {
@@ -154,7 +203,6 @@ const requestOtp = async (req, res) => {
     res.json({
       message: 'OTP sent',
       expiresAt,
-      ...(!isProduction() ? { devOtp: otp } : {}),
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -221,6 +269,66 @@ const refreshToken = async (req, res) => {
     res.json(issueSession(customer));
   } catch {
     return res.status(401).json({ message: 'Invalid refresh token' });
+  }
+};
+
+// PATCH /api/customers/profile
+const updateProfile = async (req, res) => {
+  const name = String(req.body.name || '').trim();
+  const email = normalizeEmail(req.body.email);
+  const phone = normalizePhone(req.body.phone);
+  const birthday = String(req.body.birthday || '').trim();
+  const gender = String(req.body.gender || '').trim();
+  const imageValidation = validateProfileImage(req.body.profileImage ?? '');
+
+  if (!name || name.length > 120) {
+    return res.status(400).json({ message: 'Valid name is required' });
+  }
+  if (!isValidEmail(email)) {
+    return res.status(400).json({ message: 'Valid email is required' });
+  }
+  if (!isValidSriLankanPhone(phone)) {
+    return res
+      .status(400)
+      .json({ message: 'Valid Sri Lankan phone number is required' });
+  }
+  if (birthday.length > 30 || gender.length > 30) {
+    return res.status(400).json({ message: 'Profile details are too long' });
+  }
+  if (!imageValidation.valid) {
+    return res.status(400).json({ message: imageValidation.message });
+  }
+
+  try {
+    const duplicate = await Customer.findOne({
+      _id: { $ne: req.user.id },
+      $or: [{ email }, { phone }],
+    });
+    if (duplicate) {
+      return res.status(409).json({
+        message:
+          duplicate.email === email
+            ? 'Email is already registered'
+            : 'Phone number is already registered',
+      });
+    }
+
+    const customer = await Customer.findById(req.user.id);
+    if (!customer) {
+      return res.status(404).json({ message: 'Customer not found' });
+    }
+
+    customer.name = name;
+    customer.email = email;
+    customer.phone = phone;
+    customer.birthday = birthday;
+    customer.gender = gender;
+    customer.profileImage = imageValidation.value;
+    await customer.save();
+
+    return res.json({ customer: publicCustomer(customer) });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
   }
 };
 
@@ -295,6 +403,7 @@ module.exports = {
   requestOtp,
   verifyOtp,
   refreshToken,
+  updateProfile,
   getSavedPlaces,
   updateSavedPlaces,
 };

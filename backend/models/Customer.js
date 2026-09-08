@@ -28,13 +28,20 @@ const customerSchema = new mongoose.Schema(
     otp: { type: String },
     otpDebug: { type: String },
     otpExpiry: { type: Date },
+    birthday: { type: String, trim: true, maxlength: 30, default: '' },
+    gender: { type: String, trim: true, maxlength: 30, default: '' },
+    profileImage: {
+      type: String,
+      maxlength: 1100000,
+      default: '',
+    },
     savedPlaces: { type: [savedPlaceSchema], default: [] },
   },
   { timestamps: true }
 );
 
 customerSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next();
+  if (!this.password || !this.isModified('password')) return next();
   this.password = await bcrypt.hash(this.password, 10);
   next();
 });

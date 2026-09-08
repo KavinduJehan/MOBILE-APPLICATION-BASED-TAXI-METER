@@ -4,8 +4,12 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-final String _configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
-final String _baseUrl = _resolveBaseUrl();
+const String _configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
+
+String get _baseUrl {
+  if (_configuredBaseUrl.isNotEmpty) return _configuredBaseUrl;
+  return kIsWeb ? 'http://localhost:5000/api' : 'http://172.20.10.3:5000/api';
+}
 
 const String _tokenKey = 'auth_token';
 const String _refreshTokenKey = 'refresh_token';
@@ -199,7 +203,6 @@ class ApiService {
     required String lastName,
     required String email,
     required String phone,
-    required String password,
   }) {
     final name = [
       firstName.trim(),
@@ -214,7 +217,6 @@ class ApiService {
         'lastName': lastName,
         'email': email,
         'phone': phone,
-        'password': password,
       },
     );
   }
@@ -262,6 +264,39 @@ class ApiService {
     return _dio.get('/drivers/nearby', queryParameters: queryParameters);
   }
 
+  static Future<Response> autocompletePlaces({
+    required String input,
+    required String sessionToken,
+    double? latitude,
+    double? longitude,
+  }) {
+    final queryParameters = <String, dynamic>{
+      'input': input,
+      'sessionToken': sessionToken,
+    };
+    if (latitude != null) queryParameters['lat'] = latitude;
+    if (longitude != null) queryParameters['lng'] = longitude;
+    return _dio.get(
+      '/locations/autocomplete',
+      queryParameters: queryParameters,
+    );
+  }
+
+  static Future<Response> getPlaceDetails({
+    required String placeId,
+    required String sessionToken,
+  }) => _dio.get(
+    '/locations/details/${Uri.encodeComponent(placeId)}',
+    queryParameters: {'sessionToken': sessionToken},
+  );
+
+  static Future<Response> reverseGeocode({
+    required double latitude,
+    required double longitude,
+  }) => _dio.get(
+    '/locations/reverse',
+    queryParameters: {'lat': latitude, 'lng': longitude},
+  );
   static Future<Response> getDriverByQR(String qrToken) =>
       _dio.get('/drivers/qr/$qrToken');
 
@@ -285,6 +320,9 @@ class ApiService {
 
   static Future<Response> getTripDetails(String tripId) =>
       _dio.get('/trips/$tripId');
+
+  static Future<Response> cancelTrip(String tripId) =>
+      _dio.patch('/trips/$tripId/cancel');
 
   static Future<Response> getMyTrips({int page = 1, int limit = 20}) =>
       _dio.get('/trips/my', queryParameters: {'page': page, 'limit': limit});

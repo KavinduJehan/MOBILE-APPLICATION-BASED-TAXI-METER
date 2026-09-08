@@ -21,11 +21,7 @@ class _CustomerSignupScreenState extends State<CustomerSignupScreen> {
   final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
 
-  bool _obscurePassword = true;
-  bool _obscureConfirmPassword = true;
   String? _error;
 
   String get _phoneNumber => '0${_phoneController.text.trim()}';
@@ -36,8 +32,6 @@ class _CustomerSignupScreenState extends State<CustomerSignupScreen> {
     _lastNameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
-    _passwordController.dispose();
-    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -52,7 +46,6 @@ class _CustomerSignupScreenState extends State<CustomerSignupScreen> {
       lastName: _lastNameController.text.trim(),
       email: _emailController.text.trim(),
       phone: _phoneNumber,
-      password: _passwordController.text,
     );
     if (!mounted) return;
 
@@ -60,7 +53,10 @@ class _CustomerSignupScreenState extends State<CustomerSignupScreen> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => PhoneVerificationScreen(phoneNumber: _phoneNumber),
+          builder: (_) => PhoneVerificationScreen(
+            phoneNumber: _phoneNumber,
+            isNewUser: true,
+          ),
         ),
       );
     } else {
@@ -95,18 +91,6 @@ class _CustomerSignupScreenState extends State<CustomerSignupScreen> {
     if (!RegExp(r'^[1-9]\d{8}$').hasMatch(digits)) {
       return 'Enter the 9 digits after +94';
     }
-    return null;
-  }
-
-  String? _validatePassword(String? value) {
-    if (value == null || value.isEmpty) return 'Password is required';
-    if (value.length < 6) return 'Password must be at least 6 characters';
-    return null;
-  }
-
-  String? _validateConfirmPassword(String? value) {
-    if (value == null || value.isEmpty) return 'Re-enter password is required';
-    if (value != _passwordController.text) return 'Passwords do not match';
     return null;
   }
 
@@ -171,52 +155,15 @@ class _CustomerSignupScreenState extends State<CustomerSignupScreen> {
                   controller: _phoneController,
                   validator: _validatePhone,
                 ),
-                const SizedBox(height: 14),
-                _AuthField(
-                  controller: _passwordController,
-                  label: 'Password',
-                  obscureText: _obscurePassword,
-                  validator: _validatePassword,
-                  suffixIcon: IconButton(
-                    onPressed: () {
-                      setState(() => _obscurePassword = !_obscurePassword);
-                    },
-                    icon: Icon(
-                      _obscurePassword
-                          ? Icons.visibility_off_rounded
-                          : Icons.visibility_rounded,
-                      color: Colors.white54,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                _AuthField(
-                  controller: _confirmPasswordController,
-                  label: 'Re-enter Password',
-                  obscureText: _obscureConfirmPassword,
-                  validator: _validateConfirmPassword,
-                  suffixIcon: IconButton(
-                    onPressed: () {
-                      setState(
-                        () => _obscureConfirmPassword =
-                            !_obscureConfirmPassword,
-                      );
-                    },
-                    icon: Icon(
-                      _obscureConfirmPassword
-                          ? Icons.visibility_off_rounded
-                          : Icons.visibility_rounded,
-                      color: Colors.white54,
-                    ),
-                  ),
-                ),
                 if (_error != null) ...[
                   const SizedBox(height: 12),
                   Text(
                     _error!,
                     textAlign: TextAlign.center,
-                    style:
-                        const TextStyle(color: Colors.redAccent, fontSize: 14),
+                    style: const TextStyle(
+                      color: Colors.redAccent,
+                      fontSize: 14,
+                    ),
                   ),
                 ],
                 const SizedBox(height: 28),
@@ -224,11 +171,12 @@ class _CustomerSignupScreenState extends State<CustomerSignupScreen> {
                   height: 58,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primaryBlue,
+                      backgroundColor: AppTheme.actionBlue,
                       foregroundColor: Colors.white,
-                      elevation: 0,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
+                        borderRadius: BorderRadius.circular(
+                          AppTheme.buttonRadius,
+                        ),
                       ),
                     ),
                     onPressed: auth.loading ? null : _submit,
@@ -242,7 +190,7 @@ class _CustomerSignupScreenState extends State<CustomerSignupScreen> {
                             ),
                           )
                         : const Text(
-                            'Sign Up',
+                            'SIGN UP',
                             style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w800,
@@ -294,8 +242,6 @@ class _AuthField extends StatelessWidget {
     this.validator,
     this.keyboardType,
     this.textCapitalization = TextCapitalization.none,
-    this.obscureText = false,
-    this.suffixIcon,
   });
 
   final TextEditingController controller;
@@ -303,8 +249,6 @@ class _AuthField extends StatelessWidget {
   final String? Function(String?)? validator;
   final TextInputType? keyboardType;
   final TextCapitalization textCapitalization;
-  final bool obscureText;
-  final Widget? suffixIcon;
 
   @override
   Widget build(BuildContext context) {
@@ -312,10 +256,9 @@ class _AuthField extends StatelessWidget {
       controller: controller,
       keyboardType: keyboardType,
       textCapitalization: textCapitalization,
-      obscureText: obscureText,
       cursorColor: AppTheme.primaryBlue,
       style: const TextStyle(color: Colors.white, fontSize: 16),
-      decoration: InputDecoration(labelText: label, suffixIcon: suffixIcon),
+      decoration: InputDecoration(labelText: label),
       validator: validator,
     );
   }
