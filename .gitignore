@@ -50,3 +50,6 @@ frontend-Customer/.idea/
 
 # Local Google Maps browser configuration
 frontend-Customer/web/maps_config.js
+
+# Local Firebase Android configuration
+frontend-Customer/android/app/google-services.json

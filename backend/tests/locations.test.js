@@ -195,4 +195,66 @@ describe('Google Places proxy', () => {
     expect(requestUrl.searchParams.get('latlng')).toBe('6.89,79.88');
     expect(requestUrl.searchParams.get('region')).toBe('lk');
   });
+
+  it('returns an encoded driving route between selected locations', async () => {
+    process.env.GOOGLE_MAPS_API_KEY = 'test-key';
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        routes: [
+          {
+            distanceMeters: 12500,
+            duration: '1800s',
+            polyline: { encodedPolyline: 'route-polyline' },
+          },
+        ],
+      }),
+    });
+
+    const res = await request(app)
+      .post('/api/locations/route')
+      .set('Authorization', 'Bearer ' + customerToken())
+      .send({
+        pickupLat: 6.9271,
+        pickupLng: 79.8612,
+        destinationLat: 6.0329,
+        destinationLng: 80.2168,
+      });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({
+      encodedPolyline: 'route-polyline',
+      distanceMeters: 12500,
+      duration: '1800s',
+    });
+    expect(global.fetch.mock.calls[0][0]).toContain(
+      'routes.googleapis.com/directions/v2:computeRoutes',
+    );
+    const options = global.fetch.mock.calls[0][1];
+    expect(options.headers['X-Goog-FieldMask']).toContain(
+      'routes.polyline.encodedPolyline',
+    );
+    expect(JSON.parse(options.body)).toMatchObject({
+      travelMode: 'DRIVE',
+      routingPreference: 'TRAFFIC_AWARE',
+    });
+  });
+
+  it('rejects invalid route coordinates before calling Google', async () => {
+    process.env.GOOGLE_MAPS_API_KEY = 'test-key';
+    global.fetch = jest.fn();
+
+    const res = await request(app)
+      .post('/api/locations/route')
+      .set('Authorization', 'Bearer ' + customerToken())
+      .send({
+        pickupLat: 200,
+        pickupLng: 79.8612,
+        destinationLat: 6.0329,
+        destinationLng: 80.2168,
+      });
+
+    expect(res.statusCode).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
 });
