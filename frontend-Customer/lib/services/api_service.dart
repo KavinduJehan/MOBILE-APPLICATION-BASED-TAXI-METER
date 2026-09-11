@@ -21,6 +21,27 @@ const Duration _secureStorageTimeout = Duration(seconds: 3);
 String? _inMemoryToken;
 String? _inMemoryRefreshToken;
 
+String _resolveBaseUrl() {
+  if (_configuredBaseUrl.isNotEmpty) {
+    return _configuredBaseUrl;
+  }
+
+  if (kIsWeb) {
+    return 'http://localhost:5000/api';
+  }
+
+  switch (defaultTargetPlatform) {
+    case TargetPlatform.android:
+      return 'http://10.0.2.2:5000/api';
+    case TargetPlatform.iOS:
+    case TargetPlatform.macOS:
+    case TargetPlatform.windows:
+    case TargetPlatform.linux:
+    case TargetPlatform.fuchsia:
+      return 'http://localhost:5000/api';
+  }
+}
+
 class ApiService {
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
   static final Dio _dio = _buildDio();
@@ -31,8 +52,9 @@ class ApiService {
     final dio = Dio(
       BaseOptions(
         baseUrl: _baseUrl,
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 10),
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 30),
+        sendTimeout: const Duration(seconds: 30),
         headers: {'Content-Type': 'application/json'},
       ),
     );

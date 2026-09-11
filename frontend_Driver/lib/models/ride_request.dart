@@ -6,6 +6,10 @@ class RideRequest {
     required this.customerName,
     required this.pickupAddress,
     required this.destinationAddress,
+    required this.pickupLatitude,
+    required this.pickupLongitude,
+    required this.destinationLatitude,
+    required this.destinationLongitude,
     required this.estimatedDistanceKm,
     required this.driverRatePerKm,
     required this.suggestedRatePerKm,
@@ -17,6 +21,10 @@ class RideRequest {
   final String customerName;
   final String pickupAddress;
   final String destinationAddress;
+  final double pickupLatitude;
+  final double pickupLongitude;
+  final double destinationLatitude;
+  final double destinationLongitude;
   final double estimatedDistanceKm;
   final double driverRatePerKm;
   final double? suggestedRatePerKm;
@@ -30,6 +38,10 @@ class RideRequest {
       customerName: readString(json, ['customerName', 'passengerName'], fallback: readString(customer, ['name', 'fullName'], fallback: 'Customer')),
       pickupAddress: readString(json, ['pickupAddress', 'pickup', 'from']),
       destinationAddress: readString(json, ['destinationAddress', 'destination', 'to']),
+      pickupLatitude: readDouble(json, ['pickupLat', 'pickupLatitude']),
+      pickupLongitude: readDouble(json, ['pickupLng', 'pickupLongitude']),
+      destinationLatitude: readDouble(json, ['destLat', 'destinationLat', 'destinationLatitude']),
+      destinationLongitude: readDouble(json, ['destLng', 'destinationLng', 'destinationLongitude']),
       estimatedDistanceKm: readDouble(json, ['estimatedDistanceKm', 'distanceKm', 'distance']),
       driverRatePerKm: readDouble(json, ['driverRatePerKm', 'ratePerKm', 'driverRate']),
       suggestedRatePerKm: json['suggestedRatePerKm'] is num ? (json['suggestedRatePerKm'] as num).toDouble() : (json['suggestedRate'] is num ? (json['suggestedRate'] as num).toDouble() : null),
