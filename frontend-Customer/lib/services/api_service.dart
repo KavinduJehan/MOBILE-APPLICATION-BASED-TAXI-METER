@@ -5,11 +5,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 const String _configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
-const String _baseUrl = _configuredBaseUrl != ''
-    ? _configuredBaseUrl
-    : kIsWeb
-    ? 'http://localhost:5000/api'
-    : 'http://10.44.26.23:5000/api';
+
+String get _baseUrl {
+  if (_configuredBaseUrl.isNotEmpty) return _configuredBaseUrl;
+  return kIsWeb ? 'http://localhost:5000/api' : 'http://172.20.10.3:5000/api';
+}
 
 const String _tokenKey = 'auth_token';
 const String _refreshTokenKey = 'refresh_token';
@@ -21,6 +21,27 @@ const Duration _secureStorageTimeout = Duration(seconds: 3);
 String? _inMemoryToken;
 String? _inMemoryRefreshToken;
 
+String _resolveBaseUrl() {
+  if (_configuredBaseUrl.isNotEmpty) {
+    return _configuredBaseUrl;
+  }
+
+  if (kIsWeb) {
+    return 'http://localhost:5000/api';
+  }
+
+  switch (defaultTargetPlatform) {
+    case TargetPlatform.android:
+      return 'http://10.0.2.2:5000/api';
+    case TargetPlatform.iOS:
+    case TargetPlatform.macOS:
+    case TargetPlatform.windows:
+    case TargetPlatform.linux:
+    case TargetPlatform.fuchsia:
+      return 'http://localhost:5000/api';
+  }
+}
+
 class ApiService {
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
   static final Dio _dio = _buildDio();
@@ -31,8 +52,9 @@ class ApiService {
     final dio = Dio(
       BaseOptions(
         baseUrl: _baseUrl,
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 10),
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 30),
+        sendTimeout: const Duration(seconds: 30),
         headers: {'Content-Type': 'application/json'},
       ),
     );
@@ -181,7 +203,6 @@ class ApiService {
     required String lastName,
     required String email,
     required String phone,
-    required String password,
   }) {
     final name = [
       firstName.trim(),
@@ -196,7 +217,6 @@ class ApiService {
         'lastName': lastName,
         'email': email,
         'phone': phone,
-        'password': password,
       },
     );
   }
@@ -244,6 +264,55 @@ class ApiService {
     return _dio.get('/drivers/nearby', queryParameters: queryParameters);
   }
 
+  static Future<Response> autocompletePlaces({
+    required String input,
+    required String sessionToken,
+    double? latitude,
+    double? longitude,
+  }) {
+    final queryParameters = <String, dynamic>{
+      'input': input,
+      'sessionToken': sessionToken,
+    };
+    if (latitude != null) queryParameters['lat'] = latitude;
+    if (longitude != null) queryParameters['lng'] = longitude;
+    return _dio.get(
+      '/locations/autocomplete',
+      queryParameters: queryParameters,
+    );
+  }
+
+  static Future<Response> getPlaceDetails({
+    required String placeId,
+    required String sessionToken,
+  }) => _dio.get(
+    '/locations/details/${Uri.encodeComponent(placeId)}',
+    queryParameters: {'sessionToken': sessionToken},
+  );
+
+  static Future<Response> reverseGeocode({
+    required double latitude,
+    required double longitude,
+  }) => _dio.get(
+    '/locations/reverse',
+    queryParameters: {'lat': latitude, 'lng': longitude},
+  );
+
+  static Future<Response> getDrivingRoute({
+    required double pickupLatitude,
+    required double pickupLongitude,
+    required double destinationLatitude,
+    required double destinationLongitude,
+  }) => _dio.post(
+    '/locations/route',
+    data: {
+      'pickupLat': pickupLatitude,
+      'pickupLng': pickupLongitude,
+      'destinationLat': destinationLatitude,
+      'destinationLng': destinationLongitude,
+    },
+  );
+
   static Future<Response> getDriverByQR(String qrToken) =>
       _dio.get('/drivers/qr/$qrToken');
 
@@ -267,6 +336,9 @@ class ApiService {
 
   static Future<Response> getTripDetails(String tripId) =>
       _dio.get('/trips/$tripId');
+
+  static Future<Response> cancelTrip(String tripId) =>
+      _dio.patch('/trips/$tripId/cancel');
 
   static Future<Response> getMyTrips({int page = 1, int limit = 20}) =>
       _dio.get('/trips/my', queryParameters: {'page': page, 'limit': limit});

@@ -1,4 +1,4 @@
-package com.example.taxi_meter_app
+package com.ridex_customer
 
 import io.flutter.embedding.android.FlutterActivity
 

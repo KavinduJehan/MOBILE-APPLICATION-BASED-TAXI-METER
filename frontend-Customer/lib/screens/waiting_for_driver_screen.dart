@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/trip_model.dart';
+import '../providers/trip_provider.dart';
 import '../services/api_service.dart';
 import '../theme.dart';
 import 'trip_progress_screen.dart';
@@ -71,13 +73,21 @@ class _WaitingForDriverScreenState extends State<WaitingForDriverScreen> {
                 'driver': data['driver'] ?? widget.driver,
                 'driverName': widget.driver['name'],
                 'vehicleNumber': widget.driver['vehicleNumber'],
-                'startLocation': tripObj['startLocation'] ?? data['pickupAddress'],
+                'startLocation':
+                    tripObj['startLocation'] ?? data['pickupAddress'],
                 'endLocation': tripObj['endLocation'] ?? data['destAddress'],
                 'distanceKm': tripObj['distanceKm'] ?? widget.distanceKm,
                 'ratePerKm': tripObj['ratePerKm'] ?? effectiveRate,
-                'totalFare': tripObj['totalFare'] ??
-                    double.parse((widget.distanceKm * effectiveRate).toStringAsFixed(2)),
+                'totalFare':
+                    tripObj['totalFare'] ??
+                    double.parse(
+                      (widget.distanceKm * effectiveRate).toStringAsFixed(2),
+                    ),
               });
+
+        if (trip != null) {
+          context.read<TripProvider>().upsertTrip(trip);
+        }
 
         Navigator.pushReplacement(
           context,
@@ -169,7 +179,7 @@ class _WaitingForDriverScreenState extends State<WaitingForDriverScreen> {
               else
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryBlue,
+                    backgroundColor: AppTheme.actionBlue,
                   ),
                   onPressed: () => Navigator.pop(context),
                   child: const Text('Go Back'),

@@ -83,8 +83,13 @@ const startTrip = async (req, res) => {
     const trip = await Trip.findById(req.params.id);
     if (!trip) return res.status(404).json({ message: 'Trip not found' });
     if (!canAccessTrip(trip, req)) return res.status(403).json({ message: 'Forbidden' });
-    if (trip.status === 'completed') {
-      return res.status(409).json({ message: 'Trip is already completed' });
+    if (trip.status === 'completed' || trip.status === 'cancelled') {
+      return res.status(409).json({
+        message:
+          trip.status === 'completed'
+            ? 'Trip is already completed'
+            : 'Canceled trips cannot be started',
+      });
     }
 
     trip.status = 'ongoing';
@@ -119,6 +124,35 @@ const endTrip = async (req, res) => {
     res.json({ trip: await populateTrip(Trip.findById(trip._id)), receipt });
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+};
+
+const cancelTrip = async (req, res) => {
+  try {
+    const trip = await Trip.findById(req.params.id);
+    if (!trip) return res.status(404).json({ message: 'Trip not found' });
+    if (!canAccessTrip(trip, req)) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+    if (trip.status === 'completed') {
+      return res.status(409).json({ message: 'Completed trips cannot be canceled' });
+    }
+    if (trip.status === 'cancelled') {
+      return res.status(409).json({
+        message: 'Canceled trips cannot be completed',
+      });
+    }
+    if (trip.status === 'cancelled') {
+      return res.json({ trip: await populateTrip(Trip.findById(trip._id)) });
+    }
+
+    trip.status = 'cancelled';
+    trip.endTime = new Date();
+    await trip.save();
+
+    return res.json({ trip: await populateTrip(Trip.findById(trip._id)) });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
   }
 };
 
@@ -179,4 +213,12 @@ const getIncome = async (req, res) => {
   }
 };
 
-module.exports = { createTrip, startTrip, endTrip, getTripDetails, getMyTrips, getIncome };
+module.exports = {
+  createTrip,
+  startTrip,
+  endTrip,
+  cancelTrip,
+  getTripDetails,
+  getMyTrips,
+  getIncome,
+};

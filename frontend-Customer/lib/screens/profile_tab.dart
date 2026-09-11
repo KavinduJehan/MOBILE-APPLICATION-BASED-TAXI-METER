@@ -6,11 +6,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../models/trip_model.dart';
 import '../providers/auth_provider.dart';
-import '../providers/trip_provider.dart';
 import '../screens/welcome_screen.dart';
-import '../services/api_service.dart';
 import '../theme.dart';
 
 class ProfileTab extends StatefulWidget {
@@ -21,9 +18,7 @@ class ProfileTab extends StatefulWidget {
 }
 
 class _ProfileTabState extends State<ProfileTab> {
-  List<SavedAddress> _savedAddresses = const [];
   ProfileDetails _profileDetails = const ProfileDetails();
-  bool _loadingProfileData = true;
 
   @override
   void initState() {
@@ -35,20 +30,7 @@ class _ProfileTabState extends State<ProfileTab> {
     final auth = context.read<AuthProvider>();
     final prefs = await SharedPreferences.getInstance();
     final keyPrefix = _profileKeyPrefix(auth.customer?.id);
-    final savedAddressJson = prefs.getString('${keyPrefix}_saved_addresses');
     final profileJson = prefs.getString('${keyPrefix}_profile_details');
-    var savedAddresses = _decodeSavedAddresses(savedAddressJson);
-
-    try {
-      final response = await ApiService.getSavedPlaces();
-      savedAddresses = _decodeSavedAddressesFromResponse(response.data);
-      await prefs.setString(
-        '${keyPrefix}_saved_addresses',
-        jsonEncode(savedAddresses.map((address) => address.toJson()).toList()),
-      );
-    } catch (_) {
-      // Keep using the local cache when offline or unauthenticated.
-    }
 
     if (!mounted) return;
     final customerDetails = ProfileDetails(
@@ -62,42 +44,8 @@ class _ProfileTabState extends State<ProfileTab> {
     );
     final storedDetails = ProfileDetails.fromJsonString(profileJson);
     setState(() {
-      _savedAddresses = savedAddresses;
       _profileDetails = storedDetails.mergeFallback(customerDetails);
-      _loadingProfileData = false;
     });
-  }
-
-  Future<void> _saveAddresses(List<SavedAddress> addresses) async {
-    final customerId = context.read<AuthProvider>().customer?.id;
-    final prefs = await SharedPreferences.getInstance();
-    final keyPrefix = _profileKeyPrefix(customerId);
-    await prefs.setString(
-      '${keyPrefix}_saved_addresses',
-      jsonEncode(addresses.map((address) => address.toJson()).toList()),
-    );
-
-    try {
-      final response = await ApiService.updateSavedPlaces(
-        addresses.map((address) => address.toJson()).toList(),
-      );
-      addresses = _decodeSavedAddressesFromResponse(response.data);
-      await prefs.setString(
-        '${keyPrefix}_saved_addresses',
-        jsonEncode(addresses.map((address) => address.toJson()).toList()),
-      );
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Saved locally. Sync failed, try again online.'),
-          ),
-        );
-      }
-    }
-
-    if (!mounted) return;
-    setState(() => _savedAddresses = addresses);
   }
 
   Future<void> _saveProfileDetails(ProfileDetails details) async {
@@ -151,189 +99,310 @@ class _ProfileTabState extends State<ProfileTab> {
       backgroundColor: AppTheme.background,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 16),
-              Center(
-                child: Column(
+              Container(
+                height: 250,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF008CFF), Color(0xFF1746B8)],
+                  ),
+                  borderRadius: BorderRadius.vertical(
+                    bottom: Radius.circular(34),
+                  ),
+                ),
+                child: Stack(
                   children: [
-                    CircleAvatar(
-                      radius: 42,
-                      backgroundColor: AppTheme.surface,
-                      child: _profileDetails.profileImagePath.isNotEmpty
-                          ? ClipOval(
-                              child: Image.file(
-                                File(_profileDetails.profileImagePath),
-                                width: 84,
-                                height: 84,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) => const Icon(
-                                  Icons.person,
-                                  size: 45,
-                                  color: AppTheme.primaryBlue,
-                                ),
-                              ),
-                            )
-                          : _profileDetails.profileImage.isNotEmpty
-                          ? ClipOval(
-                              child: Image.memory(
-                                base64Decode(
-                                  _profileDetails.profileImage.split(',').last,
-                                ),
-                                width: 84,
-                                height: 84,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) => const Icon(
-                                  Icons.person,
-                                  size: 45,
-                                  color: AppTheme.primaryBlue,
-                                ),
-                              ),
-                            )
-                          : _profileDetails.hasProfilePicture
-                          ? Text(
-                              _initials(name),
-                              style: const TextStyle(
-                                color: AppTheme.primaryBlue,
-                                fontSize: 26,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            )
-                          : const Icon(
-                              Icons.person,
-                              size: 45,
-                              color: AppTheme.primaryBlue,
-                            ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      name,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
+                    const Positioned(
+                      top: 22,
+                      left: 20,
+                      child: Text(
+                        'Profile',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      phone,
-                      style: const TextStyle(
-                        color: Color(0xFF8A8A8A),
-                        fontSize: 14,
+                    Positioned(
+                      top: 8,
+                      right: 10,
+                      child: IconButton(
+                        onPressed: () => _openEditProfile(name, phone, email),
+                        icon: const Icon(Icons.edit_rounded),
+                        color: Colors.white,
+                        tooltip: 'Edit profile',
+                      ),
+                    ),
+                    Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          GestureDetector(
+                            onTap: _showProfilePictureOptions,
+                            child: Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                Container(
+                                  width: 112,
+                                  height: 112,
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.7,
+                                      ),
+                                      width: 2,
+                                    ),
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: Color(0x55000000),
+                                        blurRadius: 18,
+                                        offset: Offset(0, 8),
+                                      ),
+                                    ],
+                                  ),
+                                  child: ClipOval(child: _profileImage(name)),
+                                ),
+                                Positioned(
+                                  right: -2,
+                                  bottom: 2,
+                                  child: Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.surface,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 3,
+                                      ),
+                                    ),
+                                    child: const Icon(
+                                      Icons.add_a_photo_rounded,
+                                      color: AppTheme.accent,
+                                      size: 18,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 13),
+                          Text(
+                            name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 21,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Tap the photo to change it',
+                            style: TextStyle(
+                              color: Color(0xD9FFFFFF),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 32),
-              _profileMenuItem(
-                icon: Icons.edit,
-                title: 'Edit Profile',
-                subtitle: 'Photo, name, mobile, email, birthday and gender',
-                onTap: () async {
-                  final updated = await Navigator.push<ProfileDetails>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => EditProfileScreen(
-                        initialDetails: _profileDetails,
-                        initialName: name,
-                        initialPhone: phone,
-                        initialEmail: email,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 26, 20, 28),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Account Details',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
-                  );
-                  if (updated != null) {
-                    await _saveProfileDetails(updated);
-                  }
-                },
-              ),
-              const SizedBox(height: 12),
-              _profileMenuItem(
-                icon: Icons.favorite,
-                title: 'Saved Places',
-                subtitle: _loadingProfileData
-                    ? 'Loading saved addresses'
-                    : '${_savedAddresses.length} saved address${_savedAddresses.length == 1 ? '' : 'es'}',
-                onTap: () async {
-                  final result = await Navigator.push<SavedPlacesResult>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          SavedPlacesScreen(addresses: _savedAddresses),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: AppTheme.surface,
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: AppTheme.border),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.22),
+                            blurRadius: 18,
+                            offset: const Offset(0, 9),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          _AccountDetailRow(
+                            icon: Icons.person_outline_rounded,
+                            label: 'Name',
+                            value: name,
+                          ),
+                          const Divider(height: 28),
+                          _AccountDetailRow(
+                            icon: Icons.mail_outline_rounded,
+                            label: 'Email address',
+                            value: email,
+                          ),
+                          const Divider(height: 28),
+                          _AccountDetailRow(
+                            icon: Icons.phone_iphone_rounded,
+                            label: 'Phone number',
+                            value: phone,
+                          ),
+                        ],
+                      ),
                     ),
-                  );
-                  if (result != null) {
-                    await _saveAddresses(result.addresses);
-                  }
-                },
-              ),
-              const SizedBox(height: 12),
-              _profileMenuItem(
-                icon: Icons.payment,
-                title: 'Payment Methods',
-                subtitle: 'Manage your payment options',
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Payment methods feature coming soon'),
+                    const SizedBox(height: 18),
+                    _profileMenuItem(
+                      icon: Icons.edit_rounded,
+                      title: 'Edit Profile',
+                      subtitle: 'Change photo, name, email or phone number',
+                      onTap: () => _openEditProfile(name, phone, email),
                     ),
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-              _profileMenuItem(
-                icon: Icons.help,
-                title: 'Help & Support',
-                subtitle: 'Recent activities and support topics',
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const HelpSupportScreen(),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-              _profileMenuItem(
-                icon: Icons.info,
-                title: 'About RideX',
-                subtitle: 'Learn about our app',
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('RideX taxi meter customer app'),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 32),
-              if (auth.isLoggedIn)
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color.fromARGB(
-                      255,
-                      126,
-                      122,
-                      161,
-                    ).withValues(alpha: 0.2),
-                    foregroundColor: Colors.redAccent,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  onPressed: () => _confirmSignOut(context, auth),
-                  child: const Text('Sign Out'),
+                    const SizedBox(height: 28),
+                    if (auth.isLoggedIn)
+                      _AnimatedSignOutButton(
+                        onPressed: () => _confirmSignOut(context, auth),
+                      ),
+                  ],
                 ),
+              ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  Widget _profileImage(String name) {
+    if (_profileDetails.profileImagePath.isNotEmpty) {
+      return Image.file(
+        File(_profileDetails.profileImagePath),
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _profileFallback(name),
+      );
+    }
+    if (_profileDetails.profileImage.isNotEmpty) {
+      try {
+        return Image.memory(
+          base64Decode(_profileDetails.profileImage.split(',').last),
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => _profileFallback(name),
+        );
+      } catch (_) {
+        return _profileFallback(name);
+      }
+    }
+    return _profileFallback(name);
+  }
+
+  Widget _profileFallback(String name) {
+    return ColoredBox(
+      color: AppTheme.surface,
+      child: Center(
+        child: Text(
+          _initials(name),
+          style: const TextStyle(
+            color: AppTheme.accent,
+            fontSize: 32,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openEditProfile(String name, String phone, String email) async {
+    final updated = await Navigator.push<ProfileDetails>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EditProfileScreen(
+          initialDetails: _profileDetails,
+          initialName: name,
+          initialPhone: phone,
+          initialEmail: email,
+        ),
+      ),
+    );
+    if (updated != null) await _saveProfileDetails(updated);
+  }
+
+  Future<void> _showProfilePictureOptions() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: AppTheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(
+                Icons.photo_camera_rounded,
+                color: AppTheme.accent,
+              ),
+              title: const Text('Take a photo'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.photo_library_rounded,
+                color: AppTheme.accent,
+              ),
+              title: const Text('Choose from gallery'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+    await _pickProfileImage(source);
+  }
+
+  Future<void> _pickProfileImage(ImageSource source) async {
+    try {
+      final image = await ImagePicker().pickImage(
+        source: source,
+        imageQuality: 70,
+        maxWidth: 640,
+        maxHeight: 640,
+      );
+      if (image == null || !mounted) return;
+      final bytes = await File(image.path).readAsBytes();
+      final updated = _profileDetails.copyWith(
+        profileImagePath: image.path,
+        profileImage: 'data:image/jpeg;base64,${base64Encode(bytes)}',
+        hasProfilePicture: true,
+      );
+      await _saveProfileDetails(updated);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open photos or camera')),
+      );
+    }
   }
 
   void _confirmSignOut(BuildContext context, AuthProvider auth) {
@@ -420,6 +489,63 @@ class _ProfileTabState extends State<ProfileTab> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _AccountDetailRow extends StatelessWidget {
+  const _AccountDetailRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 42,
+          height: 42,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: AppTheme.primary.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: AppTheme.accent, size: 21),
+        ),
+        const SizedBox(width: 13),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  color: AppTheme.mutedText,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                value,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -702,8 +828,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     try {
       final image = await ImagePicker().pickImage(
         source: source,
-        imageQuality: 85,
-        maxWidth: 1200,
+        imageQuality: 70,
+        maxWidth: 640,
+        maxHeight: 640,
       );
       if (image == null || !mounted) return;
       final bytes = await File(image.path).readAsBytes();
@@ -1084,125 +1211,125 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
   }
 }
 
-class HelpSupportScreen extends StatelessWidget {
-  const HelpSupportScreen({super.key});
+class FollowUsScreen extends StatelessWidget {
+  const FollowUsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final trips = context.watch<TripProvider>().trips.take(5).toList();
-    final activities = trips.isEmpty
-        ? _fallbackActivities
-        : trips.map(_activityFromTrip).toList();
-
     return Scaffold(
       backgroundColor: AppTheme.background,
-      appBar: AppBar(title: const Text('Help & Support')),
+      appBar: AppBar(title: const Text('Team RideX')),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
           const Text(
-            'Last 5 activities',
+            'Meet Team RideX',
             style: TextStyle(
               color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 12),
-          ...activities.map(
-            (activity) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _supportCard(
-                icon: activity.icon,
-                title: activity.title,
-                subtitle: activity.subtitle,
-              ),
-            ),
-          ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 8),
           const Text(
-            'Other topics',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
+            'Follow the people behind RideX on LinkedIn.',
+            style: TextStyle(color: Color(0xFF8A8A8A), fontSize: 14),
+          ),
+          const SizedBox(height: 24),
+          ..._linkedInProfiles.map(
+            (profile) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _linkedInCard(context, profile),
             ),
           ),
-          const SizedBox(height: 12),
-          _supportTopic(context, Icons.receipt_long, 'Trip and receipt help'),
-          _supportTopic(context, Icons.account_circle_outlined, 'Account help'),
-          _supportTopic(context, Icons.bug_report_outlined, 'App issues'),
         ],
       ),
     );
   }
 
-  static SupportActivity _activityFromTrip(TripModel trip) {
-    return SupportActivity(
-      icon: Icons.local_taxi,
-      title: trip.status.isEmpty ? 'Taxi trip' : 'Trip ${trip.status}',
-      subtitle: '${trip.pickupLocation} to ${trip.dropLocation}',
-    );
-  }
-
-  static Widget _supportTopic(
-    BuildContext context,
-    IconData icon,
-    String title,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: _supportCard(
-        icon: icon,
-        title: title,
-        subtitle: 'Tap to contact support about $title',
-        onTap: () {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('$title support selected')));
-        },
-      ),
-    );
-  }
-
-  static Widget _supportCard({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    VoidCallback? onTap,
-  }) {
+  static Widget _linkedInCard(BuildContext context, LinkedInProfile profile) {
     return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      onTap: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${profile.name} LinkedIn link will be added soon'),
+          ),
+        );
+      },
+      borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: AppTheme.surface,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(color: const Color(0xFF333336)),
         ),
         child: Row(
           children: [
-            Icon(icon, color: AppTheme.primaryBlue),
-            const SizedBox(width: 14),
+            CircleAvatar(
+              radius: 32,
+              backgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.14),
+              backgroundImage: profile.imageAsset == null
+                  ? null
+                  : AssetImage(profile.imageAsset!),
+              child: profile.imageAsset == null
+                  ? const Icon(
+                      Icons.person_outline,
+                      color: AppTheme.primaryBlue,
+                      size: 34,
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    title,
+                    profile.name,
                     style: const TextStyle(
                       color: Colors.white,
+                      fontSize: 16,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(subtitle, style: const TextStyle(color: Colors.white70)),
+                  Text(
+                    profile.role,
+                    style: const TextStyle(
+                      color: Color(0xFF8A8A8A),
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'View LinkedIn profile',
+                    style: TextStyle(
+                      color: AppTheme.primaryBlue,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ],
               ),
             ),
-            if (onTap != null)
-              const Icon(Icons.chevron_right, color: Colors.white38),
+            Container(
+              width: 34,
+              height: 34,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: const Color(0xFF0A66C2),
+                borderRadius: BorderRadius.circular(7),
+              ),
+              child: const Text(
+                'in',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -1348,45 +1475,18 @@ double? _savedAddressDouble(Object? value) {
   return null;
 }
 
-class SupportActivity {
-  final IconData icon;
-  final String title;
-  final String subtitle;
+class LinkedInProfile {
+  final String name;
+  final String role;
+  final String? imageAsset;
+  final String? url;
 
-  const SupportActivity({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
+  const LinkedInProfile({
+    required this.name,
+    required this.role,
+    this.imageAsset,
+    this.url,
   });
-}
-
-List<SavedAddress> _decodeSavedAddresses(String? source) {
-  if (source == null || source.isEmpty) return const [];
-  try {
-    final list = jsonDecode(source) as List<dynamic>;
-    return list
-        .whereType<Map>()
-        .map((json) => SavedAddress.fromJson(Map<String, dynamic>.from(json)))
-        .where((address) => address.address.isNotEmpty)
-        .toList();
-  } catch (_) {
-    return const [];
-  }
-}
-
-List<SavedAddress> _decodeSavedAddressesFromResponse(Object? data) {
-  Object? listSource;
-  if (data is Map) {
-    listSource = data['savedPlaces'] ?? data['data'];
-  } else {
-    listSource = data;
-  }
-  if (listSource is! List) return const [];
-  return listSource
-      .whereType<Map>()
-      .map((json) => SavedAddress.fromJson(Map<String, dynamic>.from(json)))
-      .where((address) => address.address.isNotEmpty)
-      .toList();
 }
 
 String _initials(String name) {
@@ -1398,30 +1498,102 @@ String _initials(String name) {
   return parts.take(2).map((part) => part[0].toUpperCase()).join();
 }
 
-const _fallbackActivities = [
-  SupportActivity(
-    icon: Icons.login,
-    title: 'Signed in to RideX',
-    subtitle: 'Your customer account is active on this device',
-  ),
-  SupportActivity(
-    icon: Icons.search,
-    title: 'Browsed nearby drivers',
-    subtitle: 'Checked drivers around your current area',
-  ),
-  SupportActivity(
-    icon: Icons.compare_arrows,
-    title: 'Viewed rate comparison',
-    subtitle: 'Compared available taxi meter rates',
-  ),
-  SupportActivity(
-    icon: Icons.qr_code_scanner,
-    title: 'Opened QR scanner',
-    subtitle: 'Ready to scan a taxi meter QR code',
-  ),
-  SupportActivity(
-    icon: Icons.person,
-    title: 'Opened profile',
-    subtitle: 'Managed customer information and saved places',
-  ),
+const _linkedInProfiles = [
+  LinkedInProfile(name: 'LinkedIn Profile 1', role: 'RideX team member'),
+  LinkedInProfile(name: 'LinkedIn Profile 2', role: 'RideX team member'),
+  LinkedInProfile(name: 'LinkedIn Profile 3', role: 'RideX team member'),
+  LinkedInProfile(name: 'LinkedIn Profile 4', role: 'RideX team member'),
 ];
+
+class _AnimatedSignOutButton extends StatefulWidget {
+  const _AnimatedSignOutButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  State<_AnimatedSignOutButton> createState() => _AnimatedSignOutButtonState();
+}
+
+class _AnimatedSignOutButtonState extends State<_AnimatedSignOutButton> {
+  bool _hovered = false;
+  bool _focused = false;
+  bool _pressed = false;
+  bool _activationPending = false;
+
+  bool get _active => _hovered || _focused || _pressed;
+
+  void _handleTap() {
+    if (_activationPending) return;
+    _activationPending = true;
+    setState(() => _pressed = true);
+    Future<void>.delayed(const Duration(milliseconds: 180), () {
+      if (!mounted) return;
+      setState(() => _pressed = false);
+      _activationPending = false;
+      widget.onPressed();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final active = _active;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 15),
+      child: AnimatedScale(
+        scale: _pressed ? 0.9 : 1,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: _handleTap,
+            onTapDown: (_) => setState(() => _pressed = true),
+            onTapCancel: () => setState(() => _pressed = false),
+            onHover: (hovered) => setState(() => _hovered = hovered),
+            onFocusChange: (focused) => setState(() => _focused = focused),
+            hoverColor: Colors.transparent,
+            focusColor: Colors.transparent,
+            splashColor: Colors.transparent,
+            highlightColor: Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              height: AppTheme.buttonHeight,
+              decoration: BoxDecoration(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.dangerRed, width: 2),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  AnimatedPositioned(
+                    duration: const Duration(milliseconds: 500),
+                    curve: Curves.easeOut,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    height: active ? AppTheme.buttonHeight : 0,
+                    child: const ColoredBox(color: AppTheme.dangerRed),
+                  ),
+                  AnimatedDefaultTextStyle(
+                    duration: const Duration(milliseconds: 500),
+                    curve: Curves.easeOut,
+                    style: TextStyle(
+                      color: active ? Colors.white : AppTheme.dangerRed,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1,
+                    ),
+                    child: const Text('Sign Out'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

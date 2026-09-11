@@ -24,59 +24,80 @@ class WelcomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.sizeOf(context);
+    final logoSize = (screenSize.width * 0.22).clamp(68.0, 84.0);
+    final logoTextSize = (screenSize.width * 0.097).clamp(30.0, 38.0);
+    final horizontalPadding = (screenSize.width * 0.07).clamp(20.0, 28.0);
+
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(28, 40, 28, 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Spacer(),
-              const RideXLogo(size: 84, textSize: 38),
-              const SizedBox(height: 30),
-              const Text(
-                'Welcome to RideX',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 32,
-                  fontWeight: FontWeight.w800,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                24,
+                horizontalPadding,
+                24,
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - 48,
+                ),
+                child: IntrinsicHeight(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Spacer(),
+                      RideXLogo(size: logoSize, textSize: logoTextSize),
+                      const SizedBox(height: 24),
+                      const Text(
+                        'Welcome to RideX',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 32,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 36),
+                      const Text(
+                        "I'm new to RideX",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white60,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      _WelcomeButton(
+                        label: 'Get Started',
+                        onTap: () => _openCreateAccount(context),
+                      ),
+                      const SizedBox(height: 24),
+                      const Text(
+                        'Already connected?',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white60,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      _WelcomeButton(
+                        label: 'Sign In',
+                        onTap: () => _openSignIn(context),
+                      ),
+                      const Spacer(flex: 2),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 56),
-              const Text(
-                "I'm new to RideX",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white60,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 14),
-              _WelcomeButton(
-                label: 'Get Started',
-                onTap: () => _openCreateAccount(context),
-              ),
-              const SizedBox(height: 34),
-              const Text(
-                'Already connected?',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white60,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 14),
-              _WelcomeButton(
-                label: 'Sign In',
-                onTap: () => _openSignIn(context),
-              ),
-              const Spacer(flex: 2),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
@@ -93,54 +114,166 @@ class _WelcomeButton extends StatefulWidget {
   State<_WelcomeButton> createState() => _WelcomeButtonState();
 }
 
-class _WelcomeButtonState extends State<_WelcomeButton> {
+class _WelcomeButtonState extends State<_WelcomeButton>
+    with SingleTickerProviderStateMixin {
   bool _isHovered = false;
   bool _isFocused = false;
   bool _isPressed = false;
+  late final AnimationController _shineController;
+  late final Animation<double> _shineOpacity;
 
   bool get _isActive => _isHovered || _isFocused || _isPressed;
 
   @override
-  Widget build(BuildContext context) {
-    final backgroundColor = _isActive
-        ? AppTheme.primaryBlue
-        : AppTheme.primaryBlue.withValues(alpha: 0.18);
-    final textColor = _isActive ? Colors.white : AppTheme.primaryBlue;
+  void initState() {
+    super.initState();
+    _shineController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+    _shineOpacity = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(
+          begin: 0.0,
+          end: 1.0,
+        ).chain(CurveTween(curve: Curves.easeIn)),
+        weight: 50,
+      ),
+      TweenSequenceItem(
+        tween: Tween(
+          begin: 1.0,
+          end: 0.0,
+        ).chain(CurveTween(curve: Curves.easeOut)),
+        weight: 50,
+      ),
+    ]).animate(_shineController);
+  }
 
-    return FocusableActionDetector(
-      onShowFocusHighlight: (focused) => setState(() => _isFocused = focused),
-      mouseCursor: SystemMouseCursors.click,
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _isHovered = true),
-        onExit: (_) => setState(() {
-          _isHovered = false;
-          _isPressed = false;
-        }),
-        child: GestureDetector(
-          onTapDown: (_) => setState(() => _isPressed = true),
-          onTapCancel: () => setState(() => _isPressed = false),
-          onTapUp: (_) => setState(() => _isPressed = false),
-          onTap: widget.onTap,
-          child: AnimatedContainer(
-            height: 56,
-            duration: const Duration(milliseconds: 140),
-            curve: Curves.easeOut,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: backgroundColor,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: _isActive
-                    ? AppTheme.primaryBlue
-                    : AppTheme.primaryBlue.withValues(alpha: 0.34),
+  @override
+  void dispose() {
+    _shineController.dispose();
+    super.dispose();
+  }
+
+  void _playShine() {
+    _shineController.forward(from: 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: widget.label,
+      child: FocusableActionDetector(
+        onShowFocusHighlight: (focused) {
+          setState(() => _isFocused = focused);
+          if (focused) _playShine();
+        },
+        mouseCursor: SystemMouseCursors.click,
+        child: MouseRegion(
+          onEnter: (_) {
+            setState(() => _isHovered = true);
+            _playShine();
+          },
+          onExit: (_) => setState(() {
+            _isHovered = false;
+            _isPressed = false;
+          }),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapDown: (_) {
+              setState(() => _isPressed = true);
+              _playShine();
+            },
+            onTapCancel: () => setState(() => _isPressed = false),
+            onTapUp: (_) => setState(() => _isPressed = false),
+            onTap: widget.onTap,
+            child: AnimatedContainer(
+              height: 56,
+              duration: const Duration(milliseconds: 500),
+              curve: _isActive ? Curves.easeOut : Curves.easeIn,
+              decoration: BoxDecoration(
+                color: AppTheme.actionBlue,
+                borderRadius: BorderRadius.circular(7),
+                border: Border.all(color: AppTheme.actionBlue),
+                boxShadow: _isActive && !_isPressed
+                    ? [
+                        BoxShadow(
+                          color: AppTheme.actionBlue.withValues(alpha: 0.9),
+                          blurRadius: 5,
+                        ),
+                        BoxShadow(
+                          color: AppTheme.actionBlue.withValues(alpha: 0.7),
+                          blurRadius: 25,
+                        ),
+                        BoxShadow(
+                          color: AppTheme.actionBlue.withValues(alpha: 0.5),
+                          blurRadius: 50,
+                        ),
+                        BoxShadow(
+                          color: AppTheme.actionBlue.withValues(alpha: 0.28),
+                          blurRadius: 100,
+                        ),
+                      ]
+                    : [
+                        BoxShadow(
+                          color: AppTheme.actionBlue.withValues(alpha: 0.72),
+                          blurRadius: 25,
+                        ),
+                      ],
               ),
-            ),
-            child: Text(
-              widget.label,
-              style: TextStyle(
-                color: textColor,
-                fontSize: 17,
-                fontWeight: FontWeight.w800,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        AnimatedBuilder(
+                          animation: _shineController,
+                          builder: (context, child) {
+                            return Positioned(
+                              left:
+                                  -40 +
+                                  (constraints.maxWidth + 80) *
+                                      _shineController.value,
+                              top: 4,
+                              bottom: 4,
+                              child: Opacity(
+                                opacity: _shineOpacity.value,
+                                child: Transform(
+                                  transform: Matrix4.skewX(-0.35),
+                                  child: Container(
+                                    width: 3,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.white,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.white,
+                                          blurRadius: 30,
+                                          spreadRadius: 20,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        Text(
+                          widget.label.toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 4,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
               ),
             ),
           ),

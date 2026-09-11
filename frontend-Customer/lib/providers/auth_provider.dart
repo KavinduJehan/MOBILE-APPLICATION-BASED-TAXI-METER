@@ -88,7 +88,7 @@ class AuthProvider extends ChangeNotifier {
           print('Session persistence failed after OTP verification: $e');
         }
       }
-      
+
       _error = null;
       notifyListeners();
       return true;
@@ -115,7 +115,6 @@ class AuthProvider extends ChangeNotifier {
     required String lastName,
     required String email,
     required String phone,
-    required String password,
   }) async {
     _setLoading(true);
     try {
@@ -124,7 +123,6 @@ class AuthProvider extends ChangeNotifier {
         lastName: lastName,
         email: email,
         phone: phone,
-        password: password,
       );
       _error = null;
       notifyListeners();
@@ -237,8 +235,26 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  String? _extractMessage(DioException e) =>
-      e.error?.toString().isNotEmpty == true ? e.error.toString() : null;
+  String? _extractMessage(DioException e) {
+    final responseMessage = e.response?.data is Map
+        ? e.response!.data['message']?.toString()
+        : null;
+    final transportMessage = e.error?.toString();
+
+    final message = responseMessage ?? transportMessage;
+    if (message == null || message.trim().isEmpty) return null;
+
+    if (message.contains('SocketException') ||
+        message.contains('Connection refused') ||
+        message.contains('Failed host lookup') ||
+        message.contains('connectTimeout') ||
+        message.contains('Send timeout') ||
+        message.contains('receiveTimeout')) {
+      return 'Cannot reach the backend server. Check the API URL and make sure the backend is running.';
+    }
+
+    return message;
+  }
 
   void _setLoading(bool value) {
     _loading = value;

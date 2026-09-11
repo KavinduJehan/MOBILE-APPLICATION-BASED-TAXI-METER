@@ -10,11 +10,14 @@ const adminRoutes = require('./routes/admin');
 const rideRequestRoutes = require('./routes/rideRequests');
 const customerRoutes = require('./routes/customerRoutes');
 const receiptRoutes = require('./routes/receipts');
+const locationRoutes = require('./routes/locations');
 
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+// Profile avatars are sent as validated, compressed data URLs. Keep this
+// deliberately bounded instead of allowing unlimited request bodies.
+app.use(express.json({ limit: '2mb' }));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/drivers', driverRoutes);
@@ -24,6 +27,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/ride-requests', rideRequestRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/receipts', receiptRoutes);
+app.use('/api/locations', locationRoutes);
 
 app.get('/api', (req, res) => res.json({
   status: 'ok',

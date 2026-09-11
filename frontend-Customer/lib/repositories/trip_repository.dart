@@ -33,6 +33,11 @@ class TripRepository {
     return TripModel.fromJson(_readNestedTrip(response.data));
   }
 
+  Future<TripModel> cancelTrip(String tripId) async {
+    final response = await ApiService.cancelTrip(tripId);
+    return TripModel.fromJson(_readNestedTrip(response.data));
+  }
+
   Future<List<TripModel>> getMyTrips({int page = 1, int limit = 20}) async {
     try {
       final response = await ApiService.getMyTrips(page: page, limit: limit);
