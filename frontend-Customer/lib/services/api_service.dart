@@ -297,6 +297,22 @@ class ApiService {
     '/locations/reverse',
     queryParameters: {'lat': latitude, 'lng': longitude},
   );
+
+  static Future<Response> getDrivingRoute({
+    required double pickupLatitude,
+    required double pickupLongitude,
+    required double destinationLatitude,
+    required double destinationLongitude,
+  }) => _dio.post(
+    '/locations/route',
+    data: {
+      'pickupLat': pickupLatitude,
+      'pickupLng': pickupLongitude,
+      'destinationLat': destinationLatitude,
+      'destinationLng': destinationLongitude,
+    },
+  );
+
   static Future<Response> getDriverByQR(String qrToken) =>
       _dio.get('/drivers/qr/$qrToken');
 

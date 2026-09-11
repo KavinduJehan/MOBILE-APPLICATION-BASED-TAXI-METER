@@ -13,9 +13,11 @@ import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import '../theme.dart';
 import '../utils/google_maps_availability.dart';
+import '../utils/google_polyline.dart';
+import '../utils/place_label.dart';
 import 'profile_tab.dart';
 
-const _defaultCenter = LatLng(6.9271, 79.8612);
+const _defaultCenter = LatLng(7.8731, 80.7718);
 
 String _newPlacesSessionToken() =>
     '${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(0x7fffffff)}';
@@ -54,6 +56,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   StreamSubscription<Position>? _positionSub;
   Future<void>? _savedPlacesLoad;
   Timer? _placeSearchDebounce;
+  Timer? _routeDebounce;
   List<_PlaceSuggestion> _remoteSuggestions = const [];
   bool _searchingPlaces = false;
   bool _resolvingPlace = false;
@@ -63,6 +66,10 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   String _placesSessionToken = _newPlacesSessionToken();
   List<_RecentPlace> _recentPlaces = const [];
   bool _resolvingLiveAddress = false;
+  List<LatLng> _routePoints = const [];
+  bool _loadingRoute = false;
+  String? _routeError;
+  int _routeRequestGeneration = 0;
 
   LatLng _pickup = _defaultCenter;
   LatLng? _destination;
@@ -94,6 +101,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     _mapController?.dispose();
     _positionSub?.cancel();
     _placeSearchDebounce?.cancel();
+    _routeDebounce?.cancel();
     _pickupSearchController
       ..removeListener(_handleSearchTextChanged)
       ..dispose();
@@ -248,14 +256,17 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       if (latitude == null || longitude == null) {
         throw const FormatException('Selected location has no coordinates');
       }
-      final address =
-          (data['address'] ?? data['name'] ?? suggestion.description)
-              .toString();
+      final placeName = (data['name'] ?? suggestion.title).toString();
+      final address = buildPlaceLabel(
+        name: placeName,
+        address: data['address']?.toString() ?? '',
+        fallback: suggestion.description,
+      );
       if (!mounted) return;
       unawaited(
         _rememberRecent(
           _RecentPlace(
-            title: (data['name'] ?? suggestion.title).toString(),
+            title: placeName,
             address: address,
             point: LatLng(latitude, longitude),
             placeId: placeId,
@@ -342,8 +353,126 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     _mapController?.animateCamera(CameraUpdate.newLatLngZoom(point, zoom));
   }
 
+  Set<Polyline> get _locationPolylines {
+    if (_routePoints.length < 2) return const <Polyline>{};
+
+    return {
+      Polyline(
+        polylineId: const PolylineId('pickup-to-destination'),
+        points: _routePoints,
+        color: AppTheme.primaryBlue,
+        width: 5,
+        geodesic: false,
+        jointType: JointType.round,
+        startCap: Cap.roundCap,
+        endCap: Cap.roundCap,
+        zIndex: 1,
+      ),
+    };
+  }
+
+  void _scheduleRouteRefresh({
+    Duration delay = const Duration(milliseconds: 250),
+  }) {
+    _routeDebounce?.cancel();
+    _routeRequestGeneration++;
+    _routeDebounce = Timer(delay, () => unawaited(_refreshRoute()));
+  }
+
+  Future<void> _refreshRoute() async {
+    final destination = _destination;
+    final generation = ++_routeRequestGeneration;
+    if (destination == null ||
+        (_pickup.latitude == destination.latitude &&
+            _pickup.longitude == destination.longitude)) {
+      if (!mounted) return;
+      setState(() {
+        _routePoints = const [];
+        _loadingRoute = false;
+        _routeError = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _routePoints = const [];
+      _loadingRoute = true;
+      _routeError = null;
+    });
+
+    try {
+      final response = await ApiService.getDrivingRoute(
+        pickupLatitude: _pickup.latitude,
+        pickupLongitude: _pickup.longitude,
+        destinationLatitude: destination.latitude,
+        destinationLongitude: destination.longitude,
+      );
+      final data = response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : <String, dynamic>{};
+      final encodedPolyline = data['encodedPolyline']?.toString() ?? '';
+      final points = decodeGooglePolyline(encodedPolyline);
+      if (points.length < 2) {
+        throw const FormatException('The route contains no map path');
+      }
+      if (!mounted || generation != _routeRequestGeneration) return;
+      setState(() {
+        _routePoints = points;
+        _loadingRoute = false;
+        _routeError = null;
+      });
+      _scheduleFitSelectedLocations();
+    } on DioException catch (error) {
+      if (!mounted || generation != _routeRequestGeneration) return;
+      setState(() {
+        _routePoints = const [];
+        _loadingRoute = false;
+        _routeError =
+            error.error?.toString() ?? 'Could not load the road route';
+      });
+    } catch (_) {
+      if (!mounted || generation != _routeRequestGeneration) return;
+      setState(() {
+        _routePoints = const [];
+        _loadingRoute = false;
+        _routeError = 'Could not load the road route';
+      });
+    }
+  }
+
+  void _fitSelectedLocations() {
+    final controller = _mapController;
+    final destination = _destination;
+    if (controller == null || destination == null) return;
+
+    if (_pickup.latitude == destination.latitude &&
+        _pickup.longitude == destination.longitude) {
+      controller.animateCamera(CameraUpdate.newLatLngZoom(_pickup, 16));
+      return;
+    }
+
+    final bounds = LatLngBounds(
+      southwest: LatLng(
+        min(_pickup.latitude, destination.latitude),
+        min(_pickup.longitude, destination.longitude),
+      ),
+      northeast: LatLng(
+        max(_pickup.latitude, destination.latitude),
+        max(_pickup.longitude, destination.longitude),
+      ),
+    );
+    controller.animateCamera(CameraUpdate.newLatLngBounds(bounds, 72));
+  }
+
+  void _scheduleFitSelectedLocations() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _fitSelectedLocations();
+    });
+  }
+
   void _handleMapCreated(GoogleMapController controller) {
     _mapController = controller;
+    if (_destination != null) _scheduleFitSelectedLocations();
   }
 
   void _applyLiveLocation(Position position, {bool moveMap = false}) {
@@ -362,6 +491,9 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         _pickupAddress = 'Location fetched';
       }
     });
+    if (!_pickupChangedManually && _destination != null) {
+      _scheduleRouteRefresh(delay: const Duration(milliseconds: 800));
+    }
     if (shouldResolveAddress) unawaited(_resolveLivePickupAddress(point));
     if (moveMap) _moveMap(point, 15);
   }
@@ -460,6 +592,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         _pickupAddress = 'Pinned pickup';
         _editingPickup = false;
       });
+      if (_destination != null) _scheduleRouteRefresh();
       return;
     }
 
@@ -471,6 +604,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       _destination = point;
       _destinationAddress = destinationName;
     });
+    _scheduleRouteRefresh();
   }
 
   Future<void> _refreshSavedPlaces() {
@@ -627,7 +761,12 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       _editingPickup = false;
       _showMap = true;
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _moveMap(point, 15));
+    if (_destination == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _moveMap(point, 15));
+    } else {
+      _scheduleRouteRefresh();
+      _scheduleFitSelectedLocations();
+    }
   }
 
   void _selectDestination(String name, LatLng point) {
@@ -639,7 +778,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       _editingPickup = false;
       _showMap = true;
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _moveMap(point, 14));
+    _scheduleRouteRefresh();
+    _scheduleFitSelectedLocations();
   }
 
   void _openMapForPinning() {
@@ -677,14 +817,20 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     if (liveLocation != null) {
       unawaited(_resolveLivePickupAddress(liveLocation));
     }
+    if (_destination != null) _scheduleRouteRefresh();
     _pickupFocusNode.requestFocus();
   }
 
   void _clearDrop() {
     _searchController.clear();
+    _routeDebounce?.cancel();
+    _routeRequestGeneration++;
     setState(() {
       _destination = null;
       _destinationAddress = null;
+      _routePoints = const [];
+      _loadingRoute = false;
+      _routeError = null;
     });
     _dropFocusNode.requestFocus();
   }
@@ -770,6 +916,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                   ),
                 ),
               },
+              polylines: _locationPolylines,
               myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
             )
@@ -1040,11 +1187,57 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                     ),
                   ),
               },
+              polylines: _locationPolylines,
               myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
             )
           else
             const _MapUnavailableBackground(),
+          if (_loadingRoute || _routeError != null)
+            Positioned(
+              top: 12,
+              left: 16,
+              right: 16,
+              child: Material(
+                color: AppTheme.surface,
+                elevation: 4,
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  child: Row(
+                    children: [
+                      if (_loadingRoute)
+                        const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      else
+                        const Icon(
+                          Icons.warning_amber_rounded,
+                          color: Color(0xFFFFB33F),
+                          size: 20,
+                        ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _loadingRoute
+                              ? 'Calculating road route...'
+                              : _routeError!,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           Positioned(
             left: 16,
             right: 16,
@@ -1064,7 +1257,12 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                         _pickupChangedManually = false;
                         _editingPickup = false;
                       });
-                      _moveMap(_pickup, 15);
+                      if (_destination == null) {
+                        _moveMap(_pickup, 15);
+                      } else {
+                        _scheduleRouteRefresh();
+                        _scheduleFitSelectedLocations();
+                      }
                     },
               onConfirm: _confirm,
             ),
@@ -1129,12 +1327,12 @@ class _MapSearchPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     const inputStyle = TextStyle(
       color: Colors.white,
-      fontSize: 15,
+      fontSize: 17,
       fontWeight: FontWeight.w600,
     );
     const hintStyle = TextStyle(
       color: AppTheme.mutedText,
-      fontSize: 15,
+      fontSize: 17,
       fontWeight: FontWeight.w500,
     );
 
@@ -1169,11 +1367,12 @@ class _MapSearchPanel extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Pick up',
+                    'PICKUP',
                     style: TextStyle(
                       color: AppTheme.mutedText,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
                     ),
                   ),
                   Row(
@@ -1184,6 +1383,7 @@ class _MapSearchPanel extends StatelessWidget {
                           focusNode: pickupFocusNode,
                           onTap: onSearchPickup,
                           style: inputStyle,
+                          textCapitalization: TextCapitalization.words,
                           textInputAction: TextInputAction.search,
                           decoration: InputDecoration(
                             isDense: true,
@@ -1225,11 +1425,12 @@ class _MapSearchPanel extends StatelessWidget {
                   ),
                   const Divider(height: 18, color: AppTheme.border),
                   Text(
-                    'Drop off',
+                    'DROP-OFF',
                     style: TextStyle(
                       color: AppTheme.mutedText,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
                     ),
                   ),
                   Row(
@@ -1240,6 +1441,7 @@ class _MapSearchPanel extends StatelessWidget {
                           focusNode: dropFocusNode,
                           onTap: onSearchDrop,
                           style: inputStyle,
+                          textCapitalization: TextCapitalization.words,
                           textInputAction: TextInputAction.search,
                           decoration: const InputDecoration(
                             isDense: true,
@@ -1683,7 +1885,7 @@ class _MapConfirmPanel extends StatelessWidget {
             _MapLocationRow(
               icon: Icons.trip_origin,
               color: AppTheme.successGreen,
-              label: 'Pickup',
+              label: 'PICKUP',
               value: editingPickup
                   ? 'Tap the map to set pickup'
                   : pickupAddress,
@@ -1696,7 +1898,7 @@ class _MapConfirmPanel extends StatelessWidget {
             _MapLocationRow(
               icon: Icons.location_on,
               color: Colors.redAccent,
-              label: 'Destination',
+              label: 'DROP-OFF',
               value: destinationAddress ?? 'Tap the map to set destination',
             ),
             const SizedBox(height: 12),
@@ -1754,14 +1956,22 @@ class _MapLocationRow extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: const TextStyle(color: Color(0xFF8A8A8A), fontSize: 12),
+                style: const TextStyle(
+                  color: Color(0xFF8A8A8A),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                ),
               ),
               Text(
                 value,
                 style: const TextStyle(
                   color: Colors.white,
+                  fontSize: 17,
                   fontWeight: FontWeight.w600,
                 ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
