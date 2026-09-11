@@ -7,6 +7,9 @@ class AppConfig {
 
   static String get baseUrl {
     if (_configuredBaseUrl.isNotEmpty) return _configuredBaseUrl;
-    return kIsWeb ? 'http://localhost:5000/api' : 'http://10.0.2.2:5000/api';
+
+    return kIsWeb
+        ? 'http://localhost:5000/api'
+        : 'http://10.44.26.23:5000/api';
   }
 }

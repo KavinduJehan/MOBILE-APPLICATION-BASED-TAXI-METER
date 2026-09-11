@@ -9,7 +9,7 @@ const String _baseUrl = _configuredBaseUrl != ''
     ? _configuredBaseUrl
     : kIsWeb
     ? 'http://localhost:5000/api'
-    : 'http://10.0.2.2:5000/api';
+    : 'http://10.44.26.23:5000/api';
 
 const String _tokenKey = 'auth_token';
 const String _refreshTokenKey = 'refresh_token';
