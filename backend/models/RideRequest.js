@@ -36,6 +36,10 @@ const rideRequestSchema = new mongoose.Schema(
       default: 'pending',
     },
 
+    // Keeps the request locked while the customer is waiting or riding.
+    // A partial unique index below makes the one-active-ride rule atomic.
+    isActive: { type: Boolean, default: true },
+
     // Populated when driver accepts — links to the created Trip
     trip: { type: mongoose.Schema.Types.ObjectId, ref: 'Trip', default: null },
 
@@ -43,6 +47,17 @@ const rideRequestSchema = new mongoose.Schema(
     syncedToCloud: { type: Boolean, default: true },
   },
   { timestamps: true }
+);
+
+rideRequestSchema.index(
+  { customer: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      isActive: true,
+      customer: { $type: 'objectId' },
+    },
+  }
 );
 
 module.exports = mongoose.model('RideRequest', rideRequestSchema);
