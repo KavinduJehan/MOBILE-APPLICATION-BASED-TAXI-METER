@@ -23,7 +23,7 @@ class DriverLocationService {
 
     await _publishCurrentLocation();
     _timer = Timer.periodic(
-      const Duration(minutes: 1),
+      const Duration(seconds: 15),
       (_) => unawaited(_publishCurrentLocation()),
     );
   }
