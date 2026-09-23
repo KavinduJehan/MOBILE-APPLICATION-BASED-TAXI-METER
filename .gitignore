@@ -16,3 +16,4 @@
 !.env.example
 frontend-Customer/android/app/google-services.json
 frontend-Customer/web/maps_config.js
+node_modules/
