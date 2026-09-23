@@ -4,6 +4,9 @@ const Driver = require('../models/Driver');
 const Trip = require('../models/Trip');
 const Receipt = require('../models/Receipt');
 
+const activeRideMessage =
+  'You already have an active ride. Complete or cancel it before booking another ride.';
+
 // POST /api/ride-requests
 // Customer creates a ride request — requires customer JWT (name pulled from token)
 const createRideRequest = async (req, res) => {
@@ -20,7 +23,7 @@ const createRideRequest = async (req, res) => {
   } = req.body;
 
   // Customer name comes from the verified JWT — not from the request body
-  const customerName = req.user?.name || req.body.customerName || 'Anonymous';
+  const customerName = req.user.name;
 
   if (!driverId || pickupLat == null || pickupLng == null ||
       destLat == null || destLng == null || !estimatedDistanceKm) {
@@ -32,6 +35,17 @@ const createRideRequest = async (req, res) => {
   }
 
   try {
+    const [activeRequest, activeTrip] = await Promise.all([
+      RideRequest.exists({ customer: req.user.id, isActive: true }),
+      Trip.exists({ customer: req.user.id, status: 'ongoing' }),
+    ]);
+    if (activeRequest || activeTrip) {
+      return res.status(409).json({
+        message: activeRideMessage,
+        code: 'ACTIVE_RIDE_EXISTS',
+      });
+    }
+
     const driver = await Driver.findById(driverId);
     if (!driver) return res.status(404).json({ message: 'Driver not found' });
     if (!driver.isVerified) return res.status(403).json({ message: 'Driver is not verified' });
@@ -45,7 +59,7 @@ const createRideRequest = async (req, res) => {
 
     const rideRequest = await RideRequest.create({
       driver: driverId,
-      customer: req.user?.role === 'customer' ? req.user.id : null,
+      customer: req.user.id,
       customerName,
       pickupLat,
       pickupLng,
@@ -60,6 +74,12 @@ const createRideRequest = async (req, res) => {
 
     res.status(201).json(rideRequest);
   } catch (err) {
+    if (err?.code === 11000) {
+      return res.status(409).json({
+        message: activeRideMessage,
+        code: 'ACTIVE_RIDE_EXISTS',
+      });
+    }
     res.status(500).json({ message: err.message });
   }
 };
@@ -115,6 +135,7 @@ const respondToRequest = async (req, res) => {
 
     if (action === 'reject') {
       rideRequest.status = 'rejected';
+      rideRequest.isActive = false;
       await rideRequest.save();
       return res.json(rideRequest);
     }

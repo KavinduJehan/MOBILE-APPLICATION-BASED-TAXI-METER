@@ -1,6 +1,27 @@
 const request = require('supertest');
 const app = require('../app');
 const Driver = require('../models/Driver');
+const Customer = require('../models/Customer');
+const jwt = require('jsonwebtoken');
+
+let customerToken;
+
+beforeEach(async () => {
+  const customer = await Customer.create({
+    name: 'Test Customer',
+    email: 'ride.customer@test.com',
+    phone: '0712345678',
+  });
+  customerToken = jwt.sign(
+    { id: customer._id, name: customer.name, role: 'customer' },
+    process.env.JWT_SECRET
+  );
+});
+
+const postRideRequest = () =>
+  request(app)
+    .post('/api/ride-requests')
+    .set('Authorization', `Bearer ${customerToken}`);
 
 const driverData = {
   name: 'Ride Driver',
@@ -64,12 +85,16 @@ describe('PATCH /api/drivers/location', () => {
 // ─── Create ride request ─────────────────────────────────────────────────────
 
 describe('POST /api/ride-requests', () => {
+  it('requires an authenticated customer', async () => {
+    const res = await request(app).post('/api/ride-requests').send({});
+    expect(res.statusCode).toBe(401);
+  });
+
   it('creates a ride request for a verified driver', async () => {
     const { driver } = await registerAndLogin();
     await Driver.findByIdAndUpdate(driver.id, { isVerified: true, ratePerKm: 80 });
 
-    const res = await request(app)
-      .post('/api/ride-requests')
+    const res = await postRideRequest()
       .send(buildRideRequest(driver.id));
     expect(res.statusCode).toBe(201);
     expect(res.body.status).toBe('pending');
@@ -77,12 +102,37 @@ describe('POST /api/ride-requests', () => {
     expect(res.body.suggestedRatePerKm).toBeNull();
   });
 
+  it('prevents a customer from booking while another request is pending', async () => {
+    const { driver } = await registerAndLogin();
+    await Driver.findByIdAndUpdate(driver.id, { isVerified: true, ratePerKm: 80 });
+
+    const first = await postRideRequest().send(buildRideRequest(driver.id));
+    const second = await postRideRequest().send(buildRideRequest(driver.id));
+
+    expect(first.statusCode).toBe(201);
+    expect(second.statusCode).toBe(409);
+    expect(second.body.code).toBe('ACTIVE_RIDE_EXISTS');
+  });
+
+  it('allows another booking after the previous request is rejected', async () => {
+    const { token, driver } = await registerAndLogin();
+    await Driver.findByIdAndUpdate(driver.id, { isVerified: true, ratePerKm: 80 });
+    const first = await postRideRequest().send(buildRideRequest(driver.id));
+
+    await request(app)
+      .patch(`/api/ride-requests/${first.body._id}/respond`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ action: 'reject' });
+
+    const second = await postRideRequest().send(buildRideRequest(driver.id));
+    expect(second.statusCode).toBe(201);
+  });
+
   it('creates a ride request with a negotiated rate', async () => {
     const { driver } = await registerAndLogin();
     await Driver.findByIdAndUpdate(driver.id, { isVerified: true, ratePerKm: 80 });
 
-    const res = await request(app)
-      .post('/api/ride-requests')
+    const res = await postRideRequest()
       .send(buildRideRequest(driver.id, { suggestedRatePerKm: 65 }));
     expect(res.statusCode).toBe(201);
     expect(res.body.suggestedRatePerKm).toBe(65);
@@ -90,8 +140,7 @@ describe('POST /api/ride-requests', () => {
 
   it('returns 403 if driver is not verified', async () => {
     const { driver } = await registerAndLogin();
-    const res = await request(app)
-      .post('/api/ride-requests')
+    const res = await postRideRequest()
       .send(buildRideRequest(driver.id));
     expect(res.statusCode).toBe(403);
   });
@@ -100,23 +149,20 @@ describe('POST /api/ride-requests', () => {
     const { driver } = await registerAndLogin();
     await Driver.findByIdAndUpdate(driver.id, { isVerified: true, ratePerKm: 80 });
 
-    const res = await request(app)
-      .post('/api/ride-requests')
+    const res = await postRideRequest()
       .send(buildRideRequest(driver.id, { suggestedRatePerKm: 100 }));
     expect(res.statusCode).toBe(201);
     expect(res.body.suggestedRatePerKm).toBeNull();
   });
 
   it('returns 400 if required fields are missing', async () => {
-    const res = await request(app)
-      .post('/api/ride-requests')
+    const res = await postRideRequest()
       .send({ driverId: '000000000000000000000000' });
     expect(res.statusCode).toBe(400);
   });
 
   it('returns 404 for a non-existent driver', async () => {
-    const res = await request(app)
-      .post('/api/ride-requests')
+    const res = await postRideRequest()
       .send(buildRideRequest('000000000000000000000000'));
     expect(res.statusCode).toBe(404);
   });
@@ -128,7 +174,7 @@ describe('GET /api/ride-requests/incoming', () => {
   it('returns pending requests for the logged-in driver', async () => {
     const { token, driver } = await registerAndLogin();
     await Driver.findByIdAndUpdate(driver.id, { isVerified: true, ratePerKm: 80 });
-    await request(app).post('/api/ride-requests').send(buildRideRequest(driver.id));
+    await postRideRequest().send(buildRideRequest(driver.id));
 
     const res = await request(app)
       .get('/api/ride-requests/incoming')
@@ -150,8 +196,7 @@ describe('PATCH /api/ride-requests/:id/respond', () => {
   it('driver accepts request and trip is auto-created', async () => {
     const { token, driver } = await registerAndLogin();
     await Driver.findByIdAndUpdate(driver.id, { isVerified: true, ratePerKm: 80 });
-    const rideRes = await request(app)
-      .post('/api/ride-requests')
+    const rideRes = await postRideRequest()
       .send(buildRideRequest(driver.id));
     const rideId = rideRes.body._id;
 
@@ -169,8 +214,7 @@ describe('PATCH /api/ride-requests/:id/respond', () => {
   it('uses negotiated rate when driver accepts a negotiation', async () => {
     const { token, driver } = await registerAndLogin();
     await Driver.findByIdAndUpdate(driver.id, { isVerified: true, ratePerKm: 80 });
-    const rideRes = await request(app)
-      .post('/api/ride-requests')
+    const rideRes = await postRideRequest()
       .send(buildRideRequest(driver.id, { suggestedRatePerKm: 65 }));
     const rideId = rideRes.body._id;
 
@@ -186,8 +230,7 @@ describe('PATCH /api/ride-requests/:id/respond', () => {
   it('driver rejects a request', async () => {
     const { token, driver } = await registerAndLogin();
     await Driver.findByIdAndUpdate(driver.id, { isVerified: true, ratePerKm: 80 });
-    const rideRes = await request(app)
-      .post('/api/ride-requests')
+    const rideRes = await postRideRequest()
       .send(buildRideRequest(driver.id));
 
     const res = await request(app)
@@ -201,8 +244,7 @@ describe('PATCH /api/ride-requests/:id/respond', () => {
   it('returns 409 if request is already accepted', async () => {
     const { token, driver } = await registerAndLogin();
     await Driver.findByIdAndUpdate(driver.id, { isVerified: true, ratePerKm: 80 });
-    const rideRes = await request(app)
-      .post('/api/ride-requests')
+    const rideRes = await postRideRequest()
       .send(buildRideRequest(driver.id));
     const rideId = rideRes.body._id;
 
@@ -221,8 +263,7 @@ describe('PATCH /api/ride-requests/:id/respond', () => {
   it('returns 400 for an invalid action', async () => {
     const { token, driver } = await registerAndLogin();
     await Driver.findByIdAndUpdate(driver.id, { isVerified: true, ratePerKm: 80 });
-    const rideRes = await request(app)
-      .post('/api/ride-requests')
+    const rideRes = await postRideRequest()
       .send(buildRideRequest(driver.id));
 
     const res = await request(app)
@@ -239,8 +280,7 @@ describe('GET /api/ride-requests/:id/status', () => {
   it('returns the current status of a ride request', async () => {
     const { driver } = await registerAndLogin();
     await Driver.findByIdAndUpdate(driver.id, { isVerified: true, ratePerKm: 80 });
-    const rideRes = await request(app)
-      .post('/api/ride-requests')
+    const rideRes = await postRideRequest()
       .send(buildRideRequest(driver.id));
 
     const res = await request(app)

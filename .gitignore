@@ -1,17 +1,18 @@
-# Environment variables
-.env
-*.env
+# JavaScript dependencies
+**/node_modules/
 
-# Node.js
-node_modules/
+# Flutter and Dart generated files
+**/.dart_tool/
+**/build/
+**/flutter/ephemeral/
 
-# Flutter
-.dart_tool/
-build/
-
-# Android / Gradle
-.gradle/
-
-# IDE
-.idea/
+# Editor settings
 .vscode/
+**/.idea/
+
+# Local environment and service configuration (may contain credentials)
+.env
+.env.*
+!.env.example
+frontend-Customer/android/app/google-services.json
+frontend-Customer/web/maps_config.js

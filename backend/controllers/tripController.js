@@ -2,6 +2,10 @@ const { v4: uuidv4 } = require('uuid');
 const Trip = require('../models/Trip');
 const Receipt = require('../models/Receipt');
 const Driver = require('../models/Driver');
+const RideRequest = require('../models/RideRequest');
+
+const activeRideMessage =
+  'You already have an active ride. Complete or cancel it before booking another ride.';
 
 const isCustomer = (req) => req.user?.role === 'customer';
 const isDriver = (req) => req.user?.role === 'driver' || !req.user?.role;
@@ -53,6 +57,19 @@ const createTrip = async (req, res) => {
       return res.status(400).json({ message: 'driverId is required' });
     }
 
+    if (isCustomer(req)) {
+      const [activeRequest, activeTrip] = await Promise.all([
+        RideRequest.exists({ customer: req.user.id, isActive: true }),
+        Trip.exists({ customer: req.user.id, status: 'ongoing' }),
+      ]);
+      if (activeRequest || activeTrip) {
+        return res.status(409).json({
+          message: activeRideMessage,
+          code: 'ACTIVE_RIDE_EXISTS',
+        });
+      }
+    }
+
     const driver = await Driver.findById(resolvedDriverId);
     if (!driver) return res.status(404).json({ message: 'Driver not found' });
     if (isCustomer(req) && !driver.isVerified) {
@@ -74,6 +91,12 @@ const createTrip = async (req, res) => {
     });
     res.status(201).json(await populateTrip(Trip.findById(trip._id)));
   } catch (err) {
+    if (err?.code === 11000) {
+      return res.status(409).json({
+        message: activeRideMessage,
+        code: 'ACTIVE_RIDE_EXISTS',
+      });
+    }
     res.status(500).json({ message: err.message });
   }
 };
@@ -119,6 +142,11 @@ const endTrip = async (req, res) => {
     trip.endTime = new Date();
     await trip.save();
 
+    await RideRequest.updateMany(
+      { trip: trip._id, isActive: true },
+      { $set: { isActive: false } }
+    );
+
     const receipt = await createReceiptForTrip(trip);
 
     res.json({ trip: await populateTrip(Trip.findById(trip._id)), receipt });
@@ -149,6 +177,11 @@ const cancelTrip = async (req, res) => {
     trip.status = 'cancelled';
     trip.endTime = new Date();
     await trip.save();
+
+    await RideRequest.updateMany(
+      { trip: trip._id, isActive: true },
+      { $set: { isActive: false } }
+    );
 
     return res.json({ trip: await populateTrip(Trip.findById(trip._id)) });
   } catch (err) {

@@ -224,19 +224,18 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   Future<void> _selectPlaceSuggestion(_PlaceSuggestion suggestion) async {
     final point = suggestion.point;
     if (point != null) {
-      unawaited(
-        _rememberRecent(
-          _RecentPlace(
-            title: suggestion.title,
-            address: suggestion.description,
-            point: point,
-            placeId: suggestion.placeId,
+        final address = normalizeSriLankanAddress(suggestion.description);
+        unawaited(
+          _rememberRecent(
+            _RecentPlace(
+              title: suggestion.title,
+              address: address,
+              point: point,
+              placeId: suggestion.placeId,
+            ),
           ),
-        ),
-      );
-      _selectResolvedPlace(suggestion.description, point, _editingPickup);
-      return;
-    }
+        );
+        _selectResolvedPlace(address, point, _editingPickup);
 
     final placeId = suggestion.placeId;
     if (placeId == null || _resolvingPlace) return;
@@ -257,11 +256,12 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         throw const FormatException('Selected location has no coordinates');
       }
       final placeName = (data['name'] ?? suggestion.title).toString();
-      final address = buildPlaceLabel(
+      final rawAddress = buildPlaceLabel(
         name: placeName,
         address: data['address']?.toString() ?? '',
         fallback: suggestion.description,
       );
+      final address = normalizeSriLankanAddress(rawAddress);
       if (!mounted) return;
       unawaited(
         _rememberRecent(
@@ -298,7 +298,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       if (mounted) setState(() => _resolvingPlace = false);
     }
   }
-
+  }
   void _selectResolvedPlace(String name, LatLng point, bool pickup) {
     if (pickup) {
       _selectPickup(name, point);
@@ -516,10 +516,11 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
           address.isEmpty) {
         return;
       }
+      final normalized = normalizeSriLankanAddress(address);
       final isCurrentPoint =
           (_pickup.latitude - point.latitude).abs() < 0.0005 &&
           (_pickup.longitude - point.longitude).abs() < 0.0005;
-      if (isCurrentPoint) setState(() => _pickupAddress = address);
+      if (isCurrentPoint) setState(() => _pickupAddress = normalized);
     } catch (_) {
       // Coordinates remain a valid pickup even when an address is unavailable.
     } finally {
@@ -752,11 +753,12 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   }
 
   void _selectPickup(String name, LatLng point) {
-    _setSearchText(_pickupSearchController, name);
+    final address = normalizeSriLankanAddress(name);
+    _setSearchText(_pickupSearchController, address);
     _pickupFocusNode.unfocus();
     setState(() {
       _pickup = point;
-      _pickupAddress = name;
+      _pickupAddress = address;
       _pickupChangedManually = true;
       _editingPickup = false;
       _showMap = true;
@@ -770,11 +772,12 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   }
 
   void _selectDestination(String name, LatLng point) {
-    _setSearchText(_searchController, name);
+    final address = normalizeSriLankanAddress(name);
+    _setSearchText(_searchController, address);
     _pickupFocusNode.unfocus();
     setState(() {
       _destination = point;
-      _destinationAddress = name;
+      _destinationAddress = address;
       _editingPickup = false;
       _showMap = true;
     });

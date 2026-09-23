@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
 import '../models/driver_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/trip_provider.dart';
@@ -14,6 +13,17 @@ class HomeTab extends StatelessWidget {
   const HomeTab({super.key});
 
   Future<void> _startBooking(BuildContext context) async {
+    if (context.read<TripProvider>().hasOngoingTrip) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'You already have an active ride. Complete or cancel it before booking another ride.',
+          ),
+        ),
+      );
+      return;
+    }
+
     final selection = await Navigator.push<LocationSelectionResult>(
       context,
       MaterialPageRoute(builder: (_) => const LocationPickerScreen()),
