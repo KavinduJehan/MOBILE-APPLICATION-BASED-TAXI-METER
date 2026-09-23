@@ -11,9 +11,11 @@ class DriverLocationService {
   Timer? _timer;
   bool _updating = false;
   String? _lastError;
+  DateTime? _lastSuccessfulUpdate;
 
   String? get lastError => _lastError;
   bool get isRunning => _timer != null;
+  DateTime? get lastSuccessfulUpdate => _lastSuccessfulUpdate;
 
   Future<void> start() async {
     if (_timer != null) return;
@@ -71,6 +73,7 @@ class DriverLocationService {
         lng: position.longitude,
       );
       _lastError = null;
+      _lastSuccessfulUpdate = DateTime.now();
     } catch (error) {
       _lastError = error.toString();
     } finally {

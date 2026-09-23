@@ -26,6 +26,9 @@ class AuthProvider extends ChangeNotifier {
   String? get token => _token;
   DriverProfile? get profile => _profile;
   bool get isAuthenticated => _token != null;
+  String? get locationError => _locationService.lastError;
+  bool get locationUpdatesRunning => _locationService.isRunning;
+  DateTime? get lastLocationUpdate => _locationService.lastSuccessfulUpdate;
 
   String get rateMode => _rateMode;
 
@@ -44,7 +47,6 @@ class AuthProvider extends ChangeNotifier {
       _token = await SessionStore.readToken();
       if (_token != null) {
         _profile = await SessionStore.readProfile() ?? await api.getProfile();
-        await _startLocationUpdates();
       }
     } catch (error) {
       await SessionStore.clear();
@@ -64,7 +66,6 @@ class AuthProvider extends ChangeNotifier {
       _token = result.token;
       await SessionStore.saveToken(result.token);
       _profile = result.profile ?? await api.getProfile();
-      await _startLocationUpdates();
       _errorMessage = null;
     } catch (error) {
       _errorMessage = _messageFrom(error);
@@ -164,6 +165,11 @@ class AuthProvider extends ChangeNotifier {
 
   void clearError() {
     _errorMessage = null;
+    notifyListeners();
+  }
+
+  Future<void> startLocationUpdates() async {
+    await _startLocationUpdates();
     notifyListeners();
   }
 
