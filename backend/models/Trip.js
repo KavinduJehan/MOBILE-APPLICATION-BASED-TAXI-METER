@@ -22,4 +22,15 @@ const tripSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+tripSchema.index(
+  { customer: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      status: 'ongoing',
+      customer: { $type: 'objectId' },
+    },
+  }
+);
+
 module.exports = mongoose.model('Trip', tripSchema);
