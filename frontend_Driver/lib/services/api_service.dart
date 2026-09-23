@@ -119,6 +119,25 @@ class ApiService {
     );
   }
 
+  Future<Map<String, dynamic>> getDrivingRoute({
+    required double pickupLatitude,
+    required double pickupLongitude,
+    required double destinationLatitude,
+    required double destinationLongitude,
+  }) async {
+    final response = await _request(
+      'POST',
+      '/locations/route',
+      data: {
+        'pickupLat': pickupLatitude,
+        'pickupLng': pickupLongitude,
+        'destinationLat': destinationLatitude,
+        'destinationLng': destinationLongitude,
+      },
+    );
+    return _asMap(response.data);
+  }
+
   Future<List<RideRequest>> getIncomingRequests() async {
     final response = await _request('GET', '/ride-requests/incoming');
     final list = _extractList(response.data, ['requests', 'data', 'items']);

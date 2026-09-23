@@ -31,6 +31,7 @@
 
   <title>ridex_driver</title>
   <link rel="manifest" href="manifest.json">
+  <script src="maps_config.js"></script>
 </head>
 <body>
   <!--
@@ -41,6 +42,24 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
-  <script src="flutter_bootstrap.js" async></script>
+  <script>
+    const mapsApiKey = window.__GOOGLE_MAPS_API_KEY__ || "";
+    if (mapsApiKey) {
+      const mapsScript = document.createElement('script');
+      mapsScript.src = `https://maps.googleapis.com/maps/api/js?key=${mapsApiKey}`;
+      mapsScript.onload = startFlutter;
+      mapsScript.onerror = startFlutter;
+      document.head.appendChild(mapsScript);
+    } else {
+      startFlutter();
+    }
+
+    function startFlutter() {
+      const bootstrap = document.createElement('script');
+      bootstrap.src = 'flutter_bootstrap.js';
+      bootstrap.async = true;
+      document.body.appendChild(bootstrap);
+    }
+  </script>
 </body>
 </html>
