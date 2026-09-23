@@ -3,7 +3,9 @@ import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:provider/provider.dart';
 
+import '../providers/trip_provider.dart';
 import '../services/api_service.dart';
 import '../theme.dart';
 import '../utils/google_polyline.dart';
@@ -211,6 +213,14 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
   }
 
   Future<void> _sendRequest() async {
+    if (context.read<TripProvider>().hasOngoingTrip) {
+      setState(() {
+        _error =
+            'You already have an active ride. Complete or cancel it before booking another ride.';
+      });
+      return;
+    }
+
     final sameMapPoint =
         _hasMapSelection &&
         widget.initialPickupLat == widget.initialDestinationLat &&
@@ -249,6 +259,15 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
       });
 
       final requestId = resp.data['_id'] as String;
+      if (!mounted) return;
+      await context.read<TripProvider>().startDriverSearch(
+        pickupAddress: pickupAddress,
+        pickupLat: pickupLat,
+        pickupLng: pickupLng,
+        destinationAddress: destAddress,
+        destinationLat: destLat,
+        destinationLng: destLng,
+      );
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
