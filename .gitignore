@@ -10,10 +10,11 @@
 .vscode/
 **/.idea/
 
-# Local environment and service configuration (may contain credentials)
+# Local environment and service configuration
 .env
 .env.*
 !.env.example
+
+# Firebase / local frontend configuration
 frontend-Customer/android/app/google-services.json
 frontend-Customer/web/maps_config.js
-node_modules/
