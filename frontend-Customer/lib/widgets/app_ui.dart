@@ -294,7 +294,7 @@ class DriverRow extends StatelessWidget {
                     ),
                     const SizedBox(height: AppSpacing.xxs),
                     Text(
-                      '${driver.vehicleType} Ã¢â‚¬Â¢ ${driver.vehicleNumber}',
+                      '${driver.vehicleType} - ${driver.vehicleNumber}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -303,7 +303,7 @@ class DriverRow extends StatelessWidget {
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
-                      '$distance Ã¢â‚¬Â¢ $rate',
+                      '$distance - $rate',
                       style: Theme.of(
                         context,
                       ).textTheme.bodySmall?.copyWith(color: Colors.white70),

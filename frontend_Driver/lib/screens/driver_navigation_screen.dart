@@ -1,13 +1,14 @@
 import 'dart:async';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart' as google_maps;
 import 'package:latlong2/latlong.dart';
 
 import '../models/ride_request.dart';
 import '../models/trip_record.dart';
+import '../services/api_service.dart';
+import '../utils/google_polyline.dart';
 import '../widgets/app_widgets.dart';
 import 'active_trip_screen.dart';
 
@@ -34,6 +35,8 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
   bool _headingToPickup = true;
   bool _loadingRoute = false;
   String? _locationError;
+  double? _routeDistanceMeters;
+  final ApiService _api = ApiService();
 
   LatLng get _pickup => LatLng(widget.request.pickupLatitude, widget.request.pickupLongitude);
   LatLng get _destination => LatLng(widget.request.destinationLatitude, widget.request.destinationLongitude);
@@ -84,30 +87,20 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
       _locationError = null;
     });
     try {
-      // OSRM returns a route constrained to roads for the driving profile.
-      final response = await Dio().get<dynamic>(
-        'https://router.project-osrm.org/route/v1/driving/'
-        '${start.longitude},${start.latitude};${_target.longitude},${_target.latitude}',
-        queryParameters: const {
-          'overview': 'full',
-          'geometries': 'geojson',
-          'alternatives': 'false',
-        },
+      final data = await _api.getDrivingRoute(
+        pickupLatitude: start.latitude,
+        pickupLongitude: start.longitude,
+        destinationLatitude: _target.latitude,
+        destinationLongitude: _target.longitude,
       );
-      final data = response.data;
-      final routes = data is Map ? data['routes'] : null;
-      final route = routes is List && routes.isNotEmpty ? routes.first : null;
-      final geometry = route is Map ? route['geometry'] : null;
-      final coordinates = geometry is Map ? geometry['coordinates'] : null;
-      final points = coordinates is List
-          ? coordinates
-              .whereType<List>()
-              .where((point) => point.length >= 2 && point[0] is num && point[1] is num)
-              .map((point) => LatLng((point[1] as num).toDouble(), (point[0] as num).toDouble()))
-              .toList()
-          : const <LatLng>[];
+      final encodedPolyline = data['encodedPolyline']?.toString() ?? '';
+      final points = decodeGooglePolyline(encodedPolyline);
       if (!mounted) return;
-      setState(() => _roadRoute = points);
+      setState(() {
+        _roadRoute = points;
+        final distanceMeters = data['distanceMeters'];
+        _routeDistanceMeters = distanceMeters is num ? distanceMeters.toDouble() : null;
+      });
     } catch (_) {
       if (mounted) {
         setState(() => _locationError = 'Road route could not be loaded. Check your internet connection.');
@@ -120,27 +113,47 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
   @override
   Widget build(BuildContext context) {
     final routePoints = _roadRoute;
-    final distance = _driverPosition == null ? null : Geolocator.distanceBetween(
-      _driverPosition!.latitude, _driverPosition!.longitude, _target.latitude, _target.longitude,
+    final distance = _routeDistanceMeters;
+    final targetMarker = google_maps.Marker(
+      markerId: const google_maps.MarkerId('target'),
+      position: google_maps.LatLng(_target.latitude, _target.longitude),
+      icon: google_maps.BitmapDescriptor.defaultMarkerWithHue(google_maps.BitmapDescriptor.hueRed),
     );
+    final markers = <google_maps.Marker>{targetMarker};
+    if (_driverPosition != null) {
+      markers.add(
+        google_maps.Marker(
+          markerId: const google_maps.MarkerId('driver'),
+          position: google_maps.LatLng(_driverPosition!.latitude, _driverPosition!.longitude),
+          icon: google_maps.BitmapDescriptor.defaultMarkerWithHue(google_maps.BitmapDescriptor.hueAzure),
+        ),
+      );
+    }
+    final polylines = routePoints.length > 1
+        ? {
+            google_maps.Polyline(
+              polylineId: const google_maps.PolylineId('google-route'),
+              points: routePoints
+                  .map((point) => google_maps.LatLng(point.latitude, point.longitude))
+                  .toList(),
+              width: 5,
+              color: const Color(0xFF69A8FF),
+            ),
+          }
+        : <google_maps.Polyline>{};
     return Scaffold(
       appBar: AppBar(title: Text(_headingToPickup ? 'Navigate to pickup' : 'Navigate to destination')),
       body: Stack(
         children: [
-          FlutterMap(
-            options: MapOptions(initialCenter: _target, initialZoom: 14),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.ridex.driver',
-              ),
-              if (routePoints.length > 1)
-                PolylineLayer(polylines: [Polyline(points: routePoints, strokeWidth: 5, color: const Color(0xFF69A8FF))]),
-              MarkerLayer(markers: [
-                Marker(point: _target, width: 48, height: 48, child: Icon(_headingToPickup ? Icons.person_pin_circle_rounded : Icons.location_on_rounded, color: Colors.redAccent, size: 44)),
-                if (_driverPosition != null) Marker(point: _driverPosition!, width: 48, height: 48, child: const Icon(Icons.local_taxi_rounded, color: Color(0xFF69A8FF), size: 40)),
-              ]),
-            ],
+          google_maps.GoogleMap(
+            initialCameraPosition: google_maps.CameraPosition(
+              target: google_maps.LatLng(_target.latitude, _target.longitude),
+              zoom: 14,
+            ),
+            myLocationEnabled: _driverPosition != null,
+            myLocationButtonEnabled: true,
+            markers: markers,
+            polylines: polylines,
           ),
           SafeArea(
             child: Align(
@@ -154,7 +167,7 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
                   Text(_headingToPickup ? 'Pick up ${widget.request.customerName}' : 'Take passenger to destination', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 6),
                   Text(_targetAddress.isEmpty ? 'Location coordinates supplied' : _targetAddress, style: const TextStyle(color: Colors.white70)),
-                  if (distance != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text('${(distance / 1000).toStringAsFixed(1)} km away', style: const TextStyle(color: Color(0xFF69A8FF)))),
+                  if (distance != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text('${(distance / 1000).toStringAsFixed(1)} km by road', style: const TextStyle(color: Color(0xFF69A8FF)))),
                   if (_loadingRoute) const Padding(padding: EdgeInsets.only(top: 6), child: Text('Finding the best road route...', style: TextStyle(color: Colors.white70))),
                   if (_locationError != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(_locationError!, style: const TextStyle(color: Colors.orangeAccent))),
                   const SizedBox(height: 14),
@@ -165,6 +178,7 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
                         setState(() {
                           _headingToPickup = false;
                           _roadRoute = const [];
+                          _routeDistanceMeters = null;
                         });
                         _loadRoadRoute();
                       } else {
