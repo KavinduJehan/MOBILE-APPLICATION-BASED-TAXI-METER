@@ -50,6 +50,15 @@ class _WaitingForDriverScreenState extends State<WaitingForDriverScreen> {
       final data = resp.data as Map<String, dynamic>;
       final newStatus = data['status'] as String? ?? 'pending';
       final agreedRate = (data['agreedRatePerKm'] as num?)?.toDouble();
+      final suggestedRate = (data['suggestedRatePerKm'] as num?)?.toDouble();
+      final driverRate = (data['driverRatePerKm'] as num?)?.toDouble();
+      final offerDeclined =
+          newStatus == 'accepted' &&
+          suggestedRate != null &&
+          agreedRate != null &&
+          driverRate != null &&
+          agreedRate == driverRate &&
+          agreedRate != suggestedRate;
 
       if (!mounted) return;
       setState(() {
@@ -100,6 +109,7 @@ class _WaitingForDriverScreenState extends State<WaitingForDriverScreen> {
               distanceKm: widget.distanceKm,
               ratePerKm: effectiveRate,
               totalFare: totalFare ?? widget.distanceKm * effectiveRate,
+              offerDeclined: offerDeclined,
             ),
           ),
         );
@@ -301,9 +311,9 @@ class _WarpSearchPainter extends CustomPainter {
         center,
         coreRadius,
         Paint()
-          ..color = const Color(0xFF00E5FF).withValues(
-            alpha: glow == 50 ? 0.2 : (glow == 30 ? 0.38 : 0.72),
-          )
+          ..color = const Color(
+            0xFF00E5FF,
+          ).withValues(alpha: glow == 50 ? 0.2 : (glow == 30 ? 0.38 : 0.72))
           ..maskFilter = MaskFilter.blur(BlurStyle.normal, glow),
       );
     }
