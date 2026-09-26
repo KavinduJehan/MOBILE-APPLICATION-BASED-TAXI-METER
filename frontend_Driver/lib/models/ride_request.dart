@@ -32,19 +32,53 @@ class RideRequest {
   final DateTime? createdAt;
 
   factory RideRequest.fromJson(Map<String, dynamic> json) {
-    final customer = readMap(json, ['customer', 'customerDetails']) ?? const <String, dynamic>{};
+    final customer =
+        readMap(json, ['customer', 'customerDetails']) ??
+        const <String, dynamic>{};
     return RideRequest(
       id: readString(json, ['id', '_id', 'requestId']),
-      customerName: readString(json, ['customerName', 'passengerName'], fallback: readString(customer, ['name', 'fullName'], fallback: 'Customer')),
+      customerName: readString(
+        json,
+        ['customerName', 'passengerName'],
+        fallback: readString(customer, [
+          'name',
+          'fullName',
+        ], fallback: 'Customer'),
+      ),
       pickupAddress: readString(json, ['pickupAddress', 'pickup', 'from']),
-      destinationAddress: readString(json, ['destinationAddress', 'destination', 'to']),
+      destinationAddress: readString(json, [
+        'destinationAddress',
+        'destAddress',
+        'destination',
+        'to',
+      ]),
       pickupLatitude: readDouble(json, ['pickupLat', 'pickupLatitude']),
       pickupLongitude: readDouble(json, ['pickupLng', 'pickupLongitude']),
-      destinationLatitude: readDouble(json, ['destLat', 'destinationLat', 'destinationLatitude']),
-      destinationLongitude: readDouble(json, ['destLng', 'destinationLng', 'destinationLongitude']),
-      estimatedDistanceKm: readDouble(json, ['estimatedDistanceKm', 'distanceKm', 'distance']),
-      driverRatePerKm: readDouble(json, ['driverRatePerKm', 'ratePerKm', 'driverRate']),
-      suggestedRatePerKm: json['suggestedRatePerKm'] is num ? (json['suggestedRatePerKm'] as num).toDouble() : (json['suggestedRate'] is num ? (json['suggestedRate'] as num).toDouble() : null),
+      destinationLatitude: readDouble(json, [
+        'destLat',
+        'destinationLat',
+        'destinationLatitude',
+      ]),
+      destinationLongitude: readDouble(json, [
+        'destLng',
+        'destinationLng',
+        'destinationLongitude',
+      ]),
+      estimatedDistanceKm: readDouble(json, [
+        'estimatedDistanceKm',
+        'distanceKm',
+        'distance',
+      ]),
+      driverRatePerKm: readDouble(json, [
+        'driverRatePerKm',
+        'ratePerKm',
+        'driverRate',
+      ]),
+      suggestedRatePerKm: json['suggestedRatePerKm'] is num
+          ? (json['suggestedRatePerKm'] as num).toDouble()
+          : (json['suggestedRate'] is num
+                ? (json['suggestedRate'] as num).toDouble()
+                : null),
       status: readString(json, ['status'], fallback: 'pending'),
       createdAt: readDateTime(json, ['createdAt', 'requestedAt']),
     );
