@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.ridex" "\0"
-            VALUE "FileDescription", "ridex_driver" "\0"
+            VALUE "FileDescription", "RideX Driver" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "ridex_driver" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.ridex. All rights reserved." "\0"
             VALUE "OriginalFilename", "ridex_driver.exe" "\0"
-            VALUE "ProductName", "ridex_driver" "\0"
+            VALUE "ProductName", "RideX Driver" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

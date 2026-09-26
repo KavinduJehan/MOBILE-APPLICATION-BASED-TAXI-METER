@@ -4,13 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart' as google_maps;
 import 'package:latlong2/latlong.dart';
+import 'package:provider/provider.dart';
 
 import '../models/ride_request.dart';
 import '../models/trip_record.dart';
+import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import '../utils/google_polyline.dart';
 import '../widgets/app_widgets.dart';
-import 'active_trip_screen.dart';
+import 'trip_summary_screen.dart';
+
+enum _NavigationState { headingToPickup, atPickup, inProgress }
 
 class DriverNavigationScreen extends StatefulWidget {
   const DriverNavigationScreen({
@@ -30,12 +34,16 @@ class DriverNavigationScreen extends StatefulWidget {
 
 class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
   StreamSubscription<Position>? _positionSubscription;
+  Timer? _routeRefreshTimer;
   LatLng? _driverPosition;
   List<LatLng> _roadRoute = const [];
-  bool _headingToPickup = true;
+  _NavigationState _navigationState = _NavigationState.headingToPickup;
   bool _loadingRoute = false;
+  bool _actionBusy = false;
   String? _locationError;
   double? _routeDistanceMeters;
+  String? _routeDuration;
+  LatLng? _lastRouteOrigin;
   google_maps.GoogleMapController? _mapController;
   final ApiService _api = ApiService();
 
@@ -45,6 +53,9 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
     widget.request.destinationLatitude,
     widget.request.destinationLongitude,
   );
+  bool get _headingToPickup =>
+      _navigationState == _NavigationState.headingToPickup;
+  bool get _tripInProgress => _navigationState == _NavigationState.inProgress;
   LatLng get _target => _headingToPickup ? _pickup : _destination;
   String get _targetAddress => _headingToPickup
       ? widget.request.pickupAddress
@@ -91,9 +102,7 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
                 position.longitude,
               ),
             );
-            if (_roadRoute.isEmpty && !_loadingRoute) {
-              _loadRoadRoute();
-            }
+            _scheduleRouteRefresh();
           },
           onError: (_) {
             if (mounted) {
@@ -125,12 +134,36 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
   @override
   void dispose() {
     _positionSubscription?.cancel();
+    _routeRefreshTimer?.cancel();
     super.dispose();
+  }
+
+  void _scheduleRouteRefresh() {
+    if (_navigationState == _NavigationState.atPickup ||
+        _driverPosition == null ||
+        _loadingRoute) {
+      return;
+    }
+    final lastOrigin = _lastRouteOrigin;
+    if (lastOrigin != null &&
+        const Distance().as(LengthUnit.Meter, lastOrigin, _driverPosition!) <
+            75) {
+      return;
+    }
+    _routeRefreshTimer?.cancel();
+    _routeRefreshTimer = Timer(const Duration(seconds: 8), () {
+      _routeRefreshTimer = null;
+      _loadRoadRoute();
+    });
   }
 
   Future<void> _loadRoadRoute() async {
     final start = _driverPosition;
-    if (start == null || _loadingRoute) return;
+    if (start == null ||
+        _loadingRoute ||
+        _navigationState == _NavigationState.atPickup) {
+      return;
+    }
     setState(() {
       _loadingRoute = true;
       _locationError = null;
@@ -147,10 +180,12 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
       if (!mounted) return;
       setState(() {
         _roadRoute = points;
+        _lastRouteOrigin = start;
         final distanceMeters = data['distanceMeters'];
         _routeDistanceMeters = distanceMeters is num
             ? distanceMeters.toDouble()
             : null;
+        _routeDuration = _formatDuration(data['duration']);
       });
       _fitMapToRoute();
     } catch (_) {
@@ -163,6 +198,17 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
     } finally {
       if (mounted) setState(() => _loadingRoute = false);
     }
+  }
+
+  String? _formatDuration(Object? value) {
+    final raw = value?.toString().replaceFirst('s', '');
+    final seconds = int.tryParse(raw ?? '');
+    if (seconds == null) return null;
+    if (seconds < 60) return '$seconds min';
+    final minutes = (seconds / 60).round();
+    return minutes < 60
+        ? '$minutes min'
+        : '${minutes ~/ 60} hr ${minutes % 60} min';
   }
 
   void _fitMapToRoute() {
@@ -191,6 +237,87 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
         72,
       ),
     );
+  }
+
+  void _recenterMap() {
+    if (_roadRoute.length > 1) {
+      _fitMapToRoute();
+      return;
+    }
+    final controller = _mapController;
+    if (controller == null) return;
+    controller.animateCamera(
+      google_maps.CameraUpdate.newLatLngZoom(
+        google_maps.LatLng(_target.latitude, _target.longitude),
+        15,
+      ),
+    );
+  }
+
+  void _markAtPickup() {
+    if (_actionBusy) return;
+    setState(() {
+      _navigationState = _NavigationState.atPickup;
+      _roadRoute = const [];
+      _routeDistanceMeters = null;
+      _routeDuration = null;
+      _locationError = null;
+    });
+    _recenterMap();
+  }
+
+  Future<void> _startTrip() async {
+    if (_actionBusy || _navigationState != _NavigationState.atPickup) return;
+    setState(() {
+      _actionBusy = true;
+      _locationError = null;
+    });
+    try {
+      await _api.startTrip(widget.trip.id);
+      if (!mounted) return;
+      setState(() {
+        _navigationState = _NavigationState.inProgress;
+        _actionBusy = false;
+      });
+      await _loadRoadRoute();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _actionBusy = false;
+        _locationError = 'Unable to start the trip. Please try again.';
+      });
+    }
+  }
+
+  Future<void> _endTrip() async {
+    if (_actionBusy || !_tripInProgress) return;
+    final auth = context.read<AuthProvider>();
+    final navigator = Navigator.of(context);
+    setState(() {
+      _actionBusy = true;
+      _locationError = null;
+    });
+    try {
+      final result = await _api.endTrip(widget.trip.id);
+      if (!mounted) return;
+      auth.stopLocationUpdates();
+      await _positionSubscription?.cancel();
+      _positionSubscription = null;
+      navigator.pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => TripSummaryScreen(
+            trip: result.trip,
+            receiptNumber: result.receiptNumber ?? widget.receiptNumber,
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _actionBusy = false;
+        _locationError = 'Unable to end the trip. Please try again.';
+      });
+    }
   }
 
   @override
@@ -259,87 +386,104 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
             polylines: polylines,
           ),
           SafeArea(
-            child: Align(
-              alignment: Alignment.bottomCenter,
-              child: Container(
-                width: double.infinity,
-                margin: const EdgeInsets.all(16),
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0E1422),
-                  borderRadius: BorderRadius.circular(24),
+            child: Stack(
+              children: [
+                Positioned(
+                  top: 16,
+                  right: 16,
+                  child: FloatingActionButton.small(
+                    heroTag: 'recenter-navigation-map',
+                    onPressed: _recenterMap,
+                    child: const Icon(Icons.my_location),
+                  ),
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _headingToPickup
-                          ? 'Pick up ${widget.request.customerName}'
-                          : 'Take passenger to destination',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0E1422),
+                      borderRadius: BorderRadius.circular(24),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      _targetAddress.isEmpty
-                          ? 'Location coordinates supplied'
-                          : _targetAddress,
-                      style: const TextStyle(color: Colors.white70),
-                    ),
-                    if (distance != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(
-                          '${(distance / 1000).toStringAsFixed(1)} km by road',
-                          style: const TextStyle(color: Color(0xFF69A8FF)),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _navigationState == _NavigationState.headingToPickup
+                              ? 'Heading to pickup'
+                              : _navigationState == _NavigationState.atPickup
+                              ? 'At pickup'
+                              : 'Trip in progress',
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w700),
                         ),
-                      ),
-                    if (_loadingRoute)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 6),
-                        child: Text(
-                          'Finding the best road route...',
-                          style: TextStyle(color: Colors.white70),
+                        const SizedBox(height: 6),
+                        Text(
+                          _targetAddress.isEmpty
+                              ? 'Location coordinates supplied'
+                              : _targetAddress,
+                          style: const TextStyle(color: Colors.white70),
                         ),
-                      ),
-                    if (_locationError != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(
-                          _locationError!,
-                          style: const TextStyle(color: Colors.orangeAccent),
-                        ),
-                      ),
-                    const SizedBox(height: 14),
-                    PrimaryActionButton(
-                      label: _headingToPickup
-                          ? 'Passenger picked up'
-                          : 'Start active trip',
-                      onPressed: () {
-                        if (_headingToPickup) {
-                          setState(() {
-                            _headingToPickup = false;
-                            _roadRoute = const [];
-                            _routeDistanceMeters = null;
-                          });
-                          _loadRoadRoute();
-                        } else {
-                          Navigator.of(context).pushReplacement(
-                            MaterialPageRoute(
-                              builder: (_) => ActiveTripScreen(
-                                trip: widget.trip,
-                                receiptNumber: widget.receiptNumber,
+                        if (distance != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text(
+                              '${(distance / 1000).toStringAsFixed(1)} km by road',
+                              style: const TextStyle(color: Color(0xFF69A8FF)),
+                            ),
+                          ),
+                        if (_routeDuration != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'ETA $_routeDuration',
+                              style: const TextStyle(color: Colors.white70),
+                            ),
+                          ),
+                        if (_loadingRoute)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 6),
+                            child: Text(
+                              'Finding the best road route...',
+                              style: TextStyle(color: Colors.white70),
+                            ),
+                          ),
+                        if (_locationError != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text(
+                              _locationError!,
+                              style: const TextStyle(
+                                color: Colors.orangeAccent,
                               ),
                             ),
-                          );
-                        }
-                      },
+                          ),
+                        const SizedBox(height: 14),
+                        PrimaryActionButton(
+                          label:
+                              _navigationState ==
+                                  _NavigationState.headingToPickup
+                              ? 'I have arrived'
+                              : _navigationState == _NavigationState.atPickup
+                              ? 'Start Trip'
+                              : 'End Trip',
+                          isBusy: _actionBusy,
+                          onPressed:
+                              _navigationState ==
+                                  _NavigationState.headingToPickup
+                              ? _markAtPickup
+                              : _navigationState == _NavigationState.atPickup
+                              ? _startTrip
+                              : _endTrip,
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         ],

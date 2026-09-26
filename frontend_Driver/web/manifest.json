@@ -1,6 +1,6 @@
 {
-    "name": "ridex_driver",
-    "short_name": "ridex_driver",
+    "name": "RideX Driver",
+    "short_name": "RideX Driver",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
