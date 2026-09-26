@@ -50,15 +50,6 @@ class _WaitingForDriverScreenState extends State<WaitingForDriverScreen> {
       final data = resp.data as Map<String, dynamic>;
       final newStatus = data['status'] as String? ?? 'pending';
       final agreedRate = (data['agreedRatePerKm'] as num?)?.toDouble();
-      final suggestedRate = (data['suggestedRatePerKm'] as num?)?.toDouble();
-      final driverRate = (data['driverRatePerKm'] as num?)?.toDouble();
-      final offerDeclined =
-          newStatus == 'accepted' &&
-          suggestedRate != null &&
-          agreedRate != null &&
-          driverRate != null &&
-          agreedRate == driverRate &&
-          agreedRate != suggestedRate;
 
       if (!mounted) return;
       setState(() {
@@ -109,7 +100,6 @@ class _WaitingForDriverScreenState extends State<WaitingForDriverScreen> {
               distanceKm: widget.distanceKm,
               ratePerKm: effectiveRate,
               totalFare: totalFare ?? widget.distanceKm * effectiveRate,
-              offerDeclined: offerDeclined,
             ),
           ),
         );
