@@ -110,7 +110,6 @@ export default function Dashboard() {
       <div style={styles.content}>
         <div style={styles.heroCard}>
           <div>
-            <p style={styles.eyebrow}>Operations overview</p>
             <h2 style={styles.pageTitle}>Admin Dashboard</h2>
           </div>
         </div>
