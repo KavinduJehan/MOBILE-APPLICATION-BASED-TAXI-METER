@@ -3,6 +3,7 @@ import Login from './pages/Login';
 import Drivers from './pages/Drivers';
 import Trips from './pages/Trips';
 import Dashboard from './pages/Dashboard';
+import Pricing from './pages/Pricing';
 import PrivateRoute from './components/PrivateRoute';
 
 function App() {
@@ -21,6 +22,10 @@ function App() {
         <Route
           path="/trips"
           element={<PrivateRoute><Trips /></PrivateRoute>}
+        />
+        <Route
+          path="/pricing"
+          element={<PrivateRoute><Pricing /></PrivateRoute>}
         />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

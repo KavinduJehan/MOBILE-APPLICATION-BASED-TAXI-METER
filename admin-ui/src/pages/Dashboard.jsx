@@ -103,6 +103,7 @@ export default function Dashboard() {
           <button style={styles.navBtn} onClick={() => navigate('/dashboard')}>Dashboard</button>
           <button style={styles.navBtn} onClick={() => navigate('/drivers')}>Drivers</button>
           <button style={styles.navBtn} onClick={() => navigate('/trips')}>Trips</button>
+          <button style={styles.navBtn} onClick={() => navigate('/pricing')}>Pricing</button>
           <button style={{ ...styles.navBtn, color: '#ff8a8a' }} onClick={handleLogout}>Logout</button>
         </div>
       </nav>
