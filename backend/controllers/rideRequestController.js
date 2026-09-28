@@ -176,6 +176,10 @@ const respondToRequest = async (req, res) => {
       customerName: rideRequest.customerName,
       startLocation: rideRequest.pickupAddress || `${rideRequest.pickupLat},${rideRequest.pickupLng}`,
       endLocation: rideRequest.destAddress || `${rideRequest.destLat},${rideRequest.destLng}`,
+      pickupLat: rideRequest.pickupLat,
+      pickupLng: rideRequest.pickupLng,
+      destLat: rideRequest.destLat,
+      destLng: rideRequest.destLng,
       distanceKm: rideRequest.estimatedDistanceKm,
       ratePerKm: agreedRate,
       totalFare,
@@ -195,6 +199,10 @@ const respondToRequest = async (req, res) => {
         agreedRatePerKm: agreedRate,
         pickupAddress: rideRequest.pickupAddress,
         destAddress: rideRequest.destAddress,
+        pickupLat: rideRequest.pickupLat,
+        pickupLng: rideRequest.pickupLng,
+        destLat: rideRequest.destLat,
+        destLng: rideRequest.destLng,
       };
       if (rideRequest.customer) {
         io.to(rideRequest.customer.toString()).emit('request_response', acceptedPayload);

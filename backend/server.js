@@ -20,10 +20,29 @@ const io = new Server(server, {
 app.set('io', io);
 
 io.on('connection', (socket) => {
-  // Client joins their personal room by user/driver ID
+  // Client joins their personal room by user/driver ID or trip room
   socket.on('join', (userId) => {
     if (userId) {
       socket.join(userId.toString());
+    }
+  });
+
+  socket.on('join_trip', (tripId) => {
+    if (tripId) {
+      socket.join(tripId.toString());
+    }
+  });
+
+  // Low-latency direct socket driver location broadcast
+  socket.on('driver_location_update', (data) => {
+    if (!data) return;
+    const { customerId, tripId, lat, lng, driverId } = data;
+    const payload = { driverId, tripId, lat, lng };
+    if (customerId) {
+      io.to(customerId.toString()).emit('driver_location', payload);
+    }
+    if (tripId) {
+      io.to(tripId.toString()).emit('driver_location', payload);
     }
   });
 

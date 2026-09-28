@@ -48,7 +48,7 @@ const createReceiptForTrip = async (trip) => {
 };
 
 const createTrip = async (req, res) => {
-  const { driverId, startLocation, endLocation, distanceKm, customerName, startTime } = req.body;
+  const { driverId, startLocation, endLocation, distanceKm, customerName, startTime, pickupLat, pickupLng, destLat, destLng } = req.body;
   let { ratePerKm } = req.body;
 
   if (!startLocation || !endLocation || !distanceKm) {
@@ -98,6 +98,10 @@ const createTrip = async (req, res) => {
       customerName: customerName || req.user.name || 'Anonymous',
       startLocation,
       endLocation,
+      pickupLat: pickupLat ?? null,
+      pickupLng: pickupLng ?? null,
+      destLat: destLat ?? null,
+      destLng: destLng ?? null,
       distanceKm,
       ratePerKm,
       totalFare,
@@ -164,8 +168,17 @@ const endTrip = async (req, res) => {
     );
 
     const receipt = await createReceiptForTrip(trip);
+    const populatedTrip = await populateTrip(Trip.findById(trip._id));
 
-    res.json({ trip: await populateTrip(Trip.findById(trip._id)), receipt });
+    const io = req.app?.get('io');
+    if (io) {
+      const payload = { tripId: trip._id, trip: populatedTrip, receipt };
+      if (trip.customer) io.to(trip.customer.toString()).emit('trip_ended', payload);
+      if (trip.driver) io.to(trip.driver.toString()).emit('trip_ended', payload);
+      io.to(trip._id.toString()).emit('trip_ended', payload);
+    }
+
+    res.json({ trip: populatedTrip, receipt });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
