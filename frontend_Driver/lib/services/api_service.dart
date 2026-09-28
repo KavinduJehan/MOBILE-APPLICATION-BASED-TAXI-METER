@@ -103,6 +103,18 @@ class ApiService {
     return _readDouble(data, ['ratePerKm', 'averageRate', 'rate', 'value']);
   }
 
+  /// Fetches the real-time auto-calculated rate with surge breakdown.
+  /// Returns a map containing: effectiveRate, baseRate, multiplier, breakdown.
+  Future<Map<String, dynamic>> getAutoRate(String area) async {
+    final response = await _request(
+      'GET',
+      '/rates/auto',
+      auth: false,
+      queryParameters: {'area': area},
+    );
+    return _asMap(response.data);
+  }
+
   Future<Map<String, dynamic>> getPublicConfig() async {
     final response = await _request('GET', '/config/public', auth: false);
     return _asMap(response.data);
