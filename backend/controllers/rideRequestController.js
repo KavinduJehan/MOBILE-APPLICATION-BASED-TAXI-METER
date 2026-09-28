@@ -145,8 +145,14 @@ const respondToRequest = async (req, res) => {
       rideRequest.isActive = false;
       await rideRequest.save();
 
-      if (io && rideRequest.customer) {
-        io.to(rideRequest.customer.toString()).emit('request_response', {
+      if (io) {
+        if (rideRequest.customer) {
+          io.to(rideRequest.customer.toString()).emit('request_response', {
+            requestId: rideRequest._id,
+            status: 'rejected',
+          });
+        }
+        io.to(rideRequest._id.toString()).emit('request_response', {
           requestId: rideRequest._id,
           status: 'rejected',
         });
@@ -181,14 +187,19 @@ const respondToRequest = async (req, res) => {
     rideRequest.agreedRatePerKm = agreedRate;
     rideRequest.trip = trip._id;
     await rideRequest.save();
-
-    if (io && rideRequest.customer) {
-      io.to(rideRequest.customer.toString()).emit('request_response', {
+    if (io) {
+      const acceptedPayload = {
         requestId: rideRequest._id,
         status: 'accepted',
         trip,
         agreedRatePerKm: agreedRate,
-      });
+        pickupAddress: rideRequest.pickupAddress,
+        destAddress: rideRequest.destAddress,
+      };
+      if (rideRequest.customer) {
+        io.to(rideRequest.customer.toString()).emit('request_response', acceptedPayload);
+      }
+      io.to(rideRequest._id.toString()).emit('request_response', acceptedPayload);
     }
 
     res.json({ rideRequest, trip });

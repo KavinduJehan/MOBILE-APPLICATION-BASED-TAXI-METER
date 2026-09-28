@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/trip_model.dart';
 import '../providers/trip_provider.dart';
 import '../services/api_service.dart';
+import '../services/customer_socket_service.dart';
 import '../theme.dart';
 import 'trip_progress_screen.dart';
 
@@ -30,85 +31,139 @@ class _WaitingForDriverScreenState extends State<WaitingForDriverScreen> {
   String _status = 'pending';
   String? _error;
   double? _agreedRate;
+  bool _handled = false;
 
   @override
   void initState() {
     super.initState();
+    _initSocket();
     _poll(); // immediate first check
     _timer = Timer.periodic(const Duration(seconds: 3), (_) => _poll());
+  }
+
+  void _initSocket() {
+    CustomerSocketService.instance.listenToRequest(
+      requestId: widget.requestId,
+      onResponse: _onSocketResponse,
+    );
+  }
+
+  void _onSocketResponse(Map<String, dynamic> data) {
+    if (!mounted || _handled) return;
+    final status = data['status'] as String? ?? '';
+    if (status == 'accepted') {
+      _handleAccepted(data);
+    } else if (status == 'rejected') {
+      _handleRejected();
+    }
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    CustomerSocketService.instance.disconnect();
     super.dispose();
   }
 
+  Future<void> _handleAccepted(Map<String, dynamic> data) async {
+    if (_handled) return;
+    _handled = true;
+    _timer?.cancel();
+    CustomerSocketService.instance.disconnect();
+
+    final agreedRate = (data['agreedRatePerKm'] as num?)?.toDouble();
+    if (mounted) {
+      setState(() {
+        _status = 'accepted';
+        _agreedRate = agreedRate;
+        _error = null;
+      });
+    }
+
+    await context.read<TripProvider>().clearPendingSearch();
+    if (!mounted) return;
+
+    final tripObj = data['trip'] as Map<String, dynamic>?;
+    final totalFare = (tripObj?['totalFare'] as num?)?.toDouble();
+    final effectiveRate = agreedRate ?? widget.ratePerKm;
+    final trip = tripObj == null
+        ? null
+        : TripModel.fromJson({
+            ...tripObj,
+            'driver': data['driver'] ?? widget.driver,
+            'driverName': widget.driver['name'],
+            'vehicleNumber': widget.driver['vehicleNumber'],
+            'startLocation':
+                tripObj['startLocation'] ?? data['pickupAddress'],
+            'endLocation': tripObj['endLocation'] ?? data['destAddress'],
+            'distanceKm': tripObj['distanceKm'] ?? widget.distanceKm,
+            'ratePerKm': tripObj['ratePerKm'] ?? effectiveRate,
+            'totalFare':
+                tripObj['totalFare'] ??
+                double.parse(
+                  (widget.distanceKm * effectiveRate).toStringAsFixed(2),
+                ),
+          });
+
+    if (trip != null) {
+      context.read<TripProvider>().upsertTrip(trip);
+    }
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TripProgressScreen(
+          requestId: widget.requestId,
+          driver: widget.driver,
+          trip: trip,
+          distanceKm: widget.distanceKm,
+          ratePerKm: effectiveRate,
+          totalFare: totalFare ?? widget.distanceKm * effectiveRate,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleRejected() async {
+    if (_handled) return;
+    _handled = true;
+    _timer?.cancel();
+    CustomerSocketService.instance.disconnect();
+
+    if (mounted) {
+      setState(() {
+        _status = 'rejected';
+        _error = null;
+      });
+    }
+    await context.read<TripProvider>().clearPendingSearch();
+  }
+
   Future<void> _poll() async {
+    if (_handled) return;
     try {
       final resp = await ApiService.getRequestStatus(widget.requestId);
       final data = resp.data as Map<String, dynamic>;
       final newStatus = data['status'] as String? ?? 'pending';
-      final agreedRate = (data['agreedRatePerKm'] as num?)?.toDouble();
 
-      if (!mounted) return;
-      setState(() {
-        _status = newStatus;
-        _agreedRate = agreedRate;
-        _error = null;
-      });
+      if (!mounted || _handled) return;
 
       if (newStatus == 'accepted') {
-        _timer?.cancel();
-        await context.read<TripProvider>().clearPendingSearch();
-        if (!mounted) return;
-
-        // Extract totalFare from the populated trip in the status response
-        final tripObj = data['trip'] as Map<String, dynamic>?;
-        final totalFare = (tripObj?['totalFare'] as num?)?.toDouble();
-        final effectiveRate = agreedRate ?? widget.ratePerKm;
-        final trip = tripObj == null
-            ? null
-            : TripModel.fromJson({
-                ...tripObj,
-                'driver': data['driver'] ?? widget.driver,
-                'driverName': widget.driver['name'],
-                'vehicleNumber': widget.driver['vehicleNumber'],
-                'startLocation':
-                    tripObj['startLocation'] ?? data['pickupAddress'],
-                'endLocation': tripObj['endLocation'] ?? data['destAddress'],
-                'distanceKm': tripObj['distanceKm'] ?? widget.distanceKm,
-                'ratePerKm': tripObj['ratePerKm'] ?? effectiveRate,
-                'totalFare':
-                    tripObj['totalFare'] ??
-                    double.parse(
-                      (widget.distanceKm * effectiveRate).toStringAsFixed(2),
-                    ),
-              });
-
-        if (trip != null) {
-          context.read<TripProvider>().upsertTrip(trip);
-        }
-
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => TripProgressScreen(
-              requestId: widget.requestId,
-              driver: widget.driver,
-              trip: trip,
-              distanceKm: widget.distanceKm,
-              ratePerKm: effectiveRate,
-              totalFare: totalFare ?? widget.distanceKm * effectiveRate,
-            ),
-          ),
-        );
+        await _handleAccepted(data);
       } else if (newStatus == 'rejected') {
-        _timer?.cancel();
-        await context.read<TripProvider>().clearPendingSearch();
+        await _handleRejected();
+      } else {
+        final agreedRate = (data['agreedRatePerKm'] as num?)?.toDouble();
+        setState(() {
+          _status = newStatus;
+          _agreedRate = agreedRate;
+          _error = null;
+        });
       }
     } catch (e) {
-      if (mounted) setState(() => _error = 'Connection error — retrying…');
+      if (mounted && !_handled) {
+        setState(() => _error = 'Connection error — retrying…');
+      }
     }
   }
 

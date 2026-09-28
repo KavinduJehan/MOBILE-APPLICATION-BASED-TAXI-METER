@@ -1,6 +1,7 @@
 const request = require('supertest');
 const app = require('../app');
 const Driver = require('../models/Driver');
+const SystemConfig = require('../models/SystemConfig');
 const validDriver = {
   name: 'Rate Driver',
   email: 'rate@test.com',
@@ -15,6 +16,10 @@ const registerAndLogin = async (data = validDriver) => {
   const res = await request(app).post('/api/auth/register').send(data);
   return res.body.token;
 };
+
+beforeEach(async () => {
+  await SystemConfig.findOneAndUpdate({}, { rateMode: 'DRIVER' }, { upsert: true, new: true });
+});
 
 describe('PATCH /api/rates/my-rate', () => {
   it('updates the driver rate successfully', async () => {

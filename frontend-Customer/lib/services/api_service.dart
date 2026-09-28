@@ -42,6 +42,7 @@ class ApiService {
   static final Dio _dio = _buildDio();
 
   static Dio get dio => _dio;
+  static String get socketUrl => _resolveBaseUrl().replaceAll(RegExp(r'/api/?$'), '');
 
   static Dio _buildDio() {
     final dio = Dio(
