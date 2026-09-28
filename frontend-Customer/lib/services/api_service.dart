@@ -8,7 +8,7 @@ const String _configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
 
 String get _baseUrl {
   if (_configuredBaseUrl.isNotEmpty) return _configuredBaseUrl;
-  return kIsWeb ? 'http://localhost:5000/api' : 'http://172.20.10.3:5000/api';
+  return kIsWeb ? 'http://localhost:5000/api' : 'http://192.168.1.101:5000/api';
 }
 
 const String _tokenKey = 'auth_token';
@@ -32,7 +32,7 @@ String _resolveBaseUrl() {
 
   switch (defaultTargetPlatform) {
     case TargetPlatform.android:
-      return 'http://10.0.2.2:5000/api';
+      return 'http://192.168.1.101:5000/api';
     case TargetPlatform.iOS:
     case TargetPlatform.macOS:
     case TargetPlatform.windows:
