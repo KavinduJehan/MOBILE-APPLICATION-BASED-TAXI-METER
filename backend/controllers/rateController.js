@@ -62,8 +62,29 @@ const getAreaRates = async (req, res) => {
 // Public endpoint - used by both drivers (rate screen) and customers (booking).
 const getAutoRate = async (req, res) => {
   const area = (req.query.area || '').trim();
+  const overrides = {};
+  const overrideFields = [
+    ['baseRate', 'autoBaseRate', 1],
+    ['minMultiplier', 'autoMinMultiplier', 1],
+    ['maxMultiplier', 'autoMaxMultiplier', 1],
+  ];
+  for (const [queryField, configField, minimum] of overrideFields) {
+    if (req.query[queryField] === undefined) continue;
+    const value = Number(req.query[queryField]);
+    if (!Number.isFinite(value) || value < minimum) {
+      return res.status(400).json({ message: `${queryField} must be a number greater than or equal to ${minimum}` });
+    }
+    overrides[queryField] = value;
+  }
+  if (
+    overrides.minMultiplier !== undefined &&
+    overrides.maxMultiplier !== undefined &&
+    overrides.minMultiplier > overrides.maxMultiplier
+  ) {
+    return res.status(400).json({ message: 'minMultiplier cannot exceed maxMultiplier' });
+  }
   try {
-    const result = await computeAutoRate(area);
+    const result = await computeAutoRate(area, overrides);
     res.json({ area, ...result });
   } catch (err) {
     res.status(500).json({ message: err.message });

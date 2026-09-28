@@ -112,3 +112,23 @@ describe('GET /api/rates/area', () => {
     expect(res.statusCode).toBe(400);
   });
 });
+
+describe('GET /api/rates/auto', () => {
+  it('uses preview parameters and fallback area tiers when saved settings omit tiers', async () => {
+    await SystemConfig.findOneAndUpdate(
+      {},
+      { $set: { autoBaseRate: 100, autoMinMultiplier: 1, autoMaxMultiplier: 2.5, autoAreaFactors: {} } },
+      { upsert: true, new: true }
+    );
+    const res = await request(app).get('/api/rates/auto?area=Colombo&baseRate=200&minMultiplier=1&maxMultiplier=2.5');
+    expect(res.statusCode).toBe(200);
+    expect(res.body.baseRate).toBe(200);
+    expect(res.body.breakdown.areaFactor).toBe(1.15);
+    expect(res.body.effectiveRate).toBe(Number((200 * res.body.multiplier).toFixed(2)));
+  });
+
+  it('rejects invalid preview multiplier bounds', async () => {
+    const res = await request(app).get('/api/rates/auto?area=Colombo&minMultiplier=2&maxMultiplier=1');
+    expect(res.statusCode).toBe(400);
+  });
+});

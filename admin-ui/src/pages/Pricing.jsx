@@ -1,6 +1,7 @@
 ﻿import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
+import { useCallback } from 'react';
 
 // Sri Lankan city tiers for reference
 const AREA_TIERS = {
@@ -45,6 +46,7 @@ export default function Pricing() {
   const [previewLoading,  setPreviewLoading]   = useState(false);
   const [preview,         setPreview]          = useState(null);
   const [previewArea,     setPreviewArea]      = useState('Colombo');
+  const [previewDistance, setPreviewDistance]  = useState('5');
 
   useEffect(() => {
     api.get('/admin/config').then((res) => {
@@ -56,6 +58,34 @@ export default function Pricing() {
     }).catch(() => setError('Failed to load config.')).finally(() => setLoading(false));
   }, []);
 
+  const handlePreview = useCallback(async () => {
+    setPreviewLoading(true);
+    try {
+      const params = new URLSearchParams({
+        area: previewArea,
+        baseRate: String(Number(autoBaseRate)),
+        minMultiplier: String(Number(autoMinMult)),
+        maxMultiplier: String(Number(autoMaxMult)),
+      });
+      const res = await api.get(`/rates/auto?${params.toString()}`);
+      setPreview(res.data);
+    } catch {
+      setPreview({ error: 'Preview unavailable' });
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [previewArea, autoBaseRate, autoMinMult, autoMaxMult]);
+
+  useEffect(() => {
+    if (loading || rateMode !== 'AUTO') return undefined;
+    const firstRefresh = window.setTimeout(handlePreview, 250);
+    const refreshTimer = window.setInterval(handlePreview, 30000);
+    return () => {
+      window.clearTimeout(firstRefresh);
+      window.clearInterval(refreshTimer);
+    };
+  }, [loading, rateMode, handlePreview]);
+
   const handleSave = async () => {
     setSaving(true); setError(''); setSuccess('');
     try {
@@ -65,19 +95,11 @@ export default function Pricing() {
         autoMinMultiplier: Number(autoMinMult),
         autoMaxMultiplier: Number(autoMaxMult),
       });
+      if (rateMode === 'AUTO') await handlePreview();
       setSuccess('Pricing settings saved.');
     } catch (err) {
       setError(err.response?.data?.message || 'Save failed.');
     } finally { setSaving(false); }
-  };
-
-  const handlePreview = async () => {
-    setPreviewLoading(true); setPreview(null);
-    try {
-      const res = await api.get(`/rates/auto?area=${encodeURIComponent(previewArea)}`);
-      setPreview(res.data);
-    } catch { setPreview({ error: 'Preview unavailable' }); }
-    finally { setPreviewLoading(false); }
   };
 
   const handleLogout = () => { localStorage.removeItem('adminToken'); navigate('/login'); };
@@ -188,6 +210,7 @@ export default function Pricing() {
 
             {/* Live preview */}
             <div style={s.previewBox}>
+              <p style={s.hint}>Preview uses the entered base and multiplier values, along with current demand, time, weather, and area data. It refreshes every 30 seconds.</p>
               <div style={s.sectionTitle}>🔍 Live rate preview</div>
               <div style={s.previewRow}>
                 <input
@@ -196,12 +219,22 @@ export default function Pricing() {
                   placeholder="Enter area, e.g. Colombo"
                   style={{...s.input, flex: 1, marginBottom: 0}}
                 />
+                <input
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  value={previewDistance}
+                  onChange={(e) => setPreviewDistance(e.target.value)}
+                  aria-label="Trip distance in kilometers"
+                  placeholder="Distance (km)"
+                  style={{...s.input, width: '150px', marginBottom: 0}}
+                />
                 <button
                   onClick={handlePreview}
                   disabled={previewLoading}
                   style={s.previewBtn}
                 >
-                  {previewLoading ? 'Calculating…' : 'Calculate now'}
+                  {previewLoading ? 'Calculating…' : 'Refresh rate'}
                 </button>
               </div>
               {preview && !preview.error && (
@@ -210,6 +243,12 @@ export default function Pricing() {
                     Rs. {preview.effectiveRate?.toFixed(2)} / km
                     <span style={s.previewMult}> ({preview.multiplier?.toFixed(2)}× surge)</span>
                   </div>
+                  {Number(previewDistance) > 0 && (
+                    <div style={s.previewFare}>
+                      Estimated trip fare: Rs. {(preview.effectiveRate * Number(previewDistance)).toFixed(2)}
+                      <span style={s.hint}> ({Number(previewDistance).toFixed(1)} km × current rate)</span>
+                    </div>
+                  )}
                   <div style={s.breakdownGrid}>
                     {[
                       ['🚗 Demand/supply', `${preview.breakdown?.availableDrivers} drivers · ${preview.breakdown?.activeRequests} requests`, preview.breakdown?.demandSupplyFactor],
@@ -293,6 +332,7 @@ const s = {
   previewBtn:  { background: 'linear-gradient(135deg,#1a1a2e,#27314d)', color: '#fff', border: 'none', padding: '0.6rem 1.1rem', borderRadius: '10px', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 600 },
   previewResult: { background: '#fff', borderRadius: '12px', padding: '1rem' },
   previewRate: { fontSize: '1.5rem', fontWeight: 800, color: '#1a1a2e', marginBottom: '0.8rem' },
+  previewFare: { background: '#eafaf1', color: '#1e8449', borderRadius: '10px', padding: '0.75rem 0.9rem', marginBottom: '0.85rem', fontWeight: 700 },
   previewMult: { fontSize: '1rem', color: '#f39c12' },
   breakdownGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px,1fr))', gap: '0.75rem' },
   breakdownCell: { background: '#f8fafe', borderRadius: '10px', padding: '0.7rem' },
