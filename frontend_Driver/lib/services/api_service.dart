@@ -92,6 +92,28 @@ class ApiService {
     await _request('PATCH', '/rates/my-rate', data: {'ratePerKm': ratePerKm});
   }
 
+  /// Update editable driver profile fields.
+  Future<DriverProfile> updateProfile({
+    required String name,
+    required String email,
+    required String phone,
+    required String vehicleNumber,
+    required String area,
+  }) async {
+    final response = await _request(
+      'PATCH',
+      '/drivers/profile',
+      data: {
+        'name': name,
+        'email': email,
+        'phone': phone,
+        'vehicleNumber': vehicleNumber,
+        'area': area,
+      },
+    );
+    return DriverProfile.fromJson(_asMap(response.data));
+  }
+
   Future<double> getAreaRate(String area) async {
     final response = await _request(
       'GET',
