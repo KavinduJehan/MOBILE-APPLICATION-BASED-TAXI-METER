@@ -241,6 +241,10 @@ const getMyTrips = async (req, res) => {
 const getIncome = async (req, res) => {
   try {
     const trips = await Trip.find({ driver: req.user.id, status: 'completed' });
+    const cancelledTrips = await Trip.countDocuments({
+      driver: req.user.id,
+      status: { $in: ['cancelled', 'canceled'] },
+    });
 
     const totalEarnings = parseFloat(
       trips.reduce((sum, t) => sum + t.totalFare, 0).toFixed(2)
@@ -256,7 +260,13 @@ const getIncome = async (req, res) => {
       byDay[day] = parseFloat(((byDay[day] || 0) + t.totalFare).toFixed(2));
     }
 
-    res.json({ totalEarnings, totalTrips, byDay });
+    res.json({
+      totalEarnings,
+      totalTrips,
+      completedTrips: totalTrips,
+      cancelledTrips,
+      byDay,
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

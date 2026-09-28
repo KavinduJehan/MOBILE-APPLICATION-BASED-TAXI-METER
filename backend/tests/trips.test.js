@@ -191,6 +191,8 @@ describe('GET /api/trips/income', () => {
     expect(res.statusCode).toBe(200);
     expect(res.body.totalEarnings).toBe(38 * 75);
     expect(res.body.totalTrips).toBe(1);
+    expect(res.body.completedTrips).toBe(1);
+    expect(res.body.cancelledTrips).toBe(0);
     expect(Object.keys(res.body.byDay).length).toBe(1);
   });
 
