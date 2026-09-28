@@ -10,6 +10,7 @@ class DriverProfile {
     required this.vehicleNumber,
     required this.area,
     required this.ratePerKm,
+    this.pricingMode = 'ADMIN',
     required this.isVerified,
     required this.qrCode,
   });
@@ -22,6 +23,7 @@ class DriverProfile {
   final String vehicleNumber;
   final String area;
   final double ratePerKm;
+  final String pricingMode;
   final bool isVerified;
   final String qrCode;
 
@@ -35,6 +37,7 @@ class DriverProfile {
       vehicleNumber: readString(json, ['vehicleNumber', 'vehicleNo', 'vehicle']),
       area: readString(json, ['area', 'serviceArea']),
       ratePerKm: readDouble(json, ['ratePerKm', 'rate', 'perKmRate']),
+      pricingMode: readString(json, ['pricingMode'], fallback: 'ADMIN'),
       isVerified: readBool(json, ['isVerified', 'verified']),
       qrCode: readString(json, ['qrCode', 'qr_code', 'qrImage']),
     );
@@ -49,6 +52,7 @@ class DriverProfile {
     String? vehicleNumber,
     String? area,
     double? ratePerKm,
+    String? pricingMode,
     bool? isVerified,
     String? qrCode,
   }) {
@@ -61,6 +65,7 @@ class DriverProfile {
       vehicleNumber: vehicleNumber ?? this.vehicleNumber,
       area: area ?? this.area,
       ratePerKm: ratePerKm ?? this.ratePerKm,
+      pricingMode: pricingMode ?? this.pricingMode,
       isVerified: isVerified ?? this.isVerified,
       qrCode: qrCode ?? this.qrCode,
     );

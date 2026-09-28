@@ -54,6 +54,17 @@ describe('PATCH /api/rates/my-rate', () => {
     const res = await request(app).patch('/api/rates/my-rate').send({ ratePerKm: 85 });
     expect(res.statusCode).toBe(401);
   });
+
+  it.each(['ADMIN', 'AUTO'])('blocks driver rate changes in %s mode', async (pricingMode) => {
+    const token = await registerAndLogin();
+    await Driver.findOneAndUpdate({ email: validDriver.email }, { pricingMode, ratePerKm: 70 });
+    const res = await request(app)
+      .patch('/api/rates/my-rate')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ ratePerKm: 90 });
+    expect(res.statusCode).toBe(403);
+    expect((await Driver.findOne({ email: validDriver.email })).ratePerKm).toBe(70);
+  });
 });
 
 describe('GET /api/rates/area', () => {

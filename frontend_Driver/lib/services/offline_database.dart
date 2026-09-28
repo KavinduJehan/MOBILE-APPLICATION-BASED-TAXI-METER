@@ -34,7 +34,7 @@ class OfflineDatabase {
 
     return await openDatabase(
       dbPath,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         // Table for storing trips (both offline-created and cached)
         await db.execute('''
@@ -67,10 +67,16 @@ class OfflineDatabase {
             vehicle_number TEXT,
             area TEXT,
             rate_per_km REAL,
+            pricing_mode TEXT DEFAULT 'ADMIN',
             is_verified INTEGER,
             updated_at INTEGER
           )
         ''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute("ALTER TABLE cached_profile ADD COLUMN pricing_mode TEXT DEFAULT 'ADMIN'");
+        }
       },
     );
   }
@@ -281,6 +287,7 @@ class OfflineDatabase {
         'vehicle_number': profile.vehicleNumber,
         'area': profile.area,
         'rate_per_km': profile.ratePerKm,
+        'pricing_mode': profile.pricingMode,
         'is_verified': profile.isVerified ? 1 : 0,
         'updated_at': DateTime.now().millisecondsSinceEpoch,
       },
@@ -303,6 +310,7 @@ class OfflineDatabase {
       vehicleNumber: (row['vehicle_number'] as String?) ?? '',
       area: (row['area'] as String?) ?? '',
       ratePerKm: (row['rate_per_km'] as num?)?.toDouble() ?? 0.0,
+      pricingMode: (row['pricing_mode'] as String?) ?? 'ADMIN',
       isVerified: (row['is_verified'] as int?) == 1,
       qrCode: '',
     );

@@ -1,35 +1,34 @@
 const Driver = require('../models/Driver');
-const SystemConfig = require('../models/SystemConfig');
 const { computeAutoRate } = require('../services/pricingEngine');
 
 // PATCH /api/rates/my-rate
 // Blocked when rateMode is ADMIN or AUTO (algorithm owns the rate in AUTO mode)
 const updateRate = async (req, res) => {
   const { ratePerKm } = req.body;
-  if (ratePerKm === undefined || ratePerKm < 0) {
-    return res.status(400).json({ message: 'Valid ratePerKm is required' });
+  if (ratePerKm === undefined || !Number.isFinite(Number(ratePerKm)) || Number(ratePerKm) <= 0) {
+    return res.status(400).json({ message: 'ratePerKm must be a positive number' });
   }
 
   try {
-    let config = await SystemConfig.findOne();
-    if (!config) config = await SystemConfig.create({});
+    if (req.user?.role !== 'driver') {
+      return res.status(403).json({ message: 'Only drivers can update their own rate.' });
+    }
+    const driver = await Driver.findById(req.user.id).select('-password');
+    if (!driver) return res.status(404).json({ message: 'Driver not found' });
 
-    if (config.rateMode === 'ADMIN') {
+    if (driver.pricingMode === 'ADMIN') {
       return res.status(403).json({ message: 'Rates are controlled by the regulator.' });
     }
-    if (config.rateMode === 'AUTO') {
+    if (driver.pricingMode === 'AUTO') {
       return res.status(403).json({
         message: 'Auto-pricing is active. Your rate is set by the algorithm.',
         rateMode: 'AUTO',
       });
     }
 
-    const driver = await Driver.findByIdAndUpdate(
-      req.user.id,
-      { ratePerKm },
-      { new: true }
-    ).select('-password');
-    res.json(driver);
+    driver.ratePerKm = Number(ratePerKm);
+    await driver.save();
+    res.json(driver.toJSON());
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

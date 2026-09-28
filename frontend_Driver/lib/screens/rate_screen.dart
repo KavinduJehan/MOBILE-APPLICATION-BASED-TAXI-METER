@@ -90,6 +90,7 @@ class _RateScreenState extends State<RateScreen> {
     final auth    = context.watch<AuthProvider>();
     final profile = auth.profile;
     final isAuto  = auth.rateMode == 'AUTO';
+    final isAdmin = auth.rateMode == 'ADMIN';
 
     return AppShellScaffold(
       appBar: AppBar(title: const Text('Rate')),
@@ -110,10 +111,12 @@ class _RateScreenState extends State<RateScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SectionTitle(
-                    title: isAuto ? 'Auto-calculated rate' : 'Profile rate',
+                    title: isAuto ? 'Auto Surge Pricing' : isAdmin ? 'Admin-Controlled Pricing' : 'Driver-Set Pricing',
                     subtitle: isAuto
-                        ? 'Your rate is set by the surge pricing algorithm.'
-                        : 'Adjust the amount you charge per kilometer.',
+                        ? 'Your current rate is calculated by the live surge pricing algorithm.'
+                        : isAdmin
+                            ? 'The regulator controls your rate. You can view it here but cannot change it.'
+                            : 'You control your rate. Adjust the amount you charge per kilometer.',
                   ),
                   const SizedBox(height: 18),
                   InfoRow(label: 'Name',    value: profile?.name ?? '-'),
@@ -123,22 +126,23 @@ class _RateScreenState extends State<RateScreen> {
                   const SizedBox(height: 10),
 
                   if (!isAuto) ...[
-                    // Manual / Admin mode: show the text field
                     Form(
                       key: _formKey,
                       child: TextFormField(
                         controller: _rateCtrl,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        enabled: auth.rateMode != 'ADMIN',
+                        enabled: !isAdmin,
                         decoration: InputDecoration(
                           labelText: 'Rate per km',
                           suffixText: 'Rs',
-                          helperText: _areaAverage == null
-                              ? 'Area average unavailable'
-                              : 'Area average: Rs. ${_areaAverage!.toStringAsFixed(2)}',
+                          helperText: isAdmin
+                              ? 'Controlled rate set by the regulator'
+                              : _areaAverage == null
+                                  ? 'Area average unavailable'
+                                  : 'Area average: Rs. ${_areaAverage!.toStringAsFixed(2)}',
                         ),
                         validator: (value) {
-                          if (auth.rateMode == 'ADMIN') return null;
+                          if (isAdmin) return null;
                           final parsed = double.tryParse(value?.trim() ?? '');
                           if (parsed == null || parsed <= 0) return 'Enter a valid rate';
                           return null;
@@ -146,23 +150,23 @@ class _RateScreenState extends State<RateScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    if (auth.rateMode == 'ADMIN') ...[
-                      _modeNoticeBox(
-                        Colors.orange,
-                        'Rates are controlled by the regulator. You cannot change your rate.',
-                      ),
+                    if (isAdmin) ...[
+                      _modeNoticeBox(Colors.orange, 'Admin-controlled rate. Only the regulator can change this pricing.'),
+                      const SizedBox(height: 20),
+                    ] else ...[
+                      _modeNoticeBox(const Color(0xFF27AE60), 'Driver-set rate. You control your price per kilometer.'),
                       const SizedBox(height: 20),
                     ],
                     PrimaryActionButton(
                       label: 'Save Rate',
                       isBusy: auth.busy,
-                      onPressed: auth.rateMode == 'ADMIN' ? null : _save,
+                      onPressed: isAdmin ? null : _save,
                     ),
                   ] else ...[
                     // AUTO mode: big live rate display
                     _modeNoticeBox(
                       const Color(0xFF6C7CFF),
-                      'Smart auto-pricing is active. The algorithm sets your rate in real time.',
+                      'Auto Surge Pricing is active. Demand, time, weather, and area tier determine your rate.',
                     ),
                     const SizedBox(height: 20),
                     if (_autoLoading)

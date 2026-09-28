@@ -182,6 +182,32 @@ describe('PATCH /api/admin/drivers/:id/verify', () => {
   });
 });
 
+describe('PATCH /api/admin/drivers/:id/pricing', () => {
+  it.each(['DRIVER', 'ADMIN', 'AUTO'])('assigns %s pricing to an individual driver', async (pricingMode) => {
+    const { driver } = await registerDriver();
+    const adminToken = await createRegulatorAndLogin();
+    const res = await request(app)
+      .patch(`/api/admin/drivers/${driver.id}/pricing`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ pricingMode, ...(pricingMode === 'ADMIN' ? { ratePerKm: 88 } : {}) });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.pricingMode).toBe(pricingMode);
+    if (pricingMode === 'ADMIN') expect(res.body.ratePerKm).toBe(88);
+    const stored = await Driver.findById(driver.id);
+    expect(stored.pricingMode).toBe(pricingMode);
+  });
+
+  it('rejects unsupported pricing modes', async () => {
+    const { driver } = await registerDriver();
+    const adminToken = await createRegulatorAndLogin();
+    const res = await request(app)
+      .patch(`/api/admin/drivers/${driver.id}/pricing`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ pricingMode: 'OTHER' });
+    expect(res.statusCode).toBe(400);
+  });
+});
+
 // ─── GET /api/admin/trips ────────────────────────────────────────────────────
 
 describe('GET /api/admin/trips', () => {

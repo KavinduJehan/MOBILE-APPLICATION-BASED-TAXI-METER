@@ -32,7 +32,6 @@ const MODE_INFO = {
 
 export default function Pricing() {
   const navigate = useNavigate();
-  const [config,  setConfig]  = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState('');
@@ -50,7 +49,6 @@ export default function Pricing() {
   useEffect(() => {
     api.get('/admin/config').then((res) => {
       const c = res.data;
-      setConfig(c);
       setRateMode(c.rateMode       || 'ADMIN');
       setAutoBaseRate(c.autoBaseRate    ?? 100);
       setAutoMinMult (c.autoMinMultiplier ?? 1.0);
@@ -107,7 +105,7 @@ export default function Pricing() {
 
       <div style={s.content}>
         <h2 style={s.pageTitle}>Pricing Settings</h2>
-        <p style={s.subtitle}>Control how driver rates are determined across the platform.</p>
+        <p style={s.subtitle}>Set the default pricing method for new drivers and configure shared Auto Surge Pricing. Assign or change a method for each driver in Driver Management.</p>
 
         {error   && <div style={s.alertErr}>{error}</div>}
         {success && <div style={s.alertOk}>{success}</div>}

@@ -21,6 +21,7 @@ class SessionStore {
         'vehicleNumber': profile.vehicleNumber,
         'area': profile.area,
         'ratePerKm': profile.ratePerKm,
+        'pricingMode': profile.pricingMode,
         'isVerified': profile.isVerified,
         'qrCode': profile.qrCode,
       }));

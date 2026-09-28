@@ -8,6 +8,8 @@ export default function Drivers() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [rateDrafts, setRateDrafts] = useState({});
+  const [savingPricing, setSavingPricing] = useState({});
   const navigate = useNavigate();
 
   const fetchDrivers = async (currentFilter) => {
@@ -34,6 +36,21 @@ export default function Drivers() {
       fetchDrivers(filter);
     } catch (err) {
       alert('Failed to update driver: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
+  const handlePricing = async (driver, pricingMode, ratePerKm) => {
+    setSavingPricing((current) => ({ ...current, [driver._id]: true }));
+    try {
+      await api.patch(`/admin/drivers/${driver._id}/pricing`, {
+        pricingMode,
+        ...(ratePerKm === undefined ? {} : { ratePerKm: Number(ratePerKm) }),
+      });
+      await fetchDrivers(filter);
+    } catch (err) {
+      alert('Failed to update pricing: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setSavingPricing((current) => ({ ...current, [driver._id]: false }));
     }
   };
 
@@ -117,7 +134,7 @@ export default function Drivers() {
           <div style={styles.skeletonWrapper}>
             {Array.from({ length: 5 }).map((_, index) => (
               <div key={index} style={styles.skeletonRow}>
-                {Array.from({ length: 9 }).map((__, cellIndex) => (
+                {Array.from({ length: 10 }).map((__, cellIndex) => (
                   <div key={cellIndex} style={styles.skeletonCell} />
                 ))}
               </div>
@@ -141,6 +158,7 @@ export default function Drivers() {
                   <th style={styles.th}>Vehicle</th>
                   <th style={styles.th}>Area</th>
                   <th style={styles.th}>Rate/km</th>
+                  <th style={styles.th}>Pricing method</th>
                   <th style={styles.th}>Status</th>
                   <th style={styles.th}>Actions</th>
                 </tr>
@@ -155,6 +173,36 @@ export default function Drivers() {
                     <td style={styles.td}>{d.vehicleNumber}</td>
                     <td style={styles.td}>{d.area || '—'}</td>
                     <td style={styles.td}>{d.ratePerKm > 0 ? `LKR ${d.ratePerKm}` : '—'}</td>
+                    <td style={styles.td}>
+                      <span style={styles.pricingBadge}>{({ DRIVER: 'Driver-Set Pricing', ADMIN: 'Admin-Controlled Pricing', AUTO: 'Auto Surge Pricing' })[d.pricingMode] || 'Admin-Controlled Pricing'}</span>
+                      <select
+                        aria-label={`Pricing method for ${d.name}`}
+                        value={d.pricingMode || 'ADMIN'}
+                        disabled={savingPricing[d._id]}
+                        onChange={(event) => handlePricing(d, event.target.value)}
+                        style={styles.pricingSelect}
+                      >
+                        <option value="DRIVER">Driver-Set Pricing</option>
+                        <option value="ADMIN">Admin-Controlled Pricing</option>
+                        <option value="AUTO">Auto Surge Pricing</option>
+                      </select>
+                      {d.pricingMode === 'ADMIN' && (
+                        <div style={styles.rateEditor}>
+                          <input
+                            aria-label={`Controlled rate for ${d.name}`}
+                            type="number" min="0.01" step="0.01"
+                            value={rateDrafts[d._id] ?? d.ratePerKm ?? ''}
+                            onChange={(event) => setRateDrafts((current) => ({ ...current, [d._id]: event.target.value }))}
+                            style={styles.rateInput}
+                          />
+                          <button
+                            style={styles.rateSave}
+                            disabled={savingPricing[d._id]}
+                            onClick={() => handlePricing(d, 'ADMIN', rateDrafts[d._id] ?? d.ratePerKm)}
+                          >Save rate</button>
+                        </div>
+                      )}
+                    </td>
                     <td style={styles.td}>
                       <span style={d.isVerified ? styles.badgeGreen : styles.badgeOrange}>
                         {d.isVerified ? 'Verified' : 'Pending'}
@@ -226,6 +274,11 @@ const styles = {
   td: { padding: '0.85rem 1rem', fontSize: '0.92rem', color: '#333' },
   badgeGreen: { background: '#d4edda', color: '#155724', padding: '0.2rem 0.6rem', borderRadius: '12px', fontSize: '0.8rem' },
   badgeOrange: { background: '#fff3cd', color: '#856404', padding: '0.2rem 0.6rem', borderRadius: '12px', fontSize: '0.8rem' },
+  pricingBadge: { display: 'inline-block', background: '#e8edff', color: '#4658c8', padding: '0.25rem 0.55rem', borderRadius: '999px', fontSize: '0.76rem', fontWeight: 700, whiteSpace: 'nowrap' },
+  pricingSelect: { display: 'block', marginTop: '0.45rem', padding: '0.4rem', border: '1px solid #d2ddec', borderRadius: '8px', minWidth: '180px', background: '#fff' },
+  rateEditor: { display: 'flex', gap: '0.35rem', marginTop: '0.4rem' },
+  rateInput: { width: '95px', padding: '0.35rem', border: '1px solid #d2ddec', borderRadius: '7px' },
+  rateSave: { background: '#27314d', color: '#fff', border: 'none', padding: '0.35rem 0.55rem', borderRadius: '7px', cursor: 'pointer', whiteSpace: 'nowrap' },
   btnApprove: { background: '#27ae60', color: '#fff', border: 'none', padding: '0.35rem 0.8rem', borderRadius: '4px', cursor: 'pointer' },
   btnReject: { background: '#e74c3c', color: '#fff', border: 'none', padding: '0.35rem 0.8rem', borderRadius: '4px', cursor: 'pointer' },
   info: { color: '#888', textAlign: 'center', marginTop: '2rem' },

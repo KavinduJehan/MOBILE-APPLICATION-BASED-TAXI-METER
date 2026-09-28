@@ -52,6 +52,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
             const SizedBox(height: 20),
+            if (profile != null) ...[
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6C7CFF).withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: const Color(0xFF6C7CFF).withValues(alpha: 0.3)),
+                  ),
+                  child: Text(
+                    'Pricing mode: ${auth.rateMode == 'DRIVER' ? 'Driver-Set' : auth.rateMode == 'AUTO' ? 'Auto Surge' : 'Admin-Controlled'}',
+                    style: const TextStyle(color: Color(0xFFAEB8FF), fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+            ],
             if (profile != null && !profile.isVerified)
               Container(
                 padding: const EdgeInsets.all(16),
@@ -116,8 +134,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 12),
             ActionCard(
-              title: 'Update Rate',
-              subtitle: 'Keep your per-km rate current.',
+              title: 'Pricing',
+              subtitle: auth.rateMode == 'DRIVER' ? 'View and update your driver-set rate.' : 'View your current rate and pricing mode.',
               icon: Icons.price_change_rounded,
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RateScreen())),
             ),

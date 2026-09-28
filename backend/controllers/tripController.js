@@ -3,7 +3,6 @@ const Trip = require('../models/Trip');
 const Receipt = require('../models/Receipt');
 const Driver = require('../models/Driver');
 const RideRequest = require('../models/RideRequest');
-const SystemConfig = require('../models/SystemConfig');
 const { computeAutoRate } = require('../services/pricingEngine');
 
 const activeRideMessage =
@@ -80,15 +79,17 @@ const createTrip = async (req, res) => {
       return res.status(403).json({ message: 'Driver is not verified' });
     }
 
-    // AUTO mode: override whatever ratePerKm was sent with the algorithm result
+    // The driver's saved pricing mode is authoritative; never trust a submitted rate for ADMIN/AUTO.
     let surgeBreakdown = null;
-    const config = await SystemConfig.findOne();
-    if (config?.rateMode === 'AUTO') {
+    if (driver.pricingMode === 'AUTO') {
       const priceResult = await computeAutoRate(driver.area || '');
       ratePerKm     = priceResult.effectiveRate;
       surgeBreakdown = priceResult.breakdown;
-    } else if (!ratePerKm) {
-      return res.status(400).json({ message: 'ratePerKm is required' });
+    } else {
+      ratePerKm = driver.ratePerKm;
+      if (!Number.isFinite(ratePerKm) || ratePerKm <= 0) {
+        return res.status(400).json({ message: 'The driver does not have a valid rate configured' });
+      }
     }
 
     const totalFare = parseFloat((distanceKm * ratePerKm).toFixed(2));
@@ -296,6 +297,8 @@ const syncOfflineTrips = async (req, res) => {
   try {
     const syncedTrips = [];
     const idMap = {}; // localId -> serverId
+    const driver = await Driver.findById(req.user.id);
+    if (!driver) return res.status(404).json({ message: 'Driver not found' });
 
     for (const item of trips) {
       const receiptNo = item.receiptNumber || `REC-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -309,8 +312,20 @@ const syncOfflineTrips = async (req, res) => {
       }
 
       const distanceKm = Number(item.distanceKm) || 0;
-      const ratePerKm = Number(item.ratePerKm) || 0;
-      const totalFare = Number(item.totalFare || item.fare) || parseFloat((distanceKm * ratePerKm).toFixed(2));
+      let ratePerKm = Number(item.ratePerKm) || 0;
+      let surgeBreakdown = item.surgeBreakdown || null;
+      if (driver.pricingMode === 'ADMIN') {
+        ratePerKm = driver.ratePerKm;
+        surgeBreakdown = null;
+      } else if (driver.pricingMode === 'AUTO') {
+        const priceResult = await computeAutoRate(driver.area || '');
+        ratePerKm = priceResult.effectiveRate;
+        surgeBreakdown = priceResult.breakdown;
+      }
+      if (!Number.isFinite(ratePerKm) || ratePerKm <= 0) {
+        return res.status(400).json({ message: 'A valid rate is required to sync offline trips' });
+      }
+      const totalFare = parseFloat((distanceKm * ratePerKm).toFixed(2));
       const startTime = item.startTime ? new Date(item.startTime) : (item.date ? new Date(item.date) : new Date());
       const endTime = item.endTime ? new Date(item.endTime) : new Date();
 
@@ -325,7 +340,7 @@ const syncOfflineTrips = async (req, res) => {
         startTime,
         endTime,
         status: item.status || 'completed',
-        surgeBreakdown: item.surgeBreakdown || null,
+        surgeBreakdown,
         syncedToCloud: true,
       });
 

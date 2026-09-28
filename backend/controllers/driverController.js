@@ -36,6 +36,7 @@ const publicDriverProjection = {
   vehicleNumber: 1,
   vehicleType: 1,
   ratePerKm: 1,
+  pricingMode: 1,
   area: 1,
   qrCode: 1,
   isVerified: 1,
@@ -64,6 +65,7 @@ const updateQRCode = async (req, res) => {
       vehicleNumber: driver.vehicleNumber,
       area: driver.area,
       ratePerKm: driver.ratePerKm,
+      pricingMode: driver.pricingMode,
     });
 
     const qrCode = await QRCode.toDataURL(qrPayload);
@@ -90,7 +92,7 @@ const getNearbyDrivers = async (req, res) => {
 
     if (!hasPickup) {
       const drivers = await Driver.find(baseMatch)
-        .select('name vehicleNumber vehicleType ratePerKm area qrCode isVerified location')
+        .select('name vehicleNumber vehicleType ratePerKm pricingMode area qrCode isVerified location')
         .lean();
       return res.json(drivers);
     }
@@ -189,5 +191,4 @@ const updateLocation = async (req, res) => {
 };
 
 module.exports = { getDriverProfile, updateDriverProfile, updateQRCode, getNearbyDrivers, getDriverByQR, updateLocation };
-
 
