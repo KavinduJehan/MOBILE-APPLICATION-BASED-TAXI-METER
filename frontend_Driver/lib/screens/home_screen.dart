@@ -1,10 +1,11 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/ride_request.dart';
 import '../providers/auth_provider.dart';
+import '../services/socket_service.dart';
 import '../theme/app_theme.dart';
 import 'dashboard_screen.dart';
 import 'earnings_screen.dart';
@@ -51,6 +52,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   @override
   void dispose() {
     _requestTimer?.cancel();
+    DriverSocketService.instance.disconnect();
     super.dispose();
   }
 
@@ -81,6 +83,24 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   void _startRequestNotifications() {
     if (_requestCheckStarted) return;
     _requestCheckStarted = true;
+
+    // Connect to WebSocket for instant real-time dispatch
+    final profile = context.read<AuthProvider>().profile;
+    if (profile != null && profile.id.isNotEmpty) {
+      DriverSocketService.instance.init(
+        driverId: profile.id,
+        onNewRequest: (request) {
+          if (!mounted) return;
+          if (!_knownRequestIds.contains(request.id)) {
+            _knownRequestIds.add(request.id);
+            setState(() => _pendingRequestCount += 1);
+            _showNewRequestDialog(request);
+          }
+        },
+      );
+    }
+
+    // Silent background polling fallback every 3s
     _checkForRequests();
     _requestTimer = Timer.periodic(const Duration(seconds: 3), (_) => _checkForRequests());
   }
