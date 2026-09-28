@@ -137,6 +137,12 @@ class ApiService {
     return _asMap(response.data);
   }
 
+  /// Fetch the receipt for a completed trip.
+  Future<Map<String, dynamic>> getReceiptForTrip(String tripId) async {
+    final response = await _request('GET', '/receipts/trip/$tripId');
+    return _asMap(response.data);
+  }
+
   Future<Map<String, dynamic>> getPublicConfig() async {
     final response = await _request('GET', '/config/public', auth: false);
     return _asMap(response.data);

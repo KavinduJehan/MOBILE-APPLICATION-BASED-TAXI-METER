@@ -12,6 +12,7 @@ class TripRecord {
     required this.status,
     required this.date,
     this.receiptNumber,
+    this.surgeBreakdown,
   });
 
   final String id;
@@ -24,6 +25,8 @@ class TripRecord {
   final String status;
   final DateTime? date;
   final String? receiptNumber;
+  /// Non-null when the trip was priced under AUTO mode.
+  final Map<String, dynamic>? surgeBreakdown;
 
   factory TripRecord.fromJson(Map<String, dynamic> json) {
     return TripRecord(
@@ -37,6 +40,7 @@ class TripRecord {
       status: readString(json, ['status'], fallback: 'completed'),
       date: readDateTime(json, ['date', 'createdAt', 'completedAt', 'endedAt']),
       receiptNumber: readString(json, ['receiptNumber', 'receiptId'], fallback: ''),
+      surgeBreakdown: readMap(json, ['surgeBreakdown']),
     );
   }
 
