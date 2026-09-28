@@ -46,6 +46,34 @@ class ApiService {
     );
   }
 
+  Future<Map<String, dynamic>> forgotPassword(String email) async {
+    final response = await _request(
+      'POST',
+      '/auth/forgot-password',
+      auth: false,
+      data: {'email': email},
+    );
+    return _asMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> resetPassword({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    final response = await _request(
+      'POST',
+      '/auth/reset-password',
+      auth: false,
+      data: {
+        'email': email,
+        'code': code,
+        'newPassword': newPassword,
+      },
+    );
+    return _asMap(response.data);
+  }
+
   Future<String> register({
     required String name,
     required String phone,

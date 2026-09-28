@@ -85,6 +85,42 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  Future<Map<String, dynamic>> forgotPassword(String email) async {
+    _setBusy(true);
+    try {
+      final res = await api.forgotPassword(email);
+      _errorMessage = null;
+      return res;
+    } catch (error) {
+      _errorMessage = _messageFrom(error);
+      rethrow;
+    } finally {
+      _setBusy(false);
+    }
+  }
+
+  Future<Map<String, dynamic>> resetPassword({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    _setBusy(true);
+    try {
+      final res = await api.resetPassword(
+        email: email,
+        code: code,
+        newPassword: newPassword,
+      );
+      _errorMessage = null;
+      return res;
+    } catch (error) {
+      _errorMessage = _messageFrom(error);
+      rethrow;
+    } finally {
+      _setBusy(false);
+    }
+  }
+
   Future<String> register({
     required String name,
     required String phone,

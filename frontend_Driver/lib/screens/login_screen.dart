@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
 import '../widgets/app_widgets.dart';
+import 'forgot_password_screen.dart';
 import 'home_screen.dart';
 import 'register_screen.dart';
 
@@ -104,7 +105,37 @@ class _LoginScreenState extends State<LoginScreen> {
                           ? 'Password is required'
                           : null,
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 6),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: auth.busy
+                            ? null
+                            : () async {
+                                final updatedEmail = await Navigator.of(context)
+                                    .push<String>(
+                                      MaterialPageRoute(
+                                        builder: (_) => ForgotPasswordScreen(
+                                          initialEmail: _emailController.text.trim(),
+                                        ),
+                                      ),
+                                    );
+                                if (updatedEmail != null && updatedEmail.isNotEmpty && mounted) {
+                                  _emailController.text = updatedEmail;
+                                  _passwordController.clear();
+                                }
+                              },
+                        child: const Text(
+                          'Forgot Password?',
+                          style: TextStyle(
+                            color: Color(0xFF69A8FF),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     PrimaryActionButton(
                       label: 'Sign In',
                       isBusy: auth.busy,
