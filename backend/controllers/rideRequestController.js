@@ -72,6 +72,11 @@ const createRideRequest = async (req, res) => {
       suggestedRatePerKm: effectiveSuggestion,
     });
 
+    const io = req.app?.get('io');
+    if (io) {
+      io.to(driverId.toString()).emit('new_request', rideRequest);
+    }
+
     res.status(201).json(rideRequest);
   } catch (err) {
     if (err?.code === 11000) {
@@ -133,10 +138,19 @@ const respondToRequest = async (req, res) => {
       return res.status(409).json({ message: `Request is already ${rideRequest.status}` });
     }
 
+    const io = req.app?.get('io');
+
     if (action === 'reject') {
       rideRequest.status = 'rejected';
       rideRequest.isActive = false;
       await rideRequest.save();
+
+      if (io && rideRequest.customer) {
+        io.to(rideRequest.customer.toString()).emit('request_response', {
+          requestId: rideRequest._id,
+          status: 'rejected',
+        });
+      }
       return res.json(rideRequest);
     }
 
@@ -167,6 +181,15 @@ const respondToRequest = async (req, res) => {
     rideRequest.agreedRatePerKm = agreedRate;
     rideRequest.trip = trip._id;
     await rideRequest.save();
+
+    if (io && rideRequest.customer) {
+      io.to(rideRequest.customer.toString()).emit('request_response', {
+        requestId: rideRequest._id,
+        status: 'accepted',
+        trip,
+        agreedRatePerKm: agreedRate,
+      });
+    }
 
     res.json({ rideRequest, trip });
   } catch (err) {
