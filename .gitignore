@@ -13,6 +13,8 @@
 # Local environment and service configuration
 .env
 .env.*
+*.env
+atlas-credentials.env
 !.env.example
 
 # Firebase / local frontend configuration
