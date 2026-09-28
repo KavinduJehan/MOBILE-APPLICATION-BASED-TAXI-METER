@@ -272,6 +272,90 @@ const getIncome = async (req, res) => {
   }
 };
 
+// POST /api/trips/sync
+// Receives an array of offline-recorded trips and saves them to MongoDB
+const syncOfflineTrips = async (req, res) => {
+  const { trips } = req.body;
+  if (!Array.isArray(trips) || trips.length === 0) {
+    return res.status(400).json({ message: 'trips array is required and must not be empty' });
+  }
+
+  try {
+    const syncedTrips = [];
+    const idMap = {}; // localId -> serverId
+
+    for (const item of trips) {
+      const receiptNo = item.receiptNumber || `REC-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+      const existingReceipt = await Receipt.findOne({ receiptNumber: receiptNo });
+      if (existingReceipt) {
+        if (item.localId) {
+          idMap[item.localId] = existingReceipt.trip.toString();
+        }
+        continue;
+      }
+
+      const distanceKm = Number(item.distanceKm) || 0;
+      const ratePerKm = Number(item.ratePerKm) || 0;
+      const totalFare = Number(item.totalFare || item.fare) || parseFloat((distanceKm * ratePerKm).toFixed(2));
+      const startTime = item.startTime ? new Date(item.startTime) : (item.date ? new Date(item.date) : new Date());
+      const endTime = item.endTime ? new Date(item.endTime) : new Date();
+
+      const trip = new Trip({
+        driver: req.user.id,
+        customerName: item.customerName || 'Offline Passenger',
+        startLocation: item.startLocation || item.startAddress || 'Offline Pickup',
+        endLocation: item.endLocation || item.endAddress || 'Offline Destination',
+        distanceKm,
+        ratePerKm,
+        totalFare,
+        startTime,
+        endTime,
+        status: item.status || 'completed',
+        surgeBreakdown: item.surgeBreakdown || null,
+        syncedToCloud: true,
+      });
+
+      await trip.save();
+
+      const receipt = new Receipt({
+        trip: trip._id,
+        driver: req.user.id,
+        receiptNumber: receiptNo,
+        customerName: trip.customerName,
+        startLocation: trip.startLocation,
+        endLocation: trip.endLocation,
+        distanceKm: trip.distanceKm,
+        ratePerKm: trip.ratePerKm,
+        totalFare: trip.totalFare,
+        issuedAt: endTime,
+      });
+
+      await receipt.save();
+
+      if (item.localId) {
+        idMap[item.localId] = trip._id.toString();
+      }
+
+      syncedTrips.push({
+        localId: item.localId,
+        serverId: trip._id,
+        receiptNumber: receiptNo,
+        totalFare: trip.totalFare,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      syncedCount: syncedTrips.length,
+      syncedTrips,
+      idMap,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 module.exports = {
   createTrip,
   startTrip,
@@ -280,4 +364,5 @@ module.exports = {
   getTripDetails,
   getMyTrips,
   getIncome,
+  syncOfflineTrips,
 };
