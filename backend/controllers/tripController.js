@@ -3,6 +3,8 @@ const Trip = require('../models/Trip');
 const Receipt = require('../models/Receipt');
 const Driver = require('../models/Driver');
 const RideRequest = require('../models/RideRequest');
+const SystemConfig = require('../models/SystemConfig');
+const { computeAutoRate } = require('../services/pricingEngine');
 
 const activeRideMessage =
   'You already have an active ride. Complete or cancel it before booking another ride.';
@@ -46,8 +48,10 @@ const createReceiptForTrip = async (trip) => {
 };
 
 const createTrip = async (req, res) => {
-  const { driverId, startLocation, endLocation, distanceKm, ratePerKm, customerName, startTime } = req.body;
-  if (!startLocation || !endLocation || !distanceKm || !ratePerKm) {
+  const { driverId, startLocation, endLocation, distanceKm, customerName, startTime } = req.body;
+  let { ratePerKm } = req.body;
+
+  if (!startLocation || !endLocation || !distanceKm) {
     return res.status(400).json({ message: 'Missing required trip fields' });
   }
 
@@ -76,6 +80,17 @@ const createTrip = async (req, res) => {
       return res.status(403).json({ message: 'Driver is not verified' });
     }
 
+    // AUTO mode: override whatever ratePerKm was sent with the algorithm result
+    let surgeBreakdown = null;
+    const config = await SystemConfig.findOne();
+    if (config?.rateMode === 'AUTO') {
+      const priceResult = await computeAutoRate(driver.area || '');
+      ratePerKm     = priceResult.effectiveRate;
+      surgeBreakdown = priceResult.breakdown;
+    } else if (!ratePerKm) {
+      return res.status(400).json({ message: 'ratePerKm is required' });
+    }
+
     const totalFare = parseFloat((distanceKm * ratePerKm).toFixed(2));
     const trip = await Trip.create({
       driver: resolvedDriverId,
@@ -86,6 +101,7 @@ const createTrip = async (req, res) => {
       distanceKm,
       ratePerKm,
       totalFare,
+      surgeBreakdown,
       startTime: startTime || new Date(),
       status: 'ongoing',
     });
