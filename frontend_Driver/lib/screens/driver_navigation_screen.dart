@@ -8,6 +8,7 @@ import 'package:latlong2/latlong.dart';
 import '../models/ride_request.dart';
 import '../models/trip_record.dart';
 import '../services/api_service.dart';
+import '../services/socket_service.dart';
 import '../utils/google_polyline.dart';
 import '../widgets/app_widgets.dart';
 import 'active_trip_screen.dart';
@@ -49,6 +50,15 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
     _startLocationTracking();
   }
 
+  DateTime? _lastSyncTime;
+  void _syncLocationThrottle(double lat, double lng) {
+    final now = DateTime.now();
+    if (_lastSyncTime == null || now.difference(_lastSyncTime!).inSeconds >= 10) {
+      _lastSyncTime = now;
+      _api.updateLocation(lat: lat, lng: lng).catchError((_) {});
+    }
+  }
+
   Future<void> _startLocationTracking() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
       setState(() => _locationError = 'Turn on location services to see your live position.');
@@ -65,6 +75,16 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
     ).listen((position) {
       if (!mounted) return;
       setState(() => _driverPosition = LatLng(position.latitude, position.longitude));
+
+      // Broadcast live coordinates to customer and backend
+      DriverSocketService.instance.emitLocationUpdate(
+        lat: position.latitude,
+        lng: position.longitude,
+        tripId: widget.trip.id,
+        customerId: widget.request.customerId,
+      );
+      _syncLocationThrottle(position.latitude, position.longitude);
+
       if (_roadRoute.isEmpty && !_loadingRoute) {
         _loadRoadRoute();
       }

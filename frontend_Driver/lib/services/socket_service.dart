@@ -62,6 +62,23 @@ class DriverSocketService {
     _socket!.connect();
   }
 
+  void emitLocationUpdate({
+    required double lat,
+    required double lng,
+    String? tripId,
+    String? customerId,
+  }) {
+    if (_socket != null && _socket!.connected) {
+      _socket!.emit('driver_location_update', {
+        'driverId': _driverId,
+        'lat': lat,
+        'lng': lng,
+        if (tripId != null && tripId.isNotEmpty) 'tripId': tripId,
+        if (customerId != null && customerId.isNotEmpty) 'customerId': customerId,
+      });
+    }
+  }
+
   void disconnect() {
     _socket?.disconnect();
     _socket = null;

@@ -3,6 +3,7 @@ import '../utils/json_helpers.dart';
 class RideRequest {
   RideRequest({
     required this.id,
+    this.customerId,
     required this.customerName,
     required this.pickupAddress,
     required this.destinationAddress,
@@ -18,6 +19,7 @@ class RideRequest {
   });
 
   final String id;
+  final String? customerId;
   final String customerName;
   final String pickupAddress;
   final String destinationAddress;
@@ -33,8 +35,13 @@ class RideRequest {
 
   factory RideRequest.fromJson(Map<String, dynamic> json) {
     final customer = readMap(json, ['customer', 'customerDetails']) ?? const <String, dynamic>{};
+    final rawCustomer = json['customer'];
+    final customerId = rawCustomer is String
+        ? rawCustomer
+        : (readString(customer, ['id', '_id']).isEmpty ? null : readString(customer, ['id', '_id']));
     return RideRequest(
       id: readString(json, ['id', '_id', 'requestId']),
+      customerId: customerId,
       customerName: readString(json, ['customerName', 'passengerName'], fallback: readString(customer, ['name', 'fullName'], fallback: 'Customer')),
       pickupAddress: readString(json, ['pickupAddress', 'pickup', 'from']),
       destinationAddress: readString(json, ['destinationAddress', 'destination', 'to']),
