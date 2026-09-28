@@ -277,6 +277,10 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
             driver: widget.driver,
             distanceKm: _distanceKm,
             ratePerKm: _rate,
+            pickupLat: pickupLat,
+            pickupLng: pickupLng,
+            destLat: destLat,
+            destLng: destLng,
           ),
         ),
       );

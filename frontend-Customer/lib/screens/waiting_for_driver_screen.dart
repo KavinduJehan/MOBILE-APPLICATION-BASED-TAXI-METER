@@ -12,7 +12,10 @@ class WaitingForDriverScreen extends StatefulWidget {
   final String requestId;
   final Map<String, dynamic> driver;
   final double distanceKm;
-  final double ratePerKm;
+  final double? pickupLat;
+  final double? pickupLng;
+  final double? destLat;
+  final double? destLng;
 
   const WaitingForDriverScreen({
     super.key,
@@ -20,6 +23,10 @@ class WaitingForDriverScreen extends StatefulWidget {
     required this.driver,
     required this.distanceKm,
     required this.ratePerKm,
+    this.pickupLat,
+    this.pickupLng,
+    this.destLat,
+    this.destLng,
   });
 
   @override
@@ -109,6 +116,11 @@ class _WaitingForDriverScreenState extends State<WaitingForDriverScreen> {
       context.read<TripProvider>().upsertTrip(trip);
     }
 
+    final pLat = widget.pickupLat ?? (data['pickupLat'] as num?)?.toDouble();
+    final pLng = widget.pickupLng ?? (data['pickupLng'] as num?)?.toDouble();
+    final dLat = widget.destLat ?? (data['destLat'] as num?)?.toDouble();
+    final dLng = widget.destLng ?? (data['destLng'] as num?)?.toDouble();
+
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
@@ -119,6 +131,10 @@ class _WaitingForDriverScreenState extends State<WaitingForDriverScreen> {
           distanceKm: widget.distanceKm,
           ratePerKm: effectiveRate,
           totalFare: totalFare ?? widget.distanceKm * effectiveRate,
+          pickupLat: pLat,
+          pickupLng: pLng,
+          destLat: dLat,
+          destLng: dLng,
         ),
       ),
     );
