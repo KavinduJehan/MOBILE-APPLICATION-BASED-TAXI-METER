@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
@@ -217,8 +217,8 @@ class _RateScreenState extends State<RateScreen> {
     final baseRate    = (data['baseRate'] as num?)?.toDouble() ?? 0;
     final multiplier  = (data['multiplier'] as num?)?.toDouble() ?? 1;
 
-    double _d(String key) => (breakdown[key] as num?)?.toDouble() ?? 0;
-    String _s(String key) => breakdown[key]?.toString() ?? '-';
+    double d(String key) => (breakdown[key] as num?)?.toDouble() ?? 0;
+    String s(String key) => breakdown[key]?.toString() ?? '-';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -255,14 +255,14 @@ class _RateScreenState extends State<RateScreen> {
         ),
         const SizedBox(height: 10),
         _signalRow('🚗', 'Demand vs supply',
-            '${_d("availableDrivers").toInt()} drivers  ·  ${_d("activeRequests").toInt()} requests',
-            _d('demandSupplyFactor')),
+            '${d("availableDrivers").toInt()} drivers  ·  ${d("activeRequests").toInt()} requests',
+            d('demandSupplyFactor')),
         _signalRow('🕐', 'Time of day', _timeLabel(),
-            _d('timeFactor')),
-        _signalRow('🌦', 'Weather', _s('weatherCondition'),
-            _d('weatherFactor')),
+            d('timeFactor')),
+        _signalRow('🌦', 'Weather', s('weatherCondition'),
+            d('weatherFactor')),
         _signalRow('📍', 'Area tier', data['area']?.toString() ?? '-',
-            _d('areaFactor')),
+            d('areaFactor')),
       ],
     );
   }

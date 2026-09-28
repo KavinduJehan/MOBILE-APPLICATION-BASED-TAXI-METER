@@ -153,12 +153,57 @@ class _TripCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: Text(trip.customerName, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
-              StatusPill(label: trip.status.toUpperCase(), color: const Color(0xFF69A8FF)),
+              Expanded(
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        trip.customerName,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (trip.surgeBreakdown != null) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF6C7CFF).withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFF6C7CFF).withValues(alpha: 0.35)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.bolt_rounded, size: 12, color: Color(0xFF6C7CFF)),
+                            const SizedBox(width: 2),
+                            Text(
+                              '${((trip.surgeBreakdown!['multiplier'] as num?)?.toDouble() ?? 1.0).toStringAsFixed(2)}×',
+                              style: const TextStyle(
+                                color: Color(0xFF6C7CFF),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              StatusPill(
+                label: trip.status.toUpperCase(),
+                color: trip.status == 'completed'
+                    ? const Color(0xFF22C55E)
+                    : (trip.status == 'cancelled' || trip.status == 'canceled')
+                        ? const Color(0xFFEF4444)
+                        : const Color(0xFF69A8FF),
+              ),
             ],
           ),
           const SizedBox(height: 12),
-          Text('${trip.startAddress} -> ${trip.endAddress}', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.white70)),
+          Text('${trip.startAddress} → ${trip.endAddress}', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.white70)),
           const SizedBox(height: 12),
           Row(
             children: [
