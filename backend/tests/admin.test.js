@@ -40,6 +40,7 @@ const createRegulatorAndLogin = async () => {
 
 const registerDriver = async (data = driverData) => {
   const res = await request(app).post('/api/auth/register').send(data);
+  await Driver.findByIdAndUpdate(res.body.driver.id, { pricingMode: 'DRIVER', ratePerKm: 80 });
   return { token: res.body.token, driver: res.body.driver };
 };
 
@@ -184,7 +185,7 @@ describe('PATCH /api/admin/drivers/:id/verify', () => {
 
 describe('PATCH /api/admin/drivers/:id/pricing', () => {
   it.each(['DRIVER', 'ADMIN', 'AUTO'])('assigns %s pricing to an individual driver', async (pricingMode) => {
-    const { driver } = await registerDriver();
+    const { token: driverToken, driver } = await registerDriver();
     const adminToken = await createRegulatorAndLogin();
     const res = await request(app)
       .patch(`/api/admin/drivers/${driver.id}/pricing`)
@@ -195,6 +196,11 @@ describe('PATCH /api/admin/drivers/:id/pricing', () => {
     if (pricingMode === 'ADMIN') expect(res.body.ratePerKm).toBe(88);
     const stored = await Driver.findById(driver.id);
     expect(stored.pricingMode).toBe(pricingMode);
+    const profile = await request(app)
+      .get('/api/drivers/profile')
+      .set('Authorization', `Bearer ${driverToken}`);
+    expect(profile.statusCode).toBe(200);
+    expect(profile.body.pricingMode).toBe(pricingMode);
   });
 
   it('rejects unsupported pricing modes', async () => {
