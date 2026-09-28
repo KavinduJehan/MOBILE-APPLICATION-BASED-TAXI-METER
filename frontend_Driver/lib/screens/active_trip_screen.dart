@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../models/trip_record.dart';
 import '../providers/auth_provider.dart';
+import '../services/offline_database.dart';
 import '../widgets/app_widgets.dart';
 import 'trip_summary_screen.dart';
 
@@ -160,6 +161,8 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                 if (confirm != true) return;
                 try {
                   final result = await auth.api.endTrip(trip.id);
+                  // Cache to local SQLite so trip history works offline
+                  await OfflineDatabase.instance.cacheServerTrip(result.trip);
                   if (!context.mounted) return;
                   Navigator.of(context).pushReplacement(
                     MaterialPageRoute(
@@ -170,9 +173,52 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                     ),
                   );
                 } catch (error) {
+                  // Offline fallback: Save trip locally to SQLite & generate offline receipt
+                  final offlineReceipt = 'REC-OFFLINE-${DateTime.now().millisecondsSinceEpoch.toRadixString(36).toUpperCase()}';
+                  final localId = 'offline-${DateTime.now().millisecondsSinceEpoch}';
+                  final offlineTrip = TripRecord(
+                    id: localId,
+                    customerName: trip.customerName.isNotEmpty ? trip.customerName : 'Passenger',
+                    startAddress: trip.startAddress,
+                    endAddress: trip.endAddress,
+                    distanceKm: trip.distanceKm,
+                    ratePerKm: trip.ratePerKm,
+                    fare: estimatedFare,
+                    status: 'completed',
+                    date: DateTime.now(),
+                    receiptNumber: offlineReceipt,
+                    surgeBreakdown: trip.surgeBreakdown,
+                  );
+
+                  await OfflineDatabase.instance.insertOfflineTrip(
+                    localId: localId,
+                    customerName: offlineTrip.customerName,
+                    startAddress: offlineTrip.startAddress,
+                    endAddress: offlineTrip.endAddress,
+                    distanceKm: offlineTrip.distanceKm,
+                    ratePerKm: offlineTrip.ratePerKm,
+                    fare: offlineTrip.fare,
+                    receiptNumber: offlineReceipt,
+                    surgeBreakdown: offlineTrip.surgeBreakdown,
+                    date: offlineTrip.date,
+                  );
+
                   if (!context.mounted) return;
-                  ScaffoldMessenger.of(context)
-                      .showSnackBar(SnackBar(content: Text(auth.errorMessage ?? 'Unable to end trip')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Offline mode: Trip saved locally. Will sync when online.'),
+                      backgroundColor: Color(0xFFEAB308),
+                    ),
+                  );
+
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(
+                      builder: (_) => TripSummaryScreen(
+                        trip: offlineTrip,
+                        receiptNumber: offlineReceipt,
+                      ),
+                    ),
+                  );
                 }
               },
             ),

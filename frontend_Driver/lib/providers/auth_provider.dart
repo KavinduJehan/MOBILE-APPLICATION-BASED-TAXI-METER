@@ -4,6 +4,7 @@ import '../models/api_exception.dart';
 import '../models/driver_profile.dart';
 import '../services/api_service.dart';
 import '../services/driver_location_service.dart';
+import '../services/offline_database.dart';
 import '../services/session_store.dart';
 
 class AuthProvider extends ChangeNotifier {
@@ -46,12 +47,18 @@ class AuthProvider extends ChangeNotifier {
 
       _token = await SessionStore.readToken();
       if (_token != null) {
-        _profile = await SessionStore.readProfile() ?? await api.getProfile();
+        try {
+          _profile = await api.getProfile();
+          if (_profile != null) {
+            await OfflineDatabase.instance.cacheProfile(_profile!);
+          }
+        } catch (_) {
+          _profile = await SessionStore.readProfile() ?? await OfflineDatabase.instance.getCachedProfile();
+        }
       }
     } catch (error) {
-      await SessionStore.clear();
-      _token = null;
-      _profile = null;
+      // Offline fallback: don't wipe token immediately if server unreachable
+      _profile ??= await OfflineDatabase.instance.getCachedProfile();
       _errorMessage = _messageFrom(error);
     } finally {
       _bootstrapping = false;
@@ -66,6 +73,9 @@ class AuthProvider extends ChangeNotifier {
       _token = result.token;
       await SessionStore.saveToken(result.token);
       _profile = result.profile ?? await api.getProfile();
+      if (_profile != null) {
+        await OfflineDatabase.instance.cacheProfile(_profile!);
+      }
       _errorMessage = null;
     } catch (error) {
       _errorMessage = _messageFrom(error);
@@ -115,8 +125,12 @@ class AuthProvider extends ChangeNotifier {
     _setBusy(true);
     try {
       _profile = await api.getProfile();
+      if (_profile != null) {
+        await OfflineDatabase.instance.cacheProfile(_profile!);
+      }
       _errorMessage = null;
     } catch (error) {
+      _profile ??= await OfflineDatabase.instance.getCachedProfile();
       _errorMessage = _messageFrom(error);
     } finally {
       _setBusy(false);
@@ -128,6 +142,9 @@ class AuthProvider extends ChangeNotifier {
     try {
       await api.updateRate(ratePerKm);
       _profile = _profile?.copyWith(ratePerKm: ratePerKm);
+      if (_profile != null) {
+        await OfflineDatabase.instance.cacheProfile(_profile!);
+      }
       _errorMessage = null;
     } catch (error) {
       _errorMessage = _messageFrom(error);
