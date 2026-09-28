@@ -62,3 +62,63 @@ describe('POST /api/auth/login', () => {
     expect(res.statusCode).toBe(400);
   });
 });
+
+describe('POST /api/auth/forgot-password and /reset-password', () => {
+  beforeEach(async () => {
+    await request(app).post('/api/auth/register').send(validDriver);
+  });
+
+  it('generates a reset code for valid registered email', async () => {
+    const res = await request(app)
+      .post('/api/auth/forgot-password')
+      .send({ email: validDriver.email });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toHaveProperty('message');
+    expect(res.body).toHaveProperty('debugCode');
+  });
+
+  it('returns 404 for unknown email', async () => {
+    const res = await request(app)
+      .post('/api/auth/forgot-password')
+      .send({ email: 'nonexistent@test.com' });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('successfully resets password with valid code', async () => {
+    const forgotRes = await request(app)
+      .post('/api/auth/forgot-password')
+      .send({ email: validDriver.email });
+    const code = forgotRes.body.debugCode;
+
+    const resetRes = await request(app)
+      .post('/api/auth/reset-password')
+      .send({
+        email: validDriver.email,
+        code,
+        newPassword: 'newpassword456',
+      });
+    expect(resetRes.statusCode).toBe(200);
+
+    // Verify login works with new password
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: validDriver.email, password: 'newpassword456' });
+    expect(loginRes.statusCode).toBe(200);
+    expect(loginRes.body).toHaveProperty('token');
+  });
+
+  it('returns 400 for incorrect reset code', async () => {
+    await request(app)
+      .post('/api/auth/forgot-password')
+      .send({ email: validDriver.email });
+
+    const resetRes = await request(app)
+      .post('/api/auth/reset-password')
+      .send({
+        email: validDriver.email,
+        code: '999999',
+        newPassword: 'newpassword456',
+      });
+    expect(resetRes.statusCode).toBe(400);
+  });
+});
