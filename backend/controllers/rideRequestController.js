@@ -72,6 +72,11 @@ const createRideRequest = async (req, res) => {
       suggestedRatePerKm: effectiveSuggestion,
     });
 
+    const io = req.app?.get('io');
+    if (io) {
+      io.to(driverId.toString()).emit('new_request', rideRequest);
+    }
+
     res.status(201).json(rideRequest);
   } catch (err) {
     if (err?.code === 11000) {
@@ -133,10 +138,25 @@ const respondToRequest = async (req, res) => {
       return res.status(409).json({ message: `Request is already ${rideRequest.status}` });
     }
 
+    const io = req.app?.get('io');
+
     if (action === 'reject') {
       rideRequest.status = 'rejected';
       rideRequest.isActive = false;
       await rideRequest.save();
+
+      if (io) {
+        if (rideRequest.customer) {
+          io.to(rideRequest.customer.toString()).emit('request_response', {
+            requestId: rideRequest._id,
+            status: 'rejected',
+          });
+        }
+        io.to(rideRequest._id.toString()).emit('request_response', {
+          requestId: rideRequest._id,
+          status: 'rejected',
+        });
+      }
       return res.json(rideRequest);
     }
 
@@ -156,6 +176,10 @@ const respondToRequest = async (req, res) => {
       customerName: rideRequest.customerName,
       startLocation: rideRequest.pickupAddress || `${rideRequest.pickupLat},${rideRequest.pickupLng}`,
       endLocation: rideRequest.destAddress || `${rideRequest.destLat},${rideRequest.destLng}`,
+      pickupLat: rideRequest.pickupLat,
+      pickupLng: rideRequest.pickupLng,
+      destLat: rideRequest.destLat,
+      destLng: rideRequest.destLng,
       distanceKm: rideRequest.estimatedDistanceKm,
       ratePerKm: agreedRate,
       totalFare,
@@ -167,6 +191,24 @@ const respondToRequest = async (req, res) => {
     rideRequest.agreedRatePerKm = agreedRate;
     rideRequest.trip = trip._id;
     await rideRequest.save();
+    if (io) {
+      const acceptedPayload = {
+        requestId: rideRequest._id,
+        status: 'accepted',
+        trip,
+        agreedRatePerKm: agreedRate,
+        pickupAddress: rideRequest.pickupAddress,
+        destAddress: rideRequest.destAddress,
+        pickupLat: rideRequest.pickupLat,
+        pickupLng: rideRequest.pickupLng,
+        destLat: rideRequest.destLat,
+        destLng: rideRequest.destLng,
+      };
+      if (rideRequest.customer) {
+        io.to(rideRequest.customer.toString()).emit('request_response', acceptedPayload);
+      }
+      io.to(rideRequest._id.toString()).emit('request_response', acceptedPayload);
+    }
 
     res.json({ rideRequest, trip });
   } catch (err) {

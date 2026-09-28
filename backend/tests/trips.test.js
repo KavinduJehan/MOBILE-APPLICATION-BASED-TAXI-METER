@@ -191,6 +191,8 @@ describe('GET /api/trips/income', () => {
     expect(res.statusCode).toBe(200);
     expect(res.body.totalEarnings).toBe(38 * 75);
     expect(res.body.totalTrips).toBe(1);
+    expect(res.body.completedTrips).toBe(1);
+    expect(res.body.cancelledTrips).toBe(0);
     expect(Object.keys(res.body.byDay).length).toBe(1);
   });
 
@@ -213,3 +215,45 @@ describe('GET /api/trips/income', () => {
     expect(res.statusCode).toBe(401);
   });
 });
+
+describe('POST /api/trips/sync', () => {
+  it('syncs offline trips and generates receipts', async () => {
+    const token = await registerAndLogin();
+    const offlinePayload = {
+      trips: [
+        {
+          localId: 'offline-trip-001',
+          customerName: 'Offline Rider',
+          startLocation: 'Matara Town',
+          endLocation: 'University of Ruhuna',
+          distanceKm: 5.5,
+          ratePerKm: 100,
+          totalFare: 550,
+          receiptNumber: `REC-OFFLINE-${Date.now()}`,
+          status: 'completed',
+        },
+      ],
+    };
+
+    const res = await request(app)
+      .post('/api/trips/sync')
+      .set('Authorization', `Bearer ${token}`)
+      .send(offlinePayload);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.syncedCount).toBe(1);
+    expect(res.body.idMap['offline-trip-001']).toBeDefined();
+  });
+
+  it('rejects empty trips array', async () => {
+    const token = await registerAndLogin();
+    const res = await request(app)
+      .post('/api/trips/sync')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ trips: [] });
+
+    expect(res.statusCode).toBe(400);
+  });
+});
+

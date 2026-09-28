@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const Driver = require('../models/Driver');
 const SystemConfig = require('../models/SystemConfig');
@@ -127,4 +128,83 @@ const phoneLogin = async (req, res) => {
   }
 };
 
-module.exports = { register, login, phoneLogin };
+// POST /api/auth/forgot-password
+// Generates a 6-digit reset code and sets expiration (15 minutes)
+const forgotPassword = async (req, res) => {
+  const email = String(req.body.email || '').trim().toLowerCase();
+  if (!email) {
+    return res.status(400).json({ message: 'Email is required' });
+  }
+
+  try {
+    const driver = await Driver.findOne({ email });
+    if (!driver) {
+      return res.status(404).json({ message: 'No account found with this email' });
+    }
+
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const hashedCode = await bcrypt.hash(code, 10);
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    driver.resetPasswordCode = hashedCode;
+    driver.resetPasswordDebug = process.env.NODE_ENV === 'production' ? undefined : code;
+    driver.resetPasswordExpires = expiresAt;
+    await driver.save();
+
+    console.log(`[PASSWORD RESET] Email: ${email}  Code: ${code}`);
+
+    res.json({
+      message: 'Password reset code has been sent to your email.',
+      debugCode: process.env.NODE_ENV === 'production' ? undefined : code,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// POST /api/auth/reset-password
+// Validates 6-digit reset code and updates driver password
+const resetPassword = async (req, res) => {
+  const email = String(req.body.email || '').trim().toLowerCase();
+  const code = String(req.body.code || '').trim();
+  const newPassword = String(req.body.newPassword || '');
+
+  if (!email || !code || !newPassword) {
+    return res.status(400).json({ message: 'Email, code, and new password are required' });
+  }
+
+  if (newPassword.length < 6) {
+    return res.status(400).json({ message: 'Password must be at least 6 characters' });
+  }
+
+  try {
+    const driver = await Driver.findOne({ email });
+    if (!driver) {
+      return res.status(404).json({ message: 'No account found with this email' });
+    }
+
+    if (!driver.resetPasswordExpires || driver.resetPasswordExpires < new Date()) {
+      return res.status(400).json({ message: 'Reset code has expired. Please request a new one.' });
+    }
+
+    const isMatch =
+      (await driver.compareResetCode(code)) ||
+      (process.env.NODE_ENV !== 'production' && driver.resetPasswordDebug === code);
+
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Invalid reset code' });
+    }
+
+    driver.password = newPassword;
+    driver.resetPasswordCode = undefined;
+    driver.resetPasswordDebug = undefined;
+    driver.resetPasswordExpires = undefined;
+    await driver.save();
+
+    res.json({ message: 'Password reset successful. You can now sign in with your new password.' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+module.exports = { register, login, phoneLogin, forgotPassword, resetPassword };

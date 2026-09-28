@@ -1,5 +1,32 @@
 const QRCode = require('qrcode');
 const Driver = require('../models/Driver');
+const Trip = require('../models/Trip');
+
+// PATCH /api/drivers/profile
+// Lets a driver update their own editable fields (not password, not verification status)
+const updateDriverProfile = async (req, res) => {
+  const allowed = ['name', 'email', 'phone', 'vehicleNumber', 'area'];
+  const update = {};
+  for (const field of allowed) {
+    if (req.body[field] !== undefined) {
+      update[field] = String(req.body[field]).trim();
+    }
+  }
+  if (Object.keys(update).length === 0) {
+    return res.status(400).json({ message: 'No updatable fields provided' });
+  }
+  try {
+    const driver = await Driver.findByIdAndUpdate(
+      req.user.id,
+      update,
+      { new: true, runValidators: true }
+    ).select('-password');
+    if (!driver) return res.status(404).json({ message: 'Driver not found' });
+    res.json(driver);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
 
 const DEFAULT_NEARBY_RADIUS_KM = Number(process.env.NEARBY_DRIVER_RADIUS_KM) || 15;
 const DRIVER_LOCATION_TTL_MINUTES = Number(process.env.DRIVER_LOCATION_TTL_MINUTES) || 5;
@@ -136,11 +163,31 @@ const updateLocation = async (req, res) => {
       },
       { new: true }
     ).select('-password');
+
+    const io = req.app?.get('io');
+    if (io) {
+      Trip.findOne({ driver: req.user.id, status: 'ongoing' }).then((activeTrip) => {
+        if (activeTrip) {
+          const payload = {
+            driverId: req.user.id,
+            tripId: activeTrip._id.toString(),
+            lat,
+            lng,
+          };
+          if (activeTrip.customer) {
+            io.to(activeTrip.customer.toString()).emit('driver_location', payload);
+          }
+          io.to(activeTrip._id.toString()).emit('driver_location', payload);
+        }
+      }).catch(() => {});
+    }
+
     res.json(driver);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
-module.exports = { getDriverProfile, updateQRCode, getNearbyDrivers, getDriverByQR, updateLocation };
+module.exports = { getDriverProfile, updateDriverProfile, updateQRCode, getNearbyDrivers, getDriverByQR, updateLocation };
+
 

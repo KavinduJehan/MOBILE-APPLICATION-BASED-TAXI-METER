@@ -9,9 +9,11 @@ const {
   getTripDetails,
   getMyTrips,
   getIncome,
+  syncOfflineTrips,
 } = require('../controllers/tripController');
 
 router.post('/', protect, createTrip);
+router.post('/sync', protect, syncOfflineTrips);
 router.patch('/:id/start', protect, startTrip);
 router.patch('/:id/end', protect, endTrip);
 router.patch('/:id/cancel', protect, cancelTrip);

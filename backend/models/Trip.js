@@ -7,9 +7,16 @@ const tripSchema = new mongoose.Schema(
     customerName: { type: String, default: 'Anonymous' },
     startLocation: { type: String, required: true },
     endLocation: { type: String, required: true },
+    pickupLat: { type: Number, default: null },
+    pickupLng: { type: Number, default: null },
+    destLat: { type: Number, default: null },
+    destLng: { type: Number, default: null },
     distanceKm: { type: Number, required: true },
     ratePerKm: { type: Number, required: true },
     totalFare: { type: Number, required: true },
+    // Snapshot of the surge pricing signals used when rateMode is AUTO.
+    // Null for trips created under ADMIN or DRIVER modes.
+    surgeBreakdown: { type: mongoose.Schema.Types.Mixed, default: null },
     startTime: { type: Date, required: true },
     endTime: { type: Date },
     status: {

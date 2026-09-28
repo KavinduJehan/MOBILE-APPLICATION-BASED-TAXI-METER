@@ -84,6 +84,7 @@ export default function Drivers() {
           <button style={styles.navBtn} onClick={() => navigate('/dashboard')}>Dashboard</button>
           <button style={styles.navBtn} onClick={() => navigate('/drivers')}>Drivers</button>
           <button style={styles.navBtn} onClick={() => navigate('/trips')}>Trips</button>
+          <button style={styles.navBtn} onClick={() => navigate('/pricing')}>Pricing</button>
           <button style={{ ...styles.navBtn, color: '#e74c3c' }} onClick={handleLogout}>Logout</button>
         </div>
       </nav>

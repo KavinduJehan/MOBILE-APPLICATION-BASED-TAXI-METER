@@ -31,6 +31,9 @@ const driverSchema = new mongoose.Schema(
       lng: { type: Number, default: null },
       updatedAt: { type: Date, default: null },
     },
+    resetPasswordCode: { type: String, default: null },
+    resetPasswordDebug: { type: String, default: null },
+    resetPasswordExpires: { type: Date, default: null },
   },
   { timestamps: true }
 );
@@ -48,6 +51,11 @@ driverSchema.pre('save', async function (next) {
 
 driverSchema.methods.comparePassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
+};
+
+driverSchema.methods.compareResetCode = async function (candidateCode) {
+  if (!this.resetPasswordCode) return false;
+  return bcrypt.compare(candidateCode, this.resetPasswordCode);
 };
 
 module.exports = mongoose.model('Driver', driverSchema);

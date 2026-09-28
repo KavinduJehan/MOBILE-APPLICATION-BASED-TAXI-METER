@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/app_widgets.dart';
 import 'login_screen.dart';
+import 'profile_screen.dart';
 import 'qr_screen.dart';
 import 'rate_screen.dart';
 
@@ -54,6 +55,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 18),
+            ActionCard(
+              title: 'Edit Profile',
+              subtitle: 'Update your name, email, phone, vehicle and area.',
+              icon: Icons.manage_accounts_rounded,
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProfileScreen())),
+            ),
+            const SizedBox(height: 12),
             ActionCard(
               title: 'Update Rate',
               subtitle: 'Jump to the per-km rate editor.',

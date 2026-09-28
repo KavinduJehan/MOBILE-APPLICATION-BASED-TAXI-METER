@@ -6,11 +6,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 const String _configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
 
-String get _baseUrl {
-  if (_configuredBaseUrl.isNotEmpty) return _configuredBaseUrl;
-  return kIsWeb ? 'http://localhost:5000/api' : 'http://192.168.1.101:5000/api';
-}
-
 const String _tokenKey = 'auth_token';
 const String _refreshTokenKey = 'refresh_token';
 const String _customerKey = 'customer_data';
@@ -47,11 +42,12 @@ class ApiService {
   static final Dio _dio = _buildDio();
 
   static Dio get dio => _dio;
+  static String get socketUrl => _resolveBaseUrl().replaceAll(RegExp(r'/api/?$'), '');
 
   static Dio _buildDio() {
     final dio = Dio(
       BaseOptions(
-        baseUrl: _baseUrl,
+        baseUrl: _resolveBaseUrl(),
         connectTimeout: const Duration(seconds: 30),
         receiveTimeout: const Duration(seconds: 30),
         sendTimeout: const Duration(seconds: 30),

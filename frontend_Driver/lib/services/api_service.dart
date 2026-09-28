@@ -46,6 +46,34 @@ class ApiService {
     );
   }
 
+  Future<Map<String, dynamic>> forgotPassword(String email) async {
+    final response = await _request(
+      'POST',
+      '/auth/forgot-password',
+      auth: false,
+      data: {'email': email},
+    );
+    return _asMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> resetPassword({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    final response = await _request(
+      'POST',
+      '/auth/reset-password',
+      auth: false,
+      data: {
+        'email': email,
+        'code': code,
+        'newPassword': newPassword,
+      },
+    );
+    return _asMap(response.data);
+  }
+
   Future<String> register({
     required String name,
     required String phone,
@@ -92,6 +120,28 @@ class ApiService {
     await _request('PATCH', '/rates/my-rate', data: {'ratePerKm': ratePerKm});
   }
 
+  /// Update editable driver profile fields.
+  Future<DriverProfile> updateProfile({
+    required String name,
+    required String email,
+    required String phone,
+    required String vehicleNumber,
+    required String area,
+  }) async {
+    final response = await _request(
+      'PATCH',
+      '/drivers/profile',
+      data: {
+        'name': name,
+        'email': email,
+        'phone': phone,
+        'vehicleNumber': vehicleNumber,
+        'area': area,
+      },
+    );
+    return DriverProfile.fromJson(_asMap(response.data));
+  }
+
   Future<double> getAreaRate(String area) async {
     final response = await _request(
       'GET',
@@ -101,6 +151,24 @@ class ApiService {
     );
     final data = _asMap(response.data);
     return _readDouble(data, ['ratePerKm', 'averageRate', 'rate', 'value']);
+  }
+
+  /// Fetches the real-time auto-calculated rate with surge breakdown.
+  /// Returns a map containing: effectiveRate, baseRate, multiplier, breakdown.
+  Future<Map<String, dynamic>> getAutoRate(String area) async {
+    final response = await _request(
+      'GET',
+      '/rates/auto',
+      auth: false,
+      queryParameters: {'area': area},
+    );
+    return _asMap(response.data);
+  }
+
+  /// Fetch the receipt for a completed trip.
+  Future<Map<String, dynamic>> getReceiptForTrip(String tripId) async {
+    final response = await _request('GET', '/receipts/trip/$tripId');
+    return _asMap(response.data);
   }
 
   Future<Map<String, dynamic>> getPublicConfig() async {
@@ -200,6 +268,15 @@ class ApiService {
   Future<IncomeSummary> getIncomeSummary() async {
     final response = await _request('GET', '/trips/income');
     return IncomeSummary.fromJson(_asMap(response.data));
+  }
+
+  Future<Map<String, dynamic>> syncOfflineTrips(List<Map<String, dynamic>> trips) async {
+    final response = await _request(
+      'POST',
+      '/trips/sync',
+      data: {'trips': trips},
+    );
+    return _asMap(response.data);
   }
 
   Future<Response<dynamic>> _request(

@@ -10,6 +10,7 @@ import '../models/ride_request.dart';
 import '../models/trip_record.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
+import '../services/socket_service.dart';
 import '../utils/google_polyline.dart';
 import '../widgets/app_widgets.dart';
 import 'trip_summary_screen.dart';
@@ -67,6 +68,15 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
     _startLocationTracking();
   }
 
+  DateTime? _lastSyncTime;
+  void _syncLocationThrottle(double lat, double lng) {
+    final now = DateTime.now();
+    if (_lastSyncTime == null || now.difference(_lastSyncTime!).inSeconds >= 10) {
+      _lastSyncTime = now;
+      _api.updateLocation(lat: lat, lng: lng).catchError((_) {});
+    }
+  }
+
   Future<void> _startLocationTracking() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
       setState(
@@ -119,14 +129,19 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
         ),
       );
       if (!mounted) return;
-      setState(
-        () => _driverPosition = LatLng(position.latitude, position.longitude),
+      setState(() => _driverPosition = LatLng(position.latitude, position.longitude));
+
+      // Broadcast live coordinates to customer and backend
+      DriverSocketService.instance.emitLocationUpdate(
+        lat: position.latitude,
+        lng: position.longitude,
+        tripId: widget.trip.id,
+        customerId: widget.request.customerId,
       );
-      await _loadRoadRoute();
-      _fitMapToRoute();
-    } catch (_) {
-      if (mounted && _driverPosition == null) {
-        setState(() => _locationError = 'Unable to get your current location.');
+      _syncLocationThrottle(position.latitude, position.longitude);
+
+      if (_roadRoute.isEmpty && !_loadingRoute) {
+        _loadRoadRoute();
       }
     }
   }

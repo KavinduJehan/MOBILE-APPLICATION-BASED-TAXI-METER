@@ -3,6 +3,8 @@ const Trip = require('../models/Trip');
 const Receipt = require('../models/Receipt');
 const Driver = require('../models/Driver');
 const RideRequest = require('../models/RideRequest');
+const SystemConfig = require('../models/SystemConfig');
+const { computeAutoRate } = require('../services/pricingEngine');
 
 const activeRideMessage =
   'You already have an active ride. Complete or cancel it before booking another ride.';
@@ -46,8 +48,10 @@ const createReceiptForTrip = async (trip) => {
 };
 
 const createTrip = async (req, res) => {
-  const { driverId, startLocation, endLocation, distanceKm, ratePerKm, customerName, startTime } = req.body;
-  if (!startLocation || !endLocation || !distanceKm || !ratePerKm) {
+  const { driverId, startLocation, endLocation, distanceKm, customerName, startTime, pickupLat, pickupLng, destLat, destLng } = req.body;
+  let { ratePerKm } = req.body;
+
+  if (!startLocation || !endLocation || !distanceKm) {
     return res.status(400).json({ message: 'Missing required trip fields' });
   }
 
@@ -76,6 +80,17 @@ const createTrip = async (req, res) => {
       return res.status(403).json({ message: 'Driver is not verified' });
     }
 
+    // AUTO mode: override whatever ratePerKm was sent with the algorithm result
+    let surgeBreakdown = null;
+    const config = await SystemConfig.findOne();
+    if (config?.rateMode === 'AUTO') {
+      const priceResult = await computeAutoRate(driver.area || '');
+      ratePerKm     = priceResult.effectiveRate;
+      surgeBreakdown = priceResult.breakdown;
+    } else if (!ratePerKm) {
+      return res.status(400).json({ message: 'ratePerKm is required' });
+    }
+
     const totalFare = parseFloat((distanceKm * ratePerKm).toFixed(2));
     const trip = await Trip.create({
       driver: resolvedDriverId,
@@ -83,9 +98,14 @@ const createTrip = async (req, res) => {
       customerName: customerName || req.user.name || 'Anonymous',
       startLocation,
       endLocation,
+      pickupLat: pickupLat ?? null,
+      pickupLng: pickupLng ?? null,
+      destLat: destLat ?? null,
+      destLng: destLng ?? null,
       distanceKm,
       ratePerKm,
       totalFare,
+      surgeBreakdown,
       startTime: startTime || new Date(),
       status: 'ongoing',
     });
@@ -148,8 +168,17 @@ const endTrip = async (req, res) => {
     );
 
     const receipt = await createReceiptForTrip(trip);
+    const populatedTrip = await populateTrip(Trip.findById(trip._id));
 
-    res.json({ trip: await populateTrip(Trip.findById(trip._id)), receipt });
+    const io = req.app?.get('io');
+    if (io) {
+      const payload = { tripId: trip._id, trip: populatedTrip, receipt };
+      if (trip.customer) io.to(trip.customer.toString()).emit('trip_ended', payload);
+      if (trip.driver) io.to(trip.driver.toString()).emit('trip_ended', payload);
+      io.to(trip._id.toString()).emit('trip_ended', payload);
+    }
+
+    res.json({ trip: populatedTrip, receipt });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -225,6 +254,10 @@ const getMyTrips = async (req, res) => {
 const getIncome = async (req, res) => {
   try {
     const trips = await Trip.find({ driver: req.user.id, status: 'completed' });
+    const cancelledTrips = await Trip.countDocuments({
+      driver: req.user.id,
+      status: { $in: ['cancelled', 'canceled'] },
+    });
 
     const totalEarnings = parseFloat(
       trips.reduce((sum, t) => sum + t.totalFare, 0).toFixed(2)
@@ -240,7 +273,97 @@ const getIncome = async (req, res) => {
       byDay[day] = parseFloat(((byDay[day] || 0) + t.totalFare).toFixed(2));
     }
 
-    res.json({ totalEarnings, totalTrips, byDay });
+    res.json({
+      totalEarnings,
+      totalTrips,
+      completedTrips: totalTrips,
+      cancelledTrips,
+      byDay,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// POST /api/trips/sync
+// Receives an array of offline-recorded trips and saves them to MongoDB
+const syncOfflineTrips = async (req, res) => {
+  const { trips } = req.body;
+  if (!Array.isArray(trips) || trips.length === 0) {
+    return res.status(400).json({ message: 'trips array is required and must not be empty' });
+  }
+
+  try {
+    const syncedTrips = [];
+    const idMap = {}; // localId -> serverId
+
+    for (const item of trips) {
+      const receiptNo = item.receiptNumber || `REC-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+      const existingReceipt = await Receipt.findOne({ receiptNumber: receiptNo });
+      if (existingReceipt) {
+        if (item.localId) {
+          idMap[item.localId] = existingReceipt.trip.toString();
+        }
+        continue;
+      }
+
+      const distanceKm = Number(item.distanceKm) || 0;
+      const ratePerKm = Number(item.ratePerKm) || 0;
+      const totalFare = Number(item.totalFare || item.fare) || parseFloat((distanceKm * ratePerKm).toFixed(2));
+      const startTime = item.startTime ? new Date(item.startTime) : (item.date ? new Date(item.date) : new Date());
+      const endTime = item.endTime ? new Date(item.endTime) : new Date();
+
+      const trip = new Trip({
+        driver: req.user.id,
+        customerName: item.customerName || 'Offline Passenger',
+        startLocation: item.startLocation || item.startAddress || 'Offline Pickup',
+        endLocation: item.endLocation || item.endAddress || 'Offline Destination',
+        distanceKm,
+        ratePerKm,
+        totalFare,
+        startTime,
+        endTime,
+        status: item.status || 'completed',
+        surgeBreakdown: item.surgeBreakdown || null,
+        syncedToCloud: true,
+      });
+
+      await trip.save();
+
+      const receipt = new Receipt({
+        trip: trip._id,
+        driver: req.user.id,
+        receiptNumber: receiptNo,
+        customerName: trip.customerName,
+        startLocation: trip.startLocation,
+        endLocation: trip.endLocation,
+        distanceKm: trip.distanceKm,
+        ratePerKm: trip.ratePerKm,
+        totalFare: trip.totalFare,
+        issuedAt: endTime,
+      });
+
+      await receipt.save();
+
+      if (item.localId) {
+        idMap[item.localId] = trip._id.toString();
+      }
+
+      syncedTrips.push({
+        localId: item.localId,
+        serverId: trip._id,
+        receiptNumber: receiptNo,
+        totalFare: trip.totalFare,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      syncedCount: syncedTrips.length,
+      syncedTrips,
+      idMap,
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -254,4 +377,5 @@ module.exports = {
   getTripDetails,
   getMyTrips,
   getIncome,
+  syncOfflineTrips,
 };
