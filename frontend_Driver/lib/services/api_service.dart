@@ -46,6 +46,7 @@ class ApiService {
     );
   }
 
+<<<<<<< HEAD
   Future<Map<String, dynamic>> forgotPassword(String email) async {
     final response = await _request(
       'POST',
@@ -75,6 +76,9 @@ class ApiService {
   }
 
   Future<String> register({
+=======
+  Future<AuthResult> register({
+>>>>>>> daa0392 (onboarding flow new users)
     required String name,
     required String phone,
     required String email,
@@ -99,7 +103,16 @@ class ApiService {
       },
     );
     final data = _asMap(response.data);
-    return _readString(data, ['message'], fallback: 'Account created.');
+    final token = _readString(data, ['token', 'jwt', 'accessToken']);
+    if (token.isEmpty) {
+      throw ApiException('Registration succeeded but no token was returned.');
+    }
+    final profileMap = _readMap(data, ['driver', 'user', 'profile']);
+    return AuthResult(
+      token: token,
+      profile: profileMap == null ? null : DriverProfile.fromJson(profileMap),
+      message: _readString(data, ['message'], fallback: 'Account created.'),
+    );
   }
 
   Future<DriverProfile> getProfile() async {

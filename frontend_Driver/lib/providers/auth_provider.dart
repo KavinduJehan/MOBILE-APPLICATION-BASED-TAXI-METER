@@ -132,7 +132,7 @@ class AuthProvider extends ChangeNotifier {
   }) async {
     _setBusy(true);
     try {
-      final message = await api.register(
+      final result = await api.register(
         name: name,
         phone: phone,
         email: email,
@@ -141,8 +141,11 @@ class AuthProvider extends ChangeNotifier {
         vehicleNumber: vehicleNumber,
         area: area,
       );
+      _token = result.token;
+      await SessionStore.saveToken(result.token);
+      _profile = result.profile ?? await api.getProfile();
       _errorMessage = null;
-      return message;
+      return result.message ?? 'Account created successfully.';
     } catch (error) {
       _errorMessage = _messageFrom(error);
       rethrow;

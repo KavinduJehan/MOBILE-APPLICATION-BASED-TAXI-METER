@@ -5,8 +5,10 @@ import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
 import '../widgets/app_widgets.dart';
+import '../services/session_store.dart';
 import 'home_screen.dart';
 import 'login_screen.dart';
+import 'driver_onboarding_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -28,11 +30,14 @@ class _SplashScreenState extends State<SplashScreen> {
     final auth = context.read<AuthProvider>();
     await Future<void>.delayed(const Duration(seconds: 2));
     await auth.bootstrap();
+    final hasSeenOnboarding = await SessionStore.hasSeenOnboarding();
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => auth.isAuthenticated
-            ? const DriverHomeScreen()
+            ? (hasSeenOnboarding
+                ? const DriverHomeScreen()
+                : const DriverOnboardingScreen())
             : const LoginScreen(),
       ),
     );
