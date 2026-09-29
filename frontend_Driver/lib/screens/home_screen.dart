@@ -66,8 +66,14 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           'RideX uses your location to show passengers nearby drivers and to keep your position updated during a trip.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Not now')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Allow location')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Allow location'),
+          ),
         ],
       ),
     );
@@ -76,7 +82,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     final auth = context.read<AuthProvider>();
     await auth.startLocationUpdates();
     if (mounted && auth.locationError != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(auth.locationError!)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(auth.locationError!)));
     }
   }
 
@@ -102,7 +110,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
     // Silent background polling fallback every 3s
     _checkForRequests();
-    _requestTimer = Timer.periodic(const Duration(seconds: 3), (_) => _checkForRequests());
+    _requestTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => _checkForRequests(),
+    );
   }
 
   Future<void> _checkForRequests() async {
@@ -128,20 +139,63 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Row(
+        title: const Text('New ride request'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.notifications_active_rounded, color: Color(0xFF69A8FF)),
-            SizedBox(width: 10),
-            Text('New ride request'),
+            Row(
+              children: [
+                const CircleAvatar(
+                  backgroundColor: Color(0x2269A8FF),
+                  child: Icon(Icons.person_outline, color: Color(0xFF69A8FF)),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    request.customerName,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            _RequestStopRow(
+              icon: Icons.radio_button_checked,
+              label: 'Pickup',
+              value: request.pickupAddress,
+              color: Colors.greenAccent,
+            ),
+            const SizedBox(height: 12),
+            _RequestStopRow(
+              icon: Icons.location_on_outlined,
+              label: 'Destination',
+              value: request.destinationAddress,
+              color: Colors.redAccent,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '${request.estimatedDistanceKm.toStringAsFixed(1)} km  •  Rs. ${request.driverRatePerKm.toStringAsFixed(2)} / km',
+              style: const TextStyle(
+                color: Colors.black54,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         ),
-        content: Text('${request.customerName} is requesting a ride.\n\n${request.pickupAddress} -> ${request.destinationAddress}'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Later')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Later'),
+          ),
           FilledButton(
             onPressed: () {
               Navigator.pop(context);
-              Navigator.of(this.context).push(MaterialPageRoute(builder: (_) => RequestDetailScreen(request: request)));
+              Navigator.of(this.context).push(
+                MaterialPageRoute(
+                  builder: (_) => RequestDetailScreen(request: request),
+                ),
+              );
             },
             child: const Text('Review request'),
           ),

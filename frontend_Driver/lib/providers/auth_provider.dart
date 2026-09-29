@@ -220,6 +220,11 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void stopLocationUpdates() {
+    _locationService.stop();
+    notifyListeners();
+  }
+
   void _setBusy(bool value) {
     _busy = value;
     notifyListeners();

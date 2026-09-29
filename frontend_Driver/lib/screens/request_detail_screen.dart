@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../models/ride_request.dart';
 import '../models/trip_record.dart';
@@ -25,7 +26,9 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
     final auth = context.watch<AuthProvider>();
     final suggestedRate = request.suggestedRatePerKm;
     final estimatedFareAtDriverRate = request.fareAt(request.driverRatePerKm);
-    final estimatedFareAtSuggestedRate = suggestedRate == null ? null : request.fareAt(suggestedRate);
+    final estimatedFareAtSuggestedRate = suggestedRate == null
+        ? null
+        : request.fareAt(suggestedRate);
     return AppShellScaffold(
       appBar: AppBar(title: const Text('Request Details')),
       child: SingleChildScrollView(
@@ -43,25 +46,98 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(request.customerName, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+                  Text(
+                    request.customerName,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                   const SizedBox(height: 14),
                   InfoRow(label: 'Pickup', value: request.pickupAddress),
-                  InfoRow(label: 'Destination', value: request.destinationAddress),
-                  InfoRow(label: 'Distance', value: '${request.estimatedDistanceKm.toStringAsFixed(1)} km'),
-                  InfoRow(label: 'Your rate', value: 'Rs. ${request.driverRatePerKm.toStringAsFixed(2)} / km'),
+                  InfoRow(
+                    label: 'Destination',
+                    value: request.destinationAddress,
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    height: 220,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(18),
+                      child: GoogleMap(
+                        initialCameraPosition: CameraPosition(
+                          target: LatLng(
+                            request.pickupLatitude,
+                            request.pickupLongitude,
+                          ),
+                          zoom: 12,
+                        ),
+                        markers: {
+                          Marker(
+                            markerId: const MarkerId('request-pickup'),
+                            position: LatLng(
+                              request.pickupLatitude,
+                              request.pickupLongitude,
+                            ),
+                            infoWindow: const InfoWindow(title: 'Pickup'),
+                            icon: BitmapDescriptor.defaultMarkerWithHue(
+                              BitmapDescriptor.hueGreen,
+                            ),
+                          ),
+                          Marker(
+                            markerId: const MarkerId('request-destination'),
+                            position: LatLng(
+                              request.destinationLatitude,
+                              request.destinationLongitude,
+                            ),
+                            infoWindow: const InfoWindow(title: 'Destination'),
+                            icon: BitmapDescriptor.defaultMarkerWithHue(
+                              BitmapDescriptor.hueRed,
+                            ),
+                          ),
+                        },
+                        zoomControlsEnabled: false,
+                        myLocationButtonEnabled: false,
+                        liteModeEnabled: true,
+                      ),
+                    ),
+                  ),
+                  InfoRow(
+                    label: 'Distance',
+                    value:
+                        '${request.estimatedDistanceKm.toStringAsFixed(1)} km',
+                  ),
+                  InfoRow(
+                    label: 'Your rate',
+                    value:
+                        'Rs. ${request.driverRatePerKm.toStringAsFixed(2)} / km',
+                  ),
                   if (suggestedRate != null)
-                    InfoRow(label: 'Suggested rate', value: 'Rs. ${suggestedRate.toStringAsFixed(2)} / km'),
-                  InfoRow(label: 'Fare at your rate', value: 'Rs. ${estimatedFareAtDriverRate.toStringAsFixed(2)}'),
+                    InfoRow(
+                      label: 'Suggested rate',
+                      value: 'Rs. ${suggestedRate.toStringAsFixed(2)} / km',
+                    ),
+                  InfoRow(
+                    label: 'Fare at your rate',
+                    value:
+                        'Rs. ${estimatedFareAtDriverRate.toStringAsFixed(2)}',
+                  ),
                   if (estimatedFareAtSuggestedRate != null)
-                    InfoRow(label: 'Fare at suggested rate', value: 'Rs. ${estimatedFareAtSuggestedRate.toStringAsFixed(2)}'),
+                    InfoRow(
+                      label: 'Fare at suggested rate',
+                      value:
+                          'Rs. ${estimatedFareAtSuggestedRate.toStringAsFixed(2)}',
+                    ),
                   if (suggestedRate != null) ...[
                     const SizedBox(height: 8),
                     CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
                       value: _acceptSuggestedRate,
-                      onChanged: (value) => setState(() => _acceptSuggestedRate = value ?? false),
+                      onChanged: (value) =>
+                          setState(() => _acceptSuggestedRate = value ?? false),
                       title: const Text('Agree to suggested rate'),
-                      subtitle: const Text('Include the customer suggested rate when you accept this request.'),
+                      subtitle: const Text(
+                        'Include the customer suggested rate when you accept this request.',
+                      ),
                       controlAffinity: ListTileControlAffinity.leading,
                     ),
                   ],
@@ -79,7 +155,9 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
                   final response = await auth.api.respondToRequest(
                     requestId: request.id,
                     action: 'accept',
-                    agreedRatePerKm: _acceptSuggestedRate ? suggestedRate : null,
+                    agreedRatePerKm: _acceptSuggestedRate
+                        ? suggestedRate
+                        : null,
                   );
                   final trip = TripRecord.fromJson(_readTrip(response));
                   if (!mounted) return;
@@ -94,7 +172,13 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
                   );
                 } catch (error) {
                   if (!mounted) return;
-                  messenger.showSnackBar(SnackBar(content: Text(auth.errorMessage ?? 'Unable to accept request')));
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        auth.errorMessage ?? 'Unable to accept request',
+                      ),
+                    ),
+                  );
                 }
               },
             ),
@@ -105,12 +189,21 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
                 final messenger = ScaffoldMessenger.of(context);
                 final navigator = Navigator.of(context);
                 try {
-                  await auth.api.respondToRequest(requestId: request.id, action: 'reject');
+                  await auth.api.respondToRequest(
+                    requestId: request.id,
+                    action: 'reject',
+                  );
                   if (!mounted) return;
                   navigator.pop();
                 } catch (error) {
                   if (!mounted) return;
-                  messenger.showSnackBar(SnackBar(content: Text(auth.errorMessage ?? 'Unable to reject request')));
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        auth.errorMessage ?? 'Unable to reject request',
+                      ),
+                    ),
+                  );
                 }
               },
             ),
@@ -131,7 +224,9 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
     final receipt = response['receipt'];
     if (receipt is String && receipt.isNotEmpty) return receipt;
     final receiptNumber = response['receiptNumber'];
-    if (receiptNumber is String && receiptNumber.isNotEmpty) return receiptNumber;
+    if (receiptNumber is String && receiptNumber.isNotEmpty) {
+      return receiptNumber;
+    }
     if (receiptNumber != null) return receiptNumber.toString();
     return null;
   }
