@@ -20,3 +20,5 @@ atlas-credentials.env
 # Firebase / local frontend configuration
 frontend-Customer/android/app/google-services.json
 frontend-Customer/web/maps_config.js
+frontend/android/.gradle/
+

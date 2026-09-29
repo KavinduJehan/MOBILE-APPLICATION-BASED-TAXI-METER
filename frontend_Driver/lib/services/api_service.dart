@@ -238,6 +238,13 @@ class ApiService {
     return _asMap(response.data);
   }
 
+  Future<TripRecord> startTrip(String tripId) async {
+    final response = await _request('PATCH', '/trips/$tripId/start');
+    final data = _asMap(response.data);
+    final tripMap = _readMap(data, ['trip']) ?? data;
+    return TripRecord.fromJson(tripMap);
+  }
+
   Future<TripCompletionResult> endTrip(String tripId) async {
     final response = await _request('PATCH', '/trips/$tripId/end');
     final data = _asMap(response.data);
