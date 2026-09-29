@@ -121,7 +121,7 @@ export default function Pricing() {
           <button style={s.navBtn} onClick={() => navigate('/dashboard')}>Dashboard</button>
           <button style={s.navBtn} onClick={() => navigate('/drivers')}>Drivers</button>
           <button style={s.navBtn} onClick={() => navigate('/trips')}>Trips</button>
-          <button style={s.navBtn} onClick={() => navigate('/pricing')}>Pricing</button>
+          <button style={{...s.navBtn, ...s.navBtnActive}} aria-current="page" onClick={() => navigate('/pricing')}>Pricing</button>
           <button style={{...s.navBtn, color:'#e74c3c'}} onClick={handleLogout}>Logout</button>
         </div>
       </nav>
@@ -153,7 +153,8 @@ export default function Pricing() {
                     ...s.modeCard,
                     borderColor: active ? '#5467d8' : '#e3e8f0',
                     background: active ? '#f7f8ff' : '#fff',
-                    boxShadow: active ? '0 0 0 1px #5467d8, 0 8px 22px rgba(49,69,144,0.10)' : '0 2px 8px rgba(25,39,80,0.04)',
+                    boxShadow: active ? '0 0 0 3px rgba(84,103,216,0.20), 0 10px 24px rgba(49,69,144,0.14)' : '0 2px 8px rgba(25,39,80,0.04)',
+                    transform: active ? 'translateY(-2px)' : 'none',
                   }}
                 >
                   <div style={s.modeCardTop}>
@@ -319,7 +320,8 @@ const s = {
   page: { minHeight: '100vh', background: 'linear-gradient(135deg, #f4f7ff 0%, #edf0ff 100%)', fontFamily: 'Inter, Segoe UI, sans-serif' },
   nav:  { background: 'linear-gradient(90deg,#1a1a2e,#27314d)', color: '#fff', padding: '0.9rem 2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 8px 24px rgba(26,26,46,.18)' },
   navTitle: { fontWeight: 800, fontSize: '1.1rem' },
-  navBtn:   { background: 'none', border: 'none', color: '#fff', cursor: 'pointer', marginLeft: '1rem', fontSize: '0.95rem' },
+  navBtn:   { background: 'none', border: 'none', color: '#fff', cursor: 'pointer', marginLeft: '1rem', fontSize: '0.95rem', borderRadius: '8px', padding: '0.45rem 0.7rem', transition: 'all .18s ease' },
+  navBtnActive: { background: 'rgba(255,255,255,0.06)', fontWeight: 600, boxShadow: 'inset 0 -2px 0 rgba(173,185,230,0.55)' },
   content:  { padding: '2rem', maxWidth: '1100px', margin: '0 auto' },
   pageTitle: { fontSize: '1.5rem', color: '#1a1a2e', margin: '0 0 1.2rem' },
   section:   { background: '#fff', borderRadius: '18px', padding: '1.4rem 1.6rem', marginBottom: '1.2rem', boxShadow: '0 8px 22px rgba(23,34,71,.07)', border: '1px solid rgba(108,124,255,.1)' },
