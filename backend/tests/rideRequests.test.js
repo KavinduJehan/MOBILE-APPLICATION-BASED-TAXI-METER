@@ -35,6 +35,7 @@ const driverData = {
 
 const registerAndLogin = async (data = driverData) => {
   const res = await request(app).post('/api/auth/register').send(data);
+  await Driver.findByIdAndUpdate(res.body.driver.id, { pricingMode: 'DRIVER' });
   return { token: res.body.token, driver: res.body.driver };
 };
 

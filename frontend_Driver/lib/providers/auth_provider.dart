@@ -31,9 +31,7 @@ class AuthProvider extends ChangeNotifier {
   bool get locationUpdatesRunning => _locationService.isRunning;
   DateTime? get lastLocationUpdate => _locationService.lastSuccessfulUpdate;
 
-  String get rateMode => _rateMode;
-
-  String _rateMode = 'DRIVER';
+  String get rateMode => _profile?.pricingMode ?? 'ADMIN';
 
   Future<void> bootstrap() async {
     if (!_bootstrapping) {
@@ -41,10 +39,6 @@ class AuthProvider extends ChangeNotifier {
     }
     _setBusy(true);
     try {
-      final config = await api.getPublicConfig();
-      final rm = config['rateMode'];
-      _rateMode = (rm is String && rm.trim().isNotEmpty) ? rm : 'DRIVER';
-
       _token = await SessionStore.readToken();
       if (_token != null) {
         try {
@@ -223,6 +217,11 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> startLocationUpdates() async {
     await _startLocationUpdates();
+    notifyListeners();
+  }
+
+  void stopLocationUpdates() {
+    _locationService.stop();
     notifyListeners();
   }
 

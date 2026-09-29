@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
@@ -17,8 +18,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   final _licenseController = TextEditingController();
   final _vehicleController = TextEditingController();
+  bool _passwordVisible = false;
+  bool _confirmPasswordVisible = false;
   String _area = 'Colombo';
 
   final List<String> _areas = const [
@@ -37,6 +41,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _phoneController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     _licenseController.dispose();
     _vehicleController.dispose();
     super.dispose();
@@ -48,7 +53,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     try {
       final message = await auth.register(
         name: _nameController.text.trim(),
-        phone: _phoneController.text.trim(),
+        phone: '0${_phoneController.text.trim()}',
         email: _emailController.text.trim(),
         password: _passwordController.text,
         licenseNumber: _licenseController.text.trim(),
@@ -85,13 +90,68 @@ class _RegisterScreenState extends State<RegisterScreen> {
               children: [
                 TextFormField(controller: _nameController, decoration: const InputDecoration(labelText: 'Full name'), validator: _required),
                 const SizedBox(height: 14),
-                TextFormField(controller: _phoneController, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Phone'), validator: _required),
+                TextFormField(
+                  controller: _phoneController,
+                  keyboardType: TextInputType.phone,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(9),
+                  ],
+                  decoration: const InputDecoration(
+                    labelText: 'Phone Number',
+                    prefixText: '+94 ',
+                  ),
+                  validator: _phoneValidator,
+                ),
                 const SizedBox(height: 14),
-                TextFormField(controller: _emailController, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email'), validator: _required),
+                TextFormField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(labelText: 'Email'),
+                  validator: _emailValidator,
+                ),
                 const SizedBox(height: 14),
-                TextFormField(controller: _passwordController, obscureText: true, decoration: const InputDecoration(labelText: 'Password'), validator: _passwordValidator),
+                TextFormField(
+                  controller: _passwordController,
+                  obscureText: !_passwordVisible,
+                  decoration: InputDecoration(
+                    labelText: 'Password',
+                    suffixIcon: IconButton(
+                      tooltip: _passwordVisible ? 'Hide password' : 'Show password',
+                      onPressed: () => setState(() => _passwordVisible = !_passwordVisible),
+                      icon: Icon(_passwordVisible ? Icons.visibility : Icons.visibility_off),
+                    ),
+                  ),
+                  validator: _passwordValidator,
+                ),
                 const SizedBox(height: 14),
-                TextFormField(controller: _licenseController, decoration: const InputDecoration(labelText: 'License number'), validator: _required),
+                TextFormField(
+                  controller: _confirmPasswordController,
+                  obscureText: !_confirmPasswordVisible,
+                  decoration: InputDecoration(
+                    labelText: 'Re-enter password',
+                    suffixIcon: IconButton(
+                      tooltip: _confirmPasswordVisible ? 'Hide password' : 'Show password',
+                      onPressed: () => setState(() => _confirmPasswordVisible = !_confirmPasswordVisible),
+                      icon: Icon(_confirmPasswordVisible ? Icons.visibility : Icons.visibility_off),
+                    ),
+                  ),
+                  validator: _confirmPasswordValidator,
+                ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: _licenseController,
+                  textCapitalization: TextCapitalization.characters,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')),
+                    LengthLimitingTextInputFormatter(8),
+                  ],
+                  decoration: const InputDecoration(
+                    labelText: 'Driving license number',
+                    hintText: 'A1234567',
+                  ),
+                  validator: _licenseValidator,
+                ),
                 const SizedBox(height: 14),
                 TextFormField(controller: _vehicleController, decoration: const InputDecoration(labelText: 'Vehicle number'), validator: _required),
                 const SizedBox(height: 14),
@@ -118,10 +178,43 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return null;
   }
 
+  String? _phoneValidator(String? value) {
+    final digits = value?.trim() ?? '';
+    if (digits.isEmpty) return 'Phone number is required';
+    if (!RegExp(r'^[1-9]\d{8}$').hasMatch(digits)) {
+      return 'Enter the 9 digits after +94';
+    }
+    return null;
+  }
+
+  String? _emailValidator(String? value) {
+    final email = value?.trim() ?? '';
+    if (email.isEmpty) return 'Email is required';
+    if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)) {
+      return 'Enter a valid email address';
+    }
+    return null;
+  }
+
+  String? _licenseValidator(String? value) {
+    final license = value?.trim() ?? '';
+    if (license.isEmpty) return 'Driving license number is required';
+    if (!RegExp(r'^[A-Za-z]\d{7}$').hasMatch(license)) {
+      return 'Enter 1 letter followed by 7 digits';
+    }
+    return null;
+  }
+
   String? _passwordValidator(String? value) {
     if (value == null || value.length < 8) {
       return 'Password must be at least 8 characters';
     }
+    return null;
+  }
+
+  String? _confirmPasswordValidator(String? value) {
+    if (value == null || value.isEmpty) return 'Please re-enter your password';
+    if (value != _passwordController.text) return 'Passwords do not match';
     return null;
   }
 }

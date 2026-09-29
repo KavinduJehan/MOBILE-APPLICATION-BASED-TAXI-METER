@@ -1,6 +1,7 @@
 ﻿import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
+import { useCallback } from 'react';
 
 // Sri Lankan city tiers for reference
 const AREA_TIERS = {
@@ -11,20 +12,20 @@ const AREA_TIERS = {
 
 const MODE_INFO = {
   DRIVER: {
-    title: 'Driver sets rate',
-    desc: 'Each driver types their own rate per km. No algorithm involved.',
+    title: 'Driver-Set Pricing',
+    desc: 'Drivers choose and update their own rate per kilometer.',
     color: '#27ae60',
     icon: '🧑‍✈️',
   },
   ADMIN: {
-    title: 'Admin fixed rate',
-    desc: 'Drivers cannot change their rate. A fixed value is controlled by regulators.',
+    title: 'Admin-Controlled Pricing',
+    desc: 'Regulators set each driver’s rate. Drivers cannot change it.',
     color: '#6c7cff',
     icon: '🔒',
   },
   AUTO: {
-    title: 'Auto surge pricing',
-    desc: 'Algorithm calculates each rate in real time using demand, time of day, weather and area tier.',
+    title: 'Auto Surge Pricing',
+    desc: 'Rates adjust using current demand, time, weather, and pickup area.',
     color: '#f39c12',
     icon: '⚡',
   },
@@ -32,7 +33,6 @@ const MODE_INFO = {
 
 export default function Pricing() {
   const navigate = useNavigate();
-  const [config,  setConfig]  = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState('');
@@ -46,17 +46,45 @@ export default function Pricing() {
   const [previewLoading,  setPreviewLoading]   = useState(false);
   const [preview,         setPreview]          = useState(null);
   const [previewArea,     setPreviewArea]      = useState('Colombo');
+  const [previewDistance, setPreviewDistance]  = useState('5');
 
   useEffect(() => {
     api.get('/admin/config').then((res) => {
       const c = res.data;
-      setConfig(c);
       setRateMode(c.rateMode       || 'ADMIN');
       setAutoBaseRate(c.autoBaseRate    ?? 100);
       setAutoMinMult (c.autoMinMultiplier ?? 1.0);
       setAutoMaxMult (c.autoMaxMultiplier ?? 2.5);
     }).catch(() => setError('Failed to load config.')).finally(() => setLoading(false));
   }, []);
+
+  const handlePreview = useCallback(async () => {
+    setPreviewLoading(true);
+    try {
+      const params = new URLSearchParams({
+        area: previewArea,
+        baseRate: String(Number(autoBaseRate)),
+        minMultiplier: String(Number(autoMinMult)),
+        maxMultiplier: String(Number(autoMaxMult)),
+      });
+      const res = await api.get(`/rates/auto?${params.toString()}`);
+      setPreview(res.data);
+    } catch {
+      setPreview({ error: 'Preview unavailable' });
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [previewArea, autoBaseRate, autoMinMult, autoMaxMult]);
+
+  useEffect(() => {
+    if (loading || rateMode !== 'AUTO') return undefined;
+    const firstRefresh = window.setTimeout(handlePreview, 250);
+    const refreshTimer = window.setInterval(handlePreview, 30000);
+    return () => {
+      window.clearTimeout(firstRefresh);
+      window.clearInterval(refreshTimer);
+    };
+  }, [loading, rateMode, handlePreview]);
 
   const handleSave = async () => {
     setSaving(true); setError(''); setSuccess('');
@@ -67,19 +95,11 @@ export default function Pricing() {
         autoMinMultiplier: Number(autoMinMult),
         autoMaxMultiplier: Number(autoMaxMult),
       });
+      if (rateMode === 'AUTO') await handlePreview();
       setSuccess('Pricing settings saved.');
     } catch (err) {
       setError(err.response?.data?.message || 'Save failed.');
     } finally { setSaving(false); }
-  };
-
-  const handlePreview = async () => {
-    setPreviewLoading(true); setPreview(null);
-    try {
-      const res = await api.get(`/rates/auto?area=${encodeURIComponent(previewArea)}`);
-      setPreview(res.data);
-    } catch { setPreview({ error: 'Preview unavailable' }); }
-    finally { setPreviewLoading(false); }
   };
 
   const handleLogout = () => { localStorage.removeItem('adminToken'); navigate('/login'); };
@@ -90,7 +110,8 @@ export default function Pricing() {
     <div style={s.page}>
       <style>{`
         @keyframes fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
-        .mode-card:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(0,0,0,0.10); }
+        .mode-card:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(25,39,80,0.12); }
+        .mode-card:focus-visible { outline: 3px solid rgba(84,103,216,0.35); outline-offset: 3px; }
       `}</style>
 
       {/* nav */}
@@ -100,41 +121,49 @@ export default function Pricing() {
           <button style={s.navBtn} onClick={() => navigate('/dashboard')}>Dashboard</button>
           <button style={s.navBtn} onClick={() => navigate('/drivers')}>Drivers</button>
           <button style={s.navBtn} onClick={() => navigate('/trips')}>Trips</button>
-          <button style={s.navBtn} onClick={() => navigate('/pricing')}>Pricing</button>
+          <button style={{...s.navBtn, ...s.navBtnActive}} aria-current="page" onClick={() => navigate('/pricing')}>Pricing</button>
           <button style={{...s.navBtn, color:'#e74c3c'}} onClick={handleLogout}>Logout</button>
         </div>
       </nav>
 
       <div style={s.content}>
         <h2 style={s.pageTitle}>Pricing Settings</h2>
-        <p style={s.subtitle}>Control how driver rates are determined across the platform.</p>
-
         {error   && <div style={s.alertErr}>{error}</div>}
         {success && <div style={s.alertOk}>{success}</div>}
 
         {/* ── Mode selector ─────────────────────────────────── */}
         <div style={s.section}>
-          <h3 style={s.sectionTitle}>Rate mode</h3>
+          <div style={s.modeHeading}>
+            <div>
+              <h3 style={{...s.sectionTitle, marginBottom: '0.25rem'}}>Rate mode</h3>
+              <p style={s.modeSubheading}>Default pricing mode for new drivers: {MODE_INFO[rateMode]?.title || 'Admin-Controlled Pricing'}</p>
+            </div>
+          </div>
           <div style={s.modeGrid}>
             {Object.entries(MODE_INFO).map(([mode, info]) => {
               const active = rateMode === mode;
               return (
-                <div
+                <button
+                  type="button"
                   key={mode}
                   className="mode-card"
+                  aria-pressed={active}
                   onClick={() => setRateMode(mode)}
                   style={{
                     ...s.modeCard,
-                    borderColor: active ? info.color : 'rgba(0,0,0,0.08)',
-                    background:  active ? `${info.color}12` : '#fff',
-                    boxShadow:   active ? `0 0 0 2px ${info.color}` : '0 4px 14px rgba(0,0,0,0.05)',
+                    borderColor: active ? '#5467d8' : '#e3e8f0',
+                    background: active ? '#f7f8ff' : '#fff',
+                    boxShadow: active ? '0 0 0 3px rgba(84,103,216,0.20), 0 10px 24px rgba(49,69,144,0.14)' : '0 2px 8px rgba(25,39,80,0.04)',
+                    transform: active ? 'translateY(-2px)' : 'none',
                   }}
                 >
-                  <div style={s.modeIcon}>{info.icon}</div>
-                  <div style={{...s.modeLabel, color: active ? info.color : '#1a1a2e'}}>{info.title}</div>
-                  <div style={s.modeDesc}>{info.desc}</div>
-                  {active && <div style={{...s.modeBadge, background: info.color}}>Active</div>}
-                </div>
+                  <div style={s.modeCardTop}>
+                    <span style={{...s.modeIcon, background: `${info.color}18`}}>{info.icon}</span>
+                    {active && <span style={s.modeBadge}>Selected</span>}
+                  </div>
+                  <span style={{...s.modeLabel, color: active ? '#263b91' : '#1a1a2e'}}>{info.title}</span>
+                  <span style={s.modeDesc}>{info.desc}</span>
+                </button>
               );
             })}
           </div>
@@ -173,7 +202,7 @@ export default function Pricing() {
                   onChange={(e) => setAutoMaxMult(e.target.value)}
                   style={s.input}
                 />
-                <span style={s.hint}>Highest surge cap (Uber uses 2.5 by default).</span>
+                <span style={s.hint}>Maximum rate is the base rate multiplied by this value.</span>
               </label>
             </div>
 
@@ -190,6 +219,7 @@ export default function Pricing() {
 
             {/* Live preview */}
             <div style={s.previewBox}>
+              <p style={s.hint}>Preview uses the entered base and multiplier values, along with current demand, time, weather, and area data. It refreshes every 30 seconds.</p>
               <div style={s.sectionTitle}>🔍 Live rate preview</div>
               <div style={s.previewRow}>
                 <input
@@ -198,12 +228,22 @@ export default function Pricing() {
                   placeholder="Enter area, e.g. Colombo"
                   style={{...s.input, flex: 1, marginBottom: 0}}
                 />
+                <input
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  value={previewDistance}
+                  onChange={(e) => setPreviewDistance(e.target.value)}
+                  aria-label="Trip distance in kilometers"
+                  placeholder="Distance (km)"
+                  style={{...s.input, width: '150px', marginBottom: 0}}
+                />
                 <button
                   onClick={handlePreview}
                   disabled={previewLoading}
                   style={s.previewBtn}
                 >
-                  {previewLoading ? 'Calculating…' : 'Calculate now'}
+                  {previewLoading ? 'Calculating…' : 'Refresh rate'}
                 </button>
               </div>
               {preview && !preview.error && (
@@ -212,10 +252,16 @@ export default function Pricing() {
                     Rs. {preview.effectiveRate?.toFixed(2)} / km
                     <span style={s.previewMult}> ({preview.multiplier?.toFixed(2)}× surge)</span>
                   </div>
+                  {Number(previewDistance) > 0 && (
+                    <div style={s.previewFare}>
+                      Estimated trip fare: Rs. {(preview.effectiveRate * Number(previewDistance)).toFixed(2)}
+                      <span style={s.hint}> ({Number(previewDistance).toFixed(1)} km × current rate)</span>
+                    </div>
+                  )}
                   <div style={s.breakdownGrid}>
                     {[
                       ['🚗 Demand/supply', `${preview.breakdown?.availableDrivers} drivers · ${preview.breakdown?.activeRequests} requests`, preview.breakdown?.demandSupplyFactor],
-                      ['🕐 Time of day', new Date().toLocaleTimeString(), preview.breakdown?.timeFactor],
+                      ['🕐 Time of day', `${new Intl.DateTimeFormat('en-LK', { timeZone: 'Asia/Colombo', hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date())} Sri Lanka time`, preview.breakdown?.timeFactor],
                       ['🌦 Weather', preview.breakdown?.weatherCondition, preview.breakdown?.weatherFactor],
                       ['📍 Area tier', preview.area, preview.breakdown?.areaFactor],
                     ].map(([label, detail, factor]) => (
@@ -237,13 +283,14 @@ export default function Pricing() {
 
         {/* ── Weights reference (always visible) ────────────── */}
         <div style={s.section}>
-          <h3 style={s.sectionTitle}>Algorithm signal weights</h3>
+          <h3 style={s.sectionTitle}>What can change the rate?</h3>
+          <p style={s.weightsIntro}>The Auto Surge calculator combines these four signals. The percentage shows how much influence each one has on the final rate.</p>
           <div style={s.weightsGrid}>
             {[
-              ['🚗', 'Demand / supply', '50%', 'Active ride requests ÷ available verified drivers in area'],
-              ['🕐', 'Time of day',     '25%', 'Morning rush (7–9 AM), evening rush (5–8 PM), late night (10 PM–2 AM)'],
-              ['🌦', 'Weather',         '15%', 'OpenWeatherMap: Rain=1.3×, Thunderstorm=1.5×, Clear=1.0×'],
-              ['📍', 'Area tier',       '10%', 'Tier A cities get 1.15×, Tier B 1.05×, others 1.0×'],
+              ['🚗', 'Ride demand', '50%', 'More open requests and fewer available verified drivers in the selected area can raise the rate.'],
+              ['🕐', 'Time of day', '25%', ['Morning commute · 7–9 AM', 'Evening commute · 5–8 PM', 'Late night · 10 PM–2 AM']],
+              ['🌦', 'Weather', '15%', 'Rain and storms can raise the rate. If weather data is unavailable, this signal uses a neutral value.'],
+              ['📍', 'Pickup area', '10%', ['High demand · 1.15× · Colombo / Kandy / Galle', 'Moderate demand · 1.05× · Negombo / Kurunegala / Ratnapura', 'Other areas · 1.00×']],
             ].map(([icon, name, weight, desc]) => (
               <div key={name} style={s.weightCard}>
                 <div style={s.weightTop}>
@@ -251,7 +298,11 @@ export default function Pricing() {
                   <span style={s.wName}>{name}</span>
                   <span style={s.wBadge}>{weight}</span>
                 </div>
-                <p style={s.wDesc}>{desc}</p>
+                {Array.isArray(desc) ? (
+                  <ul style={s.wList}>
+                    {desc.map((item) => <li key={item}>{item}</li>)}
+                  </ul>
+                ) : <p style={s.wDesc}>{desc}</p>}
               </div>
             ))}
           </div>
@@ -269,18 +320,21 @@ const s = {
   page: { minHeight: '100vh', background: 'linear-gradient(135deg, #f4f7ff 0%, #edf0ff 100%)', fontFamily: 'Inter, Segoe UI, sans-serif' },
   nav:  { background: 'linear-gradient(90deg,#1a1a2e,#27314d)', color: '#fff', padding: '0.9rem 2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 8px 24px rgba(26,26,46,.18)' },
   navTitle: { fontWeight: 800, fontSize: '1.1rem' },
-  navBtn:   { background: 'none', border: 'none', color: '#fff', cursor: 'pointer', marginLeft: '1rem', fontSize: '0.95rem' },
+  navBtn:   { background: 'none', border: 'none', color: '#fff', cursor: 'pointer', marginLeft: '1rem', fontSize: '0.95rem', borderRadius: '8px', padding: '0.45rem 0.7rem', transition: 'all .18s ease' },
+  navBtnActive: { background: 'rgba(255,255,255,0.06)', fontWeight: 600, boxShadow: 'inset 0 -2px 0 rgba(173,185,230,0.55)' },
   content:  { padding: '2rem', maxWidth: '1100px', margin: '0 auto' },
-  pageTitle: { fontSize: '1.5rem', color: '#1a1a2e', margin: 0 },
-  subtitle:  { color: '#68708a', marginTop: '0.3rem', marginBottom: '1.5rem' },
+  pageTitle: { fontSize: '1.5rem', color: '#1a1a2e', margin: '0 0 1.2rem' },
   section:   { background: '#fff', borderRadius: '18px', padding: '1.4rem 1.6rem', marginBottom: '1.2rem', boxShadow: '0 8px 22px rgba(23,34,71,.07)', border: '1px solid rgba(108,124,255,.1)' },
   sectionTitle: { margin: '0 0 1rem', fontSize: '1rem', color: '#1a1a2e', fontWeight: 700 },
-  modeGrid:  { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px,1fr))', gap: '1rem' },
-  modeCard:  { borderRadius: '14px', border: '2px solid', padding: '1.2rem', cursor: 'pointer', transition: 'all .2s ease', position: 'relative' },
-  modeIcon:  { fontSize: '1.8rem', marginBottom: '0.5rem' },
-  modeLabel: { fontWeight: 700, fontSize: '1rem', marginBottom: '0.35rem' },
-  modeDesc:  { color: '#68708a', fontSize: '0.84rem', lineHeight: 1.4 },
-  modeBadge: { position: 'absolute', top: '0.7rem', right: '0.7rem', color: '#fff', fontSize: '0.72rem', fontWeight: 700, padding: '0.2rem 0.55rem', borderRadius: '999px' },
+  modeHeading: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' },
+  modeSubheading: { color: '#78839a', fontSize: '0.84rem', margin: 0 },
+  modeGrid:  { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px,1fr))', gap: '1rem' },
+  modeCard:  { borderRadius: '15px', border: '1.5px solid', padding: '1.15rem', cursor: 'pointer', transition: 'all .18s ease', display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '0.7rem', textAlign: 'left', width: '100%', fontFamily: 'inherit', color: 'inherit' },
+  modeCardTop: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: '42px' },
+  modeIcon:  { width: '42px', height: '42px', borderRadius: '12px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem' },
+  modeLabel: { fontWeight: 750, fontSize: '1rem', lineHeight: 1.3 },
+  modeDesc:  { color: '#68708a', fontSize: '0.84rem', lineHeight: 1.5 },
+  modeBadge: { background: '#e8edff', color: '#4658c8', fontSize: '0.72rem', fontWeight: 700, padding: '0.3rem 0.65rem', borderRadius: '999px' },
   paramGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px,1fr))', gap: '1rem', marginBottom: '1.2rem' },
   paramLabel: { display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.88rem', color: '#333', fontWeight: 600 },
   input:  { padding: '0.55rem 0.85rem', border: '1px solid #d2ddec', borderRadius: '10px', fontSize: '0.9rem', outline: 'none', marginBottom: '0.2rem' },
@@ -295,6 +349,7 @@ const s = {
   previewBtn:  { background: 'linear-gradient(135deg,#1a1a2e,#27314d)', color: '#fff', border: 'none', padding: '0.6rem 1.1rem', borderRadius: '10px', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 600 },
   previewResult: { background: '#fff', borderRadius: '12px', padding: '1rem' },
   previewRate: { fontSize: '1.5rem', fontWeight: 800, color: '#1a1a2e', marginBottom: '0.8rem' },
+  previewFare: { background: '#eafaf1', color: '#1e8449', borderRadius: '10px', padding: '0.75rem 0.9rem', marginBottom: '0.85rem', fontWeight: 700 },
   previewMult: { fontSize: '1rem', color: '#f39c12' },
   breakdownGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px,1fr))', gap: '0.75rem' },
   breakdownCell: { background: '#f8fafe', borderRadius: '10px', padding: '0.7rem' },
@@ -302,12 +357,14 @@ const s = {
   bDetail: { color: '#68708a', fontSize: '0.78rem', marginBottom: '0.3rem' },
   bFactor: { fontWeight: 800, fontSize: '1rem' },
   weightsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px,1fr))', gap: '0.85rem' },
+  weightsIntro: { color: '#68708a', margin: '-0.55rem 0 1rem', fontSize: '0.86rem', lineHeight: 1.5 },
   weightCard: { background: '#f8fafe', borderRadius: '12px', padding: '0.9rem 1rem' },
   weightTop:  { display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' },
   wIcon:  { fontSize: '1.3rem' },
   wName:  { fontWeight: 700, color: '#1a1a2e', fontSize: '0.9rem', flex: 1 },
   wBadge: { background: '#e8edff', color: '#5b6cff', padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 700 },
   wDesc:  { color: '#68708a', fontSize: '0.8rem', margin: 0, lineHeight: 1.4 },
+  wList: { color: '#68708a', fontSize: '0.8rem', margin: 0, paddingLeft: '1.1rem', lineHeight: 1.45, display: 'grid', gap: '0.28rem' },
   saveBtn: { background: 'linear-gradient(135deg,#6c7cff,#3c57ff)', color: '#fff', border: 'none', padding: '0.8rem 2rem', borderRadius: '12px', fontSize: '1rem', fontWeight: 700, cursor: 'pointer', boxShadow: '0 8px 20px rgba(60,87,255,.25)', marginTop: '0.5rem' },
   alertErr: { background: '#fdecea', color: '#c0392b', borderRadius: '10px', padding: '0.7rem 1rem', marginBottom: '1rem', fontSize: '0.9rem' },
   alertOk:  { background: '#eafaf1', color: '#1e8449', borderRadius: '10px', padding: '0.7rem 1rem', marginBottom: '1rem', fontSize: '0.9rem' },

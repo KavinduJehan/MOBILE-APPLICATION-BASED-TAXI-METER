@@ -1,9 +1,17 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("dev.flutter.flutter-gradle-plugin")
     id("com.google.android.libraries.mapsplatform.secrets-gradle-plugin")
     id("com.google.gms.google-services")
+}
+
+val mapsSecrets = Properties()
+val mapsSecretsFile = rootProject.file("secrets.properties")
+if (mapsSecretsFile.exists()) {
+    mapsSecretsFile.inputStream().use { mapsSecrets.load(it) }
 }
 
 android {
@@ -26,7 +34,8 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        manifestPlaceholders["MAPS_API_KEY"] = ""
+
+        manifestPlaceholders["MAPS_API_KEY"] = mapsSecrets.getProperty("MAPS_API_KEY", "")
     }
 
     buildTypes {

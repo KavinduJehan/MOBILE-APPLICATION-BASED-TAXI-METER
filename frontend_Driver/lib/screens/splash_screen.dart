@@ -19,23 +19,24 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    unawaited(_bootstrap());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_bootstrap());
+    });
   }
 
   Future<void> _bootstrap() async {
     final auth = context.read<AuthProvider>();
     await Future<void>.delayed(const Duration(seconds: 2));
-    if (!mounted) return;
     await auth.bootstrap();
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (_) => auth.isAuthenticated ? const DriverHomeScreen() : const LoginScreen(),
+        builder: (_) => auth.isAuthenticated
+            ? const DriverHomeScreen()
+            : const LoginScreen(),
       ),
     );
   }
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +58,10 @@ class _SplashScreenState extends State<SplashScreen> {
               SizedBox(
                 width: 22,
                 height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2.3, valueColor: AlwaysStoppedAnimation<Color>(Colors.white70)),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.3,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
+                ),
               ),
             ],
           ),

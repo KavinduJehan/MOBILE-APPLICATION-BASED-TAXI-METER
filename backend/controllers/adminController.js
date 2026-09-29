@@ -2,6 +2,26 @@ const Driver = require('../models/Driver');
 const Trip = require('../models/Trip');
 const RideRequest = require('../models/RideRequest');
 
+const setDriverPricing = async (req, res) => {
+  const { pricingMode, ratePerKm } = req.body;
+  const allowedModes = ['DRIVER', 'ADMIN', 'AUTO'];
+  if (!allowedModes.includes(pricingMode)) {
+    return res.status(400).json({ message: 'pricingMode must be DRIVER, ADMIN, or AUTO' });
+  }
+  if (ratePerKm !== undefined && (!Number.isFinite(Number(ratePerKm)) || Number(ratePerKm) <= 0)) {
+    return res.status(400).json({ message: 'ratePerKm must be a positive number' });
+  }
+  try {
+    const update = { pricingMode };
+    if (ratePerKm !== undefined) update.ratePerKm = Number(ratePerKm);
+    const driver = await Driver.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true }).select('-password');
+    if (!driver) return res.status(404).json({ message: 'Driver not found' });
+    res.json(driver);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 // GET /api/admin/drivers?verified=false|true|all
 const listDrivers = async (req, res) => {
   const { verified } = req.query;
@@ -92,4 +112,4 @@ const getStats = async (req, res) => {
   }
 };
 
-module.exports = { listDrivers, setDriverVerification, getAllTrips, getStats };
+module.exports = { listDrivers, setDriverVerification, setDriverPricing, getAllTrips, getStats };

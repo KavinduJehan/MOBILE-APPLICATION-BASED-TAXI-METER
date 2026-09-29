@@ -373,9 +373,9 @@ class _WarpSearchPainter extends CustomPainter {
         center,
         coreRadius,
         Paint()
-          ..color = const Color(0xFF00E5FF).withValues(
-            alpha: glow == 50 ? 0.2 : (glow == 30 ? 0.38 : 0.72),
-          )
+          ..color = const Color(
+            0xFF00E5FF,
+          ).withValues(alpha: glow == 50 ? 0.2 : (glow == 30 ? 0.38 : 0.72))
           ..maskFilter = MaskFilter.blur(BlurStyle.normal, glow),
       );
     }
