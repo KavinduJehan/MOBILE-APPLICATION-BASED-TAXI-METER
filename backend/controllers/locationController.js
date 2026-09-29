@@ -31,6 +31,7 @@ const fetchGooglePlaces = async (url, options) => {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
+    console.error('[Google API Error]', response.status, JSON.stringify(data, null, 2));
     const error = new Error(describeGooglePlacesError(data, response.status));
     error.status = response.status;
     error.details = data;
@@ -65,6 +66,7 @@ const fetchGoogleRoute = async (options) => {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
+    console.error('[Google Routes Error]', response.status, JSON.stringify(data, null, 2));
     const error = new Error(describeGoogleRoutesError(data, response.status));
     error.status = response.status;
     error.details = data;

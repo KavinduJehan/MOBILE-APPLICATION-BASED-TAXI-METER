@@ -82,7 +82,7 @@ export default function Trips() {
         <div>
           <button style={styles.navBtn} onClick={() => navigate('/dashboard')}>Dashboard</button>
           <button style={styles.navBtn} onClick={() => navigate('/drivers')}>Drivers</button>
-          <button style={styles.navBtn} onClick={() => navigate('/trips')}>Trips</button>
+          <button style={{ ...styles.navBtn, ...styles.navBtnActive }} aria-current="page" onClick={() => navigate('/trips')}>Trips</button>
           <button style={styles.navBtn} onClick={() => navigate('/pricing')}>Pricing</button>
           <button style={{ ...styles.navBtn, color: '#e74c3c' }} onClick={handleLogout}>Logout</button>
         </div>
@@ -184,6 +184,7 @@ const styles = {
     background: 'none', border: 'none', color: '#fff',
     cursor: 'pointer', marginLeft: '1rem', fontSize: '0.95rem',
   },
+  navBtnActive: { background: 'rgba(255,255,255,0.06)', borderRadius: '8px', padding: '0.45rem 0.7rem', fontWeight: 600, boxShadow: 'inset 0 -2px 0 rgba(173,185,230,0.55)' },
   content: { padding: '2rem' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' },
   headerActions: { display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' },

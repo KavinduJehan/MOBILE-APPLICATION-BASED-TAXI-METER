@@ -100,7 +100,7 @@ export default function Dashboard() {
       <nav style={styles.nav}>
         <span style={styles.navTitle}>Taxi Meter Admin</span>
         <div>
-          <button style={styles.navBtn} onClick={() => navigate('/dashboard')}>Dashboard</button>
+          <button style={{ ...styles.navBtn, ...styles.navBtnActive }} aria-current="page" onClick={() => navigate('/dashboard')}>Dashboard</button>
           <button style={styles.navBtn} onClick={() => navigate('/drivers')}>Drivers</button>
           <button style={styles.navBtn} onClick={() => navigate('/trips')}>Trips</button>
           <button style={styles.navBtn} onClick={() => navigate('/pricing')}>Pricing</button>
@@ -294,6 +294,7 @@ const styles = {
     fontSize: '0.95rem',
     transition: 'opacity 0.2s ease',
   },
+  navBtnActive: { background: 'rgba(255,255,255,0.06)', borderRadius: '8px', padding: '0.45rem 0.7rem', fontWeight: 600, boxShadow: 'inset 0 -2px 0 rgba(173,185,230,0.55)' },
   content: { padding: '2rem', maxWidth: '1200px', margin: '0 auto' },
   heroCard: {
     display: 'flex',

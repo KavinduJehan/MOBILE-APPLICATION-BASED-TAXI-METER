@@ -7,7 +7,6 @@ import 'package:provider/provider.dart';
 
 import '../models/ride_request.dart';
 import '../providers/auth_provider.dart';
-import '../utils/google_polyline.dart';
 import '../widgets/app_widgets.dart';
 import 'earnings_screen.dart';
 import 'incoming_requests_screen.dart';
@@ -67,6 +66,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
             const SizedBox(height: 20),
+            if (profile != null) ...[
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6C7CFF).withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: const Color(0xFF6C7CFF).withValues(alpha: 0.3)),
+                  ),
+                  child: Text(
+                    'Pricing mode: ${auth.rateMode == 'DRIVER' ? 'Driver-Set' : auth.rateMode == 'AUTO' ? 'Auto Surge' : 'Admin-Controlled'}',
+                    style: const TextStyle(color: Color(0xFFAEB8FF), fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+            ],
             if (profile != null && !profile.isVerified)
               Container(
                 padding: const EdgeInsets.all(16),
@@ -171,8 +188,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 12),
             ActionCard(
-              title: 'Update Rate',
-              subtitle: 'Keep your per-km rate current.',
+              title: 'Pricing',
+              subtitle: auth.rateMode == 'DRIVER' ? 'View and update your driver-set rate.' : 'View your current rate and pricing mode.',
               icon: Icons.price_change_rounded,
               onTap: () => Navigator.of(
                 context,
@@ -209,419 +226,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 18),
               const LinearProgressIndicator(minHeight: 3),
             ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DriverHomeMap extends StatefulWidget {
-  const _DriverHomeMap();
-
-  @override
-  State<_DriverHomeMap> createState() => _DriverHomeMapState();
-}
-
-class _DriverHomeMapState extends State<_DriverHomeMap> {
-  GoogleMapController? _mapController;
-  StreamSubscription<Position>? _positionSubscription;
-  Timer? _requestTimer;
-  Timer? _routeTimer;
-  LatLng? _driverPosition;
-  List<RideRequest> _requests = const [];
-  List<LatLng> _routePoints = const [];
-  String? _routeMessage;
-  String? _routeRequestId;
-  LatLng? _lastRouteOrigin;
-  bool _loadingRoute = false;
-  bool _hasFittedRoute = false;
-  String? _locationMessage;
-  bool _loadingLocation = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadLocation();
-    _loadRequests();
-    _requestTimer = Timer.periodic(
-      const Duration(seconds: 10),
-      (_) => _loadRequests(),
-    );
-  }
-
-  @override
-  void dispose() {
-    _positionSubscription?.cancel();
-    _requestTimer?.cancel();
-    _routeTimer?.cancel();
-    _mapController?.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadLocation() async {
-    if (!await Geolocator.isLocationServiceEnabled()) {
-      if (mounted) {
-        setState(() {
-          _loadingLocation = false;
-          _locationMessage = 'Turn on location services to view your map.';
-        });
-      }
-      return;
-    }
-
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
-      if (mounted) {
-        setState(() {
-          _loadingLocation = false;
-          _locationMessage =
-              'Location permission is required to view your map.';
-        });
-      }
-      return;
-    }
-
-    try {
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 15),
-        ),
-      );
-      if (!mounted) return;
-      setState(() {
-        _driverPosition = LatLng(position.latitude, position.longitude);
-        _loadingLocation = false;
-        _locationMessage = null;
-      });
-      _positionSubscription =
-          Geolocator.getPositionStream(
-            locationSettings: const LocationSettings(
-              accuracy: LocationAccuracy.high,
-              distanceFilter: 20,
-            ),
-          ).listen((position) {
-            if (!mounted) return;
-            setState(() {
-              _driverPosition = LatLng(position.latitude, position.longitude);
-            });
-            _scheduleRouteRefresh();
-          });
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _loadingLocation = false;
-          _locationMessage = 'Unable to determine your current location.';
-        });
-      }
-    }
-  }
-
-  Future<void> _loadRequests() async {
-    try {
-      final requests = await context
-          .read<AuthProvider>()
-          .api
-          .getIncomingRequests();
-      if (!mounted) return;
-      setState(() {
-        _requests = requests;
-        if (_routeRequestId != _routeRequest?.id) {
-          _routePoints = const [];
-          _routeMessage = null;
-          _hasFittedRoute = false;
-        }
-      });
-      _scheduleRouteRefresh();
-    } catch (_) {
-      // The map remains usable when request polling is temporarily unavailable.
-    }
-  }
-
-  RideRequest? get _routeRequest {
-    for (final request in _requests) {
-      if (_hasCoordinates(request)) {
-        return request;
-      }
-    }
-    return null;
-  }
-
-  bool _hasDestinationCoordinates(RideRequest request) {
-    return request.destinationLatitude.abs() <= 90 &&
-        request.destinationLongitude.abs() <= 180 &&
-        (request.destinationLatitude != 0 || request.destinationLongitude != 0);
-  }
-
-  void _scheduleRouteRefresh() {
-    final request = _routeRequest;
-    if (request == null || _loadingRoute || _driverPosition == null) return;
-    
-    final lastOrigin = _lastRouteOrigin;
-    if (_routeRequestId == request.id && lastOrigin != null) {
-      final distance = Geolocator.distanceBetween(
-        lastOrigin.latitude,
-        lastOrigin.longitude,
-        _driverPosition!.latitude,
-        _driverPosition!.longitude,
-      );
-      if (distance < 50 && _routePoints.length > 1) {
-        return;
-      }
-    }
-
-    _routeTimer?.cancel();
-    _routeTimer = Timer(const Duration(milliseconds: 400), () {
-      _routeTimer = null;
-      _loadRequestRoute(request);
-    });
-  }
-
-  Future<void> _loadRequestRoute(RideRequest request) async {
-    final start = _driverPosition;
-    if (start == null || _loadingRoute) return;
-    
-    setState(() {
-      _loadingRoute = true;
-      _routeMessage = null;
-    });
-    try {
-      final data = await context.read<AuthProvider>().api.getDrivingRoute(
-        pickupLatitude: start.latitude,
-        pickupLongitude: start.longitude,
-        destinationLatitude: request.pickupLatitude,
-        destinationLongitude: request.pickupLongitude,
-      );
-      final decodedPoints = decodeGooglePolyline(
-        data['encodedPolyline']?.toString() ?? '',
-      );
-      if (decodedPoints.length < 2) {
-        throw const FormatException('Route contains no map path');
-      }
-      final points = decodedPoints
-          .map((point) => LatLng(point.latitude, point.longitude))
-          .toList();
-      if (!mounted) return;
-      setState(() {
-        _routePoints = points;
-        _routeRequestId = request.id;
-        _lastRouteOrigin = start;
-        _routeMessage = null;
-        _loadingRoute = false;
-        _hasFittedRoute = false;
-      });
-      _fitRoute(request);
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _loadingRoute = false;
-        _routeMessage = 'Unable to load the customer route.';
-      });
-    }
-  }
-
-  void _fitRoute(RideRequest request) {
-    final controller = _mapController;
-    if (controller == null || _routePoints.length < 2 || _hasFittedRoute) {
-      return;
-    }
-    final points = [
-      ..._routePoints,
-      if (_driverPosition != null) _driverPosition!,
-      if (_hasDestinationCoordinates(request))
-        LatLng(request.destinationLatitude, request.destinationLongitude),
-    ];
-    final latitudes = points.map((point) => point.latitude).toList();
-    final longitudes = points.map((point) => point.longitude).toList();
-    controller.animateCamera(
-      CameraUpdate.newLatLngBounds(
-        LatLngBounds(
-          southwest: LatLng(
-            latitudes.reduce((a, b) => a < b ? a : b),
-            longitudes.reduce((a, b) => a < b ? a : b),
-          ),
-          northeast: LatLng(
-            latitudes.reduce((a, b) => a > b ? a : b),
-            longitudes.reduce((a, b) => a > b ? a : b),
-          ),
-        ),
-        56,
-      ),
-    );
-    _hasFittedRoute = true;
-  }
-
-  void _recenter() {
-    final position = _driverPosition;
-    if (position == null) return;
-    _mapController?.animateCamera(CameraUpdate.newLatLngZoom(position, 14));
-  }
-
-  bool _hasCoordinates(RideRequest request) {
-    return request.pickupLatitude.abs() <= 90 &&
-        request.pickupLongitude.abs() <= 180 &&
-        (request.pickupLatitude != 0 || request.pickupLongitude != 0);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final position = _driverPosition;
-    if (position == null) {
-      return Container(
-        height: 250,
-        decoration: BoxDecoration(
-          color: const Color(0xFF0E1422),
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Center(
-          child: _loadingLocation
-              ? const CircularProgressIndicator()
-              : Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(
-                    _locationMessage ?? 'Map location unavailable.',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white70),
-                  ),
-                ),
-        ),
-      );
-    }
-
-    final routeRequest = _routeRequest;
-    final markers = <Marker>{
-      Marker(
-        markerId: const MarkerId('driver-current-location'),
-        position: position,
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-        infoWindow: const InfoWindow(title: 'Your location'),
-      ),
-      ..._requests
-          .where(_hasCoordinates)
-          .map(
-            (request) => Marker(
-              markerId: MarkerId('request-${request.id}'),
-              position: LatLng(request.pickupLatitude, request.pickupLongitude),
-              icon: BitmapDescriptor.defaultMarkerWithHue(
-                BitmapDescriptor.hueGreen,
-              ),
-              infoWindow: InfoWindow(
-                title: request.customerName,
-                snippet: request.pickupAddress.isEmpty
-                    ? 'Incoming pickup request'
-                    : request.pickupAddress,
-              ),
-            ),
-          ),
-    };
-    if (routeRequest != null && _hasDestinationCoordinates(routeRequest)) {
-      markers.add(
-        Marker(
-          markerId: MarkerId('destination-${routeRequest.id}'),
-          position: LatLng(
-            routeRequest.destinationLatitude,
-            routeRequest.destinationLongitude,
-          ),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-          infoWindow: InfoWindow(
-            title: 'Destination',
-            snippet: routeRequest.destinationAddress,
-          ),
-        ),
-      );
-    }
-    final polylines = _routePoints.length > 1
-        ? {
-            Polyline(
-              polylineId: const PolylineId('request-route'),
-              points: _routePoints,
-              color: const Color(0xFF69A8FF),
-              width: 5,
-            ),
-          }
-        : <Polyline>{};
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: SizedBox(
-        height: 300,
-        child: Stack(
-          children: [
-            GoogleMap(
-              initialCameraPosition: CameraPosition(target: position, zoom: 14),
-              onMapCreated: (controller) {
-                _mapController = controller;
-                if (_routeRequest != null) {
-                  WidgetsBinding.instance.addPostFrameCallback(
-                    (_) => _fitRoute(_routeRequest!),
-                  );
-                }
-              },
-              myLocationEnabled: false,
-              myLocationButtonEnabled: false,
-              zoomControlsEnabled: false,
-              markers: markers,
-              polylines: polylines,
-            ),
-            Positioned(
-              top: 12,
-              right: 12,
-              child: FloatingActionButton.small(
-                heroTag: 'driver-home-recenter',
-                onPressed: _recenter,
-                tooltip: 'Recenter map',
-                child: const Icon(Icons.my_location),
-              ),
-            ),
-            Positioned(
-              left: 12,
-              bottom: 12,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: const Color(0xDD0E1422),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  child: Text(
-                    '${_requests.where(_hasCoordinates).length} request${_requests.where(_hasCoordinates).length == 1 ? '' : 's'} nearby',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            if (_loadingRoute || _routeMessage != null)
-              Positioned(
-                right: 12,
-                bottom: 12,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: const Color(0xDD0E1422),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    child: Text(
-                      _loadingRoute ? 'Loading route...' : _routeMessage!,
-                      style: const TextStyle(color: Colors.white70),
-                    ),
-                  ),
-                ),
-              ),
           ],
         ),
       ),

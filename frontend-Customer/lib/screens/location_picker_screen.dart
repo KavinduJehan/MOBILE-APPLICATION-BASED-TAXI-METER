@@ -224,15 +224,14 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   Future<void> _selectPlaceSuggestion(_PlaceSuggestion suggestion) async {
     final point = suggestion.point;
     if (point != null) {
-        final address = normalizeSriLankanAddress(suggestion.description);
-        unawaited(
-          _rememberRecent(
-            _RecentPlace(
-              title: suggestion.title,
-              address: address,
-              point: point,
-              placeId: suggestion.placeId,
-            ),
+      final address = normalizeSriLankanAddress(suggestion.description);
+      unawaited(
+        _rememberRecent(
+          _RecentPlace(
+            title: suggestion.title,
+            address: address,
+            point: point,
+            placeId: suggestion.placeId,
           ),
         );
         _selectResolvedPlace(address, point, _editingPickup);
@@ -302,7 +301,10 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       if (mounted) setState(() => _resolvingPlace = false);
     }
   }
+<<<<<<< HEAD
+=======
 
+>>>>>>> origin/main
   void _selectResolvedPlace(String name, LatLng point, bool pickup) {
     if (pickup) {
       _selectPickup(name, point);

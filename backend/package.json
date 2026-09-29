@@ -8,6 +8,7 @@
     "dev": "nodemon server.js",
     "seed:admin": "node scripts/seedAdmin.js",
     "seed:demo": "node scripts/seedDemo.js",
+    "clean:db": "node scripts/cleanDb.js",
     "migrate:atlas": "node scripts/migrateToAtlas.js",
     "test": "jest --runInBand --forceExit",
     "test:watch": "jest --runInBand --watch"

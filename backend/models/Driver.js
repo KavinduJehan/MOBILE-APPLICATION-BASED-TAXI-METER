@@ -16,6 +16,8 @@ const driverSchema = new mongoose.Schema(
     qrToken: { type: String, unique: true, sparse: true }, // opaque lookup token embedded in QR
     qrCode: { type: String },                 // Base64 or URL to QR image
     ratePerKm: { type: Number, default: 0 },  // Per-km rate in LKR
+    // Per-driver pricing policy; the system config mode is only the registration default.
+    pricingMode: { type: String, enum: ['DRIVER', 'ADMIN', 'AUTO'], default: 'ADMIN' },
     area: { type: String, default: '' },
     location: {
       type: {
@@ -59,4 +61,3 @@ driverSchema.methods.compareResetCode = async function (candidateCode) {
 };
 
 module.exports = mongoose.model('Driver', driverSchema);
-
