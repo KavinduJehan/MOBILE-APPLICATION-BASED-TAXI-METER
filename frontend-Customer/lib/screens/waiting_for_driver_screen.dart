@@ -12,6 +12,7 @@ class WaitingForDriverScreen extends StatefulWidget {
   final String requestId;
   final Map<String, dynamic> driver;
   final double distanceKm;
+  final double ratePerKm;
   final double? pickupLat;
   final double? pickupLng;
   final double? destLat;

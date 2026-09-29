@@ -1,0 +1,8 @@
+Option A: Dedicated User per Developer (Recommended Best Practice)
+In Atlas $\rightarrow$ Database Access $\rightarrow$ click Add New Database User.
+Create a username for each teammate (e.g. dev_teammate) and generate a password.
+Set role to Read and write to any database.
+Share the connection string securely (via Slack/WhatsApp/Teams):
+env
+MONGO_URI=mongodb+srv://dev_teammate:<their_password>@cluster0.50rjnla.mongodb.net/taximeter?retryWrites=true&w=majority
+They clone the repository, copy .env.example to .env, and paste their connection string.

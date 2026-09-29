@@ -224,18 +224,20 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   Future<void> _selectPlaceSuggestion(_PlaceSuggestion suggestion) async {
     final point = suggestion.point;
     if (point != null) {
-        final address = normalizeSriLankanAddress(suggestion.description);
-        unawaited(
-          _rememberRecent(
-            _RecentPlace(
-              title: suggestion.title,
-              address: address,
-              point: point,
-              placeId: suggestion.placeId,
-            ),
+      final address = normalizeSriLankanAddress(suggestion.description);
+      unawaited(
+        _rememberRecent(
+          _RecentPlace(
+            title: suggestion.title,
+            address: address,
+            point: point,
+            placeId: suggestion.placeId,
           ),
-        );
-        _selectResolvedPlace(address, point, _editingPickup);
+        ),
+      );
+      _selectResolvedPlace(address, point, _editingPickup);
+      return;
+    }
 
     final placeId = suggestion.placeId;
     if (placeId == null || _resolvingPlace) return;
@@ -297,7 +299,6 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     } finally {
       if (mounted) setState(() => _resolvingPlace = false);
     }
-  }
   }
   void _selectResolvedPlace(String name, LatLng point, bool pickup) {
     if (pickup) {
