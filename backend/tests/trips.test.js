@@ -1,5 +1,6 @@
 const request = require('supertest');
 const app = require('../app');
+const Driver = require('../models/Driver');
 const validDriver = {
   name: 'Trip Driver',
   email: 'trip@test.com',
@@ -21,10 +22,45 @@ const tripPayload = {
 
 const registerAndLogin = async (data = validDriver) => {
   const res = await request(app).post('/api/auth/register').send(data);
+  await Driver.findByIdAndUpdate(res.body.driver.id, { pricingMode: 'DRIVER', ratePerKm: 75 });
   return res.body.token;
 };
 
 describe('POST /api/trips', () => {
+  it('uses the saved driver rate for Driver-Set Pricing', async () => {
+    const token = await registerAndLogin();
+    const res = await request(app)
+      .post('/api/trips')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ ...tripPayload, ratePerKm: 5 });
+    expect(res.statusCode).toBe(201);
+    expect(res.body.ratePerKm).toBe(75);
+  });
+
+  it('uses the regulator rate for Admin-Controlled Pricing', async () => {
+    const token = await registerAndLogin();
+    await Driver.findOneAndUpdate({ email: validDriver.email }, { pricingMode: 'ADMIN', ratePerKm: 50 });
+    const res = await request(app)
+      .post('/api/trips')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ ...tripPayload, ratePerKm: 500 });
+    expect(res.statusCode).toBe(201);
+    expect(res.body.ratePerKm).toBe(50);
+    expect(res.body.totalFare).toBe(38 * 50);
+  });
+
+  it('uses the surge engine and ignores submitted rates for Auto Surge Pricing', async () => {
+    const token = await registerAndLogin();
+    await Driver.findOneAndUpdate({ email: validDriver.email }, { pricingMode: 'AUTO', ratePerKm: 5 });
+    const res = await request(app)
+      .post('/api/trips')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ ...tripPayload, ratePerKm: 0.01 });
+    expect(res.statusCode).toBe(201);
+    expect(res.body.ratePerKm).not.toBe(0.01);
+    expect(res.body.surgeBreakdown).toBeTruthy();
+  });
+
   it('creates a trip and calculates total fare', async () => {
     const token = await registerAndLogin();
     const res = await request(app)
@@ -256,4 +292,3 @@ describe('POST /api/trips/sync', () => {
     expect(res.statusCode).toBe(400);
   });
 });
-

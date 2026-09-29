@@ -3,6 +3,7 @@ const RideRequest = require('../models/RideRequest');
 const Driver = require('../models/Driver');
 const Trip = require('../models/Trip');
 const Receipt = require('../models/Receipt');
+const { computeAutoRate } = require('../services/pricingEngine');
 
 const activeRideMessage =
   'You already have an active ride. Complete or cancel it before booking another ride.';
@@ -52,8 +53,10 @@ const createRideRequest = async (req, res) => {
 
     // suggestedRatePerKm is a negotiation (customer proposes lower rate).
     // If it's >= driver's rate or <= 0, ignore it — no negotiation needed.
+    const autoPrice = driver.pricingMode === 'AUTO' ? await computeAutoRate(driver.area || '') : null;
+    const currentRate = autoPrice?.effectiveRate ?? driver.ratePerKm;
     let effectiveSuggestion = null;
-    if (suggestedRatePerKm != null && suggestedRatePerKm > 0 && suggestedRatePerKm < driver.ratePerKm) {
+    if (driver.pricingMode === 'DRIVER' && suggestedRatePerKm != null && suggestedRatePerKm > 0 && suggestedRatePerKm < currentRate) {
       effectiveSuggestion = suggestedRatePerKm;
     }
 
@@ -68,7 +71,7 @@ const createRideRequest = async (req, res) => {
       destLng,
       destAddress: destAddress || '',
       estimatedDistanceKm,
-      driverRatePerKm: driver.ratePerKm,
+      driverRatePerKm: currentRate,
       suggestedRatePerKm: effectiveSuggestion,
     });
 
@@ -109,7 +112,7 @@ const getRequestStatus = async (req, res) => {
   try {
     const rideRequest = await RideRequest.findById(req.params.id)
       .populate('trip', 'driver customer customerName startLocation endLocation distanceKm ratePerKm totalFare status startTime endTime createdAt')
-      .populate('driver', 'name vehicleNumber vehicleType phone area ratePerKm');
+      .populate('driver', 'name vehicleNumber vehicleType phone area ratePerKm pricingMode');
     if (!rideRequest) return res.status(404).json({ message: 'Ride request not found' });
     res.json(rideRequest);
   } catch (err) {
@@ -161,9 +164,20 @@ const respondToRequest = async (req, res) => {
     }
 
     // Accept — use suggested rate if provided, otherwise driver's rate
-    const agreedRate = rideRequest.suggestedRatePerKm != null
-      ? rideRequest.suggestedRatePerKm
-      : rideRequest.driverRatePerKm;
+    const driver = await Driver.findById(req.user.id);
+    if (!driver) return res.status(404).json({ message: 'Driver not found' });
+    let surgeBreakdown = null;
+    let agreedRate = driver.ratePerKm;
+    if (driver.pricingMode === 'AUTO') {
+      const priceResult = await computeAutoRate(driver.area || '');
+      agreedRate = priceResult.effectiveRate;
+      surgeBreakdown = priceResult.breakdown;
+    } else if (driver.pricingMode === 'DRIVER' && rideRequest.suggestedRatePerKm != null) {
+      agreedRate = rideRequest.suggestedRatePerKm;
+    }
+    if (!Number.isFinite(agreedRate) || agreedRate <= 0) {
+      return res.status(400).json({ message: 'The driver does not have a valid rate configured' });
+    }
 
     const totalFare = parseFloat(
       (rideRequest.estimatedDistanceKm * agreedRate).toFixed(2)
@@ -183,6 +197,7 @@ const respondToRequest = async (req, res) => {
       distanceKm: rideRequest.estimatedDistanceKm,
       ratePerKm: agreedRate,
       totalFare,
+      surgeBreakdown,
       startTime: new Date(),
       status: 'ongoing',
     });

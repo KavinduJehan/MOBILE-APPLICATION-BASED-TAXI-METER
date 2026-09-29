@@ -21,6 +21,15 @@ const Driver = require('../models/Driver');
 const RideRequest = require('../models/RideRequest');
 const SystemConfig = require('../models/SystemConfig');
 
+const DEFAULT_AREA_FACTORS = {
+  Colombo: 1.15,
+  Kandy: 1.15,
+  Galle: 1.15,
+  Negombo: 1.05,
+  Kurunegala: 1.05,
+  Ratnapura: 1.05,
+};
+
 // --- Weather condition -> factor mapping ------------------------------------
 // Source: OpenWeatherMap "weather.main" values
 const WEATHER_FACTORS = {
@@ -77,16 +86,19 @@ async function fetchWeatherFactor(area) {
  * computeAutoRate(area)
  * Returns { effectiveRate, baseRate, multiplier, breakdown }
  */
-async function computeAutoRate(area = '') {
+async function computeAutoRate(area = '', overrides = {}) {
   let config = await SystemConfig.findOne();
   if (!config) config = await SystemConfig.create({});
 
-  const baseRate = config.autoBaseRate        ?? 100;
-  const minM     = config.autoMinMultiplier   ?? 1.0;
-  const maxM     = config.autoMaxMultiplier   ?? 2.5;
+  const baseRate = overrides.baseRate ?? config.autoBaseRate ?? 100;
+  const minM     = overrides.minMultiplier ?? config.autoMinMultiplier ?? 1.0;
+  const maxM     = overrides.maxMultiplier ?? config.autoMaxMultiplier ?? 2.5;
 
   // Area tier factor: case-insensitive lookup, default 1.0 for unlisted areas
-  const factorsMap = config.autoAreaFactors?.toObject?.() ?? {};
+  const factorsMap = {
+    ...DEFAULT_AREA_FACTORS,
+    ...(config.autoAreaFactors?.toObject?.() ?? {}),
+  };
   const areaKey    = Object.keys(factorsMap).find(
     (k) => k.toLowerCase() === (area || '').toLowerCase()
   );
@@ -97,14 +109,21 @@ async function computeAutoRate(area = '') {
     ? { $regex: new RegExp('^' + area + '$', 'i') }
     : { $exists: true };
 
+  const driverFilter = { area: areaFilter, isVerified: true };
+  const driverIds = await Driver.distinct('_id', driverFilter);
   const [availableDrivers, activeRequests] = await Promise.all([
-    Driver.countDocuments({ area: areaFilter, isVerified: true }),
-    RideRequest.countDocuments({ isActive: true }),
+    Driver.countDocuments(driverFilter),
+    RideRequest.countDocuments({ isActive: true, driver: { $in: driverIds } }),
   ]);
   const demandSupplyFactor = getDemandSupplyFactor(activeRequests, availableDrivers);
 
   // Time of day
-  const timeFactor = getTimeFactor(new Date().getHours());
+  const sriLankaHour = Number(new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Colombo',
+    hour: 'numeric',
+    hourCycle: 'h23',
+  }).format(new Date()));
+  const timeFactor = getTimeFactor(sriLankaHour);
 
   // Weather
   const { factor: weatherFactor, condition: weatherCondition } =

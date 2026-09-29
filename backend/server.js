@@ -4,8 +4,8 @@ const { Server } = require('socket.io');
 const app = require('./app');
 const connectDB = require('./config/db');
 const configRoutes = require('./routes/config');
-
-connectDB();
+const Driver = require('./models/Driver');
+const SystemConfig = require('./models/SystemConfig');
 
 app.use('/api/config', configRoutes);
 
@@ -50,4 +50,22 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+const startServer = async () => {
+  await connectDB();
+  let config = await SystemConfig.findOne();
+  if (!config) config = await SystemConfig.create({});
+  const migration = await Driver.updateMany(
+    { pricingMode: { $exists: false } },
+    { $set: { pricingMode: config.rateMode || 'ADMIN' } }
+  );
+  if (migration.modifiedCount > 0) {
+    console.log(`Assigned the current default pricing mode to ${migration.modifiedCount} existing drivers.`);
+  }
+  server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+};
+
+startServer().catch((error) => {
+  console.error(`Server startup failed: ${error.message}`);
+  process.exit(1);
+});
