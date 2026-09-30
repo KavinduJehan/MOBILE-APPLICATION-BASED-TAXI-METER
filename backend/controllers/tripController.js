@@ -82,8 +82,13 @@ const createTrip = async (req, res) => {
     // The driver's saved pricing mode is authoritative; never trust a submitted rate for ADMIN/AUTO.
     let surgeBreakdown = null;
     if (driver.pricingMode === 'AUTO') {
-      const priceResult = await computeAutoRate(driver.area || '');
-      ratePerKm     = priceResult.effectiveRate;
+      // Use pickup coords for hyper-local geofencing; fall back to driver area string if unavailable
+      const priceResult = await computeAutoRate({
+        lat:  pickupLat  != null ? Number(pickupLat)  : null,
+        lng:  pickupLng  != null ? Number(pickupLng)  : null,
+        area: driver.area || '',
+      });
+      ratePerKm      = priceResult.effectiveRate;
       surgeBreakdown = priceResult.breakdown;
     } else {
       ratePerKm = driver.ratePerKm;
@@ -318,7 +323,8 @@ const syncOfflineTrips = async (req, res) => {
         ratePerKm = driver.ratePerKm;
         surgeBreakdown = null;
       } else if (driver.pricingMode === 'AUTO') {
-        const priceResult = await computeAutoRate(driver.area || '');
+        // Offline sync has no pickup coords — fall back to area string
+        const priceResult = await computeAutoRate({ area: driver.area || '' });
         ratePerKm = priceResult.effectiveRate;
         surgeBreakdown = priceResult.breakdown;
       }

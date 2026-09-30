@@ -53,7 +53,9 @@ const createRideRequest = async (req, res) => {
 
     // suggestedRatePerKm is a negotiation (customer proposes lower rate).
     // If it's >= driver's rate or <= 0, ignore it — no negotiation needed.
-    const autoPrice = driver.pricingMode === 'AUTO' ? await computeAutoRate(driver.area || '') : null;
+    const autoPrice = driver.pricingMode === 'AUTO'
+      ? await computeAutoRate({ lat: Number(pickupLat), lng: Number(pickupLng), area: driver.area || '' })
+      : null;
     const currentRate = autoPrice?.effectiveRate ?? driver.ratePerKm;
     let effectiveSuggestion = null;
     if (driver.pricingMode === 'DRIVER' && suggestedRatePerKm != null && suggestedRatePerKm > 0 && suggestedRatePerKm < currentRate) {
@@ -169,7 +171,12 @@ const respondToRequest = async (req, res) => {
     let surgeBreakdown = null;
     let agreedRate = driver.ratePerKm;
     if (driver.pricingMode === 'AUTO') {
-      const priceResult = await computeAutoRate(driver.area || '');
+      // Use the ride request's pickup coords for accurate geofence pricing
+      const priceResult = await computeAutoRate({
+        lat:  rideRequest.pickupLat != null ? Number(rideRequest.pickupLat) : null,
+        lng:  rideRequest.pickupLng != null ? Number(rideRequest.pickupLng) : null,
+        area: driver.area || '',
+      });
       agreedRate = priceResult.effectiveRate;
       surgeBreakdown = priceResult.breakdown;
     } else if (driver.pricingMode === 'DRIVER' && rideRequest.suggestedRatePerKm != null) {

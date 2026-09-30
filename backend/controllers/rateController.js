@@ -57,18 +57,29 @@ const getAreaRates = async (req, res) => {
   }
 };
 
-// GET /api/rates/auto?area=Colombo
+// GET /api/rates/auto?area=Colombo  (or ?lat=6.93&lng=79.86)
 // Returns the real-time auto-calculated rate with full signal breakdown.
 // Public endpoint - used by both drivers (rate screen) and customers (booking).
+// Accepts either GPS coords (?lat,?lng) or an area name (?area) for the preview.
 const getAutoRate = async (req, res) => {
   const area = (req.query.area || '').trim();
+  const lat  = req.query.lat  !== undefined ? Number(req.query.lat)  : null;
+  const lng  = req.query.lng  !== undefined ? Number(req.query.lng)  : null;
+
+  if (lat !== null && (!Number.isFinite(lat) || lat < -90  || lat > 90)) {
+    return res.status(400).json({ message: 'lat must be a valid latitude (-90 to 90)' });
+  }
+  if (lng !== null && (!Number.isFinite(lng) || lng < -180 || lng > 180)) {
+    return res.status(400).json({ message: 'lng must be a valid longitude (-180 to 180)' });
+  }
+
   const overrides = {};
   const overrideFields = [
     ['baseRate', 'autoBaseRate', 1],
     ['minMultiplier', 'autoMinMultiplier', 1],
     ['maxMultiplier', 'autoMaxMultiplier', 1],
   ];
-  for (const [queryField, configField, minimum] of overrideFields) {
+  for (const [queryField, , minimum] of overrideFields) {
     if (req.query[queryField] === undefined) continue;
     const value = Number(req.query[queryField]);
     if (!Number.isFinite(value) || value < minimum) {
@@ -84,8 +95,12 @@ const getAutoRate = async (req, res) => {
     return res.status(400).json({ message: 'minMultiplier cannot exceed maxMultiplier' });
   }
   try {
-    const result = await computeAutoRate(area, overrides);
-    res.json({ area, ...result });
+    const hasCoords = lat !== null && lng !== null;
+    const result = await computeAutoRate(
+      hasCoords ? { lat, lng, area } : { area },
+      overrides
+    );
+    res.json({ area: result.breakdown.resolvedArea, ...result });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
