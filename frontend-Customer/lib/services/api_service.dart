@@ -27,11 +27,7 @@ String _resolveBaseUrl() {
 
   switch (defaultTargetPlatform) {
     case TargetPlatform.android:
-<<<<<<< HEAD
       return 'http://192.168.8.160:5000/api';
-=======
-      return 'http://192.168.1.101:5000/api';
->>>>>>> origin/main
     case TargetPlatform.iOS:
     case TargetPlatform.macOS:
     case TargetPlatform.windows:
