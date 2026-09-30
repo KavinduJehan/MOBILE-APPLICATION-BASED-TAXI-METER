@@ -1,4 +1,4 @@
-﻿/**
+/**
  * pricingEngine.js
  * ---------------------------------------------------------------------------
  * Surge pricing engine - mirrors the approach used by Uber / PickMe.
@@ -31,17 +31,17 @@ const DEFAULT_AREA_FACTORS = {
 };
 
 // --- Weather condition -> factor mapping ------------------------------------
-// Source: OpenWeatherMap "weather.main" values
+// Source: OpenWeatherMap "weather.main" values adapted for Sri Lankan tropical weather
 const WEATHER_FACTORS = {
   Thunderstorm: 1.50,
-  Drizzle:      1.20,
+  Squall:       1.40,
   Rain:         1.30,
-  Snow:         1.40,
-  Mist:         1.10,
+  Drizzle:      1.15,
   Fog:          1.15,
+  Mist:         1.10,
   Haze:         1.10,
-  Clear:        1.00,
   Clouds:       1.05,
+  Clear:        1.00,
 };
 
 // --- Time-of-day factor -----------------------------------------------------
