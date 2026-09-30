@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 const String _configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
@@ -20,21 +19,7 @@ String _resolveBaseUrl() {
   if (_configuredBaseUrl.isNotEmpty) {
     return _configuredBaseUrl;
   }
-
-  if (kIsWeb) {
-    return 'http://localhost:5000/api';
-  }
-
-  switch (defaultTargetPlatform) {
-    case TargetPlatform.android:
-      return 'http://192.168.237.2:5000/api';
-    case TargetPlatform.iOS:
-    case TargetPlatform.macOS:
-    case TargetPlatform.windows:
-    case TargetPlatform.linux:
-    case TargetPlatform.fuchsia:
-      return 'http://localhost:5000/api';
-  }
+  return 'https://mobile-application-based-taxi-meter.onrender.com/api';
 }
 
 class ApiService {
