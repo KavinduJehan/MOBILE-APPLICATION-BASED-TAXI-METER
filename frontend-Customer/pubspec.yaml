@@ -53,6 +53,9 @@ dependencies:
   # QR / barcode camera scanning
   mobile_scanner: ^7.4.0
 
+  # QR code generation (Trip Offer QR for offline handoff)
+  qr_flutter: ^4.1.0
+
   # Package info
   package_info_plus: ^10.2.1
 

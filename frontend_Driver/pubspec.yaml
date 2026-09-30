@@ -46,6 +46,12 @@ dependencies:
   path_provider: ^2.1.5
   socket_io_client: ^3.0.2
 
+  # QR code scanning (Trip Offer QR from customer offline handoff)
+  mobile_scanner: ^7.4.0
+
+  # QR code generation
+  qr_flutter: ^4.1.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
