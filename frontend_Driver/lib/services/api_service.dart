@@ -46,7 +46,6 @@ class ApiService {
     );
   }
 
-<<<<<<< HEAD
   Future<Map<String, dynamic>> forgotPassword(String email) async {
     final response = await _request(
       'POST',
@@ -75,10 +74,7 @@ class ApiService {
     return _asMap(response.data);
   }
 
-  Future<String> register({
-=======
   Future<AuthResult> register({
->>>>>>> daa0392 (onboarding flow new users)
     required String name,
     required String phone,
     required String email,
