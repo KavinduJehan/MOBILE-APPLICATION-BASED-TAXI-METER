@@ -233,12 +233,13 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
             point: point,
             placeId: suggestion.placeId,
           ),
-        );
-        _selectResolvedPlace(address, point, _editingPickup);
-        _placesSessionToken = _newPlacesSessionToken();
-        _remoteSuggestions = const [];
-        return;
-      }
+        ),
+      );
+      _selectResolvedPlace(address, point, _editingPickup);
+      _placesSessionToken = _newPlacesSessionToken();
+      _remoteSuggestions = const [];
+      return;
+    }
 
     final placeId = suggestion.placeId;
     if (placeId == null || _resolvingPlace) return;
@@ -301,10 +302,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       if (mounted) setState(() => _resolvingPlace = false);
     }
   }
-<<<<<<< HEAD
-=======
 
->>>>>>> origin/main
   void _selectResolvedPlace(String name, LatLng point, bool pickup) {
     if (pickup) {
       _selectPickup(name, point);
