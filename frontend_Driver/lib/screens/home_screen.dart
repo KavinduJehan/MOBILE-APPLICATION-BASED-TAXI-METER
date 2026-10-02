@@ -139,7 +139,16 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('New ride request'),
+        backgroundColor: AppTheme.surfaceAlt,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: const BorderSide(color: Colors.white12),
+        ),
+        title: const Text(
+          'New ride request',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -154,7 +163,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 Expanded(
                   child: Text(
                     request.customerName,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ],
@@ -173,12 +186,33 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               value: request.destinationAddress,
               color: Colors.redAccent,
             ),
-            const SizedBox(height: 16),
-            Text(
-              '${request.estimatedDistanceKm.toStringAsFixed(1)} km  •  Rs. ${request.driverRatePerKm.toStringAsFixed(2)} / km',
-              style: const TextStyle(
-                color: Colors.black54,
-                fontWeight: FontWeight.w600,
+            const SizedBox(height: 18),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppTheme.accent.withValues(alpha: 0.35)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _RequestStat(
+                      icon: Icons.straighten_rounded,
+                      label: 'Distance',
+                      value: '${request.estimatedDistanceKm.toStringAsFixed(1)} km',
+                    ),
+                  ),
+                  Container(width: 1, height: 34, color: Colors.white24),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _RequestStat(
+                      icon: Icons.payments_outlined,
+                      label: 'Rate',
+                      value: 'Rs. ${request.driverRatePerKm.toStringAsFixed(2)} / km',
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -186,6 +220,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
+            style: TextButton.styleFrom(foregroundColor: Colors.white70),
             child: const Text('Later'),
           ),
           FilledButton(
@@ -425,7 +460,7 @@ class _RequestStopRow extends StatelessWidget {
                 label,
                 style: const TextStyle(
                   fontSize: 12,
-                  color: Colors.black54,
+                  color: Colors.white60,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -434,7 +469,54 @@ class _RequestStopRow extends StatelessWidget {
                 value.isEmpty ? 'Not specified' : value,
                 style: const TextStyle(
                   fontSize: 14,
+                  color: Colors.white,
                   fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RequestStat extends StatelessWidget {
+  const _RequestStat({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: AppTheme.accent),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Colors.white60,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],
