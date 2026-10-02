@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 class AppConfig {
   static const String _configuredBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
+    defaultValue: 'https://mobile-application-based-taxi-meter.onrender.com/api',
   );
 
   static String get baseUrl {
@@ -11,13 +12,12 @@ class AppConfig {
 
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
-        return 'http://192.168.1.101:5000/api';
       case TargetPlatform.iOS:
       case TargetPlatform.macOS:
       case TargetPlatform.linux:
       case TargetPlatform.windows:
       case TargetPlatform.fuchsia:
-        return 'http://localhost:5000/api';
+        return 'https://mobile-application-based-taxi-meter.onrender.com/api';
     }
   }
 }

@@ -3,6 +3,7 @@ const RideRequest = require('../models/RideRequest');
 const Driver = require('../models/Driver');
 const Trip = require('../models/Trip');
 const Receipt = require('../models/Receipt');
+const SystemConfig = require('../models/SystemConfig');
 const { computeAutoRate } = require('../services/pricingEngine');
 
 const activeRideMessage =
@@ -51,12 +52,19 @@ const createRideRequest = async (req, res) => {
     if (!driver) return res.status(404).json({ message: 'Driver not found' });
     if (!driver.isVerified) return res.status(403).json({ message: 'Driver is not verified' });
 
+    const config = await SystemConfig.findOne().lean();
+    const effectivePricingMode = driver.pricingMode || config?.rateMode || 'ADMIN';
+
     // suggestedRatePerKm is a negotiation (customer proposes lower rate).
     // If it's >= driver's rate or <= 0, ignore it — no negotiation needed.
-    const autoPrice = driver.pricingMode === 'AUTO' ? await computeAutoRate(driver.area || '') : null;
-    const currentRate = autoPrice?.effectiveRate ?? driver.ratePerKm;
+    const autoPrice = effectivePricingMode === 'AUTO'
+      ? await computeAutoRate({ lat: Number(pickupLat), lng: Number(pickupLng) })
+      : null;
+    const currentRate = effectivePricingMode === 'ADMIN'
+      ? (config?.autoBaseRate || driver.ratePerKm || 100)
+      : (autoPrice?.effectiveRate ?? driver.ratePerKm);
     let effectiveSuggestion = null;
-    if (driver.pricingMode === 'DRIVER' && suggestedRatePerKm != null && suggestedRatePerKm > 0 && suggestedRatePerKm < currentRate) {
+    if (effectivePricingMode === 'DRIVER' && suggestedRatePerKm != null && suggestedRatePerKm > 0 && suggestedRatePerKm < currentRate) {
       effectiveSuggestion = suggestedRatePerKm;
     }
 
@@ -166,13 +174,22 @@ const respondToRequest = async (req, res) => {
     // Accept — use suggested rate if provided, otherwise driver's rate
     const driver = await Driver.findById(req.user.id);
     if (!driver) return res.status(404).json({ message: 'Driver not found' });
+    const config = await SystemConfig.findOne().lean();
+    const effectivePricingMode = config?.rateMode || driver.pricingMode || 'ADMIN';
+
     let surgeBreakdown = null;
     let agreedRate = driver.ratePerKm;
-    if (driver.pricingMode === 'AUTO') {
-      const priceResult = await computeAutoRate(driver.area || '');
+    if (effectivePricingMode === 'AUTO') {
+      // Use the ride request's pickup coords for accurate geofence pricing
+      const priceResult = await computeAutoRate({
+        lat:  rideRequest.pickupLat != null ? Number(rideRequest.pickupLat) : null,
+        lng:  rideRequest.pickupLng != null ? Number(rideRequest.pickupLng) : null,
+      });
       agreedRate = priceResult.effectiveRate;
       surgeBreakdown = priceResult.breakdown;
-    } else if (driver.pricingMode === 'DRIVER' && rideRequest.suggestedRatePerKm != null) {
+    } else if (effectivePricingMode === 'ADMIN') {
+      agreedRate = config?.autoBaseRate || driver.ratePerKm || 100;
+    } else if (effectivePricingMode === 'DRIVER' && rideRequest.suggestedRatePerKm != null) {
       agreedRate = rideRequest.suggestedRatePerKm;
     }
     if (!Number.isFinite(agreedRate) || agreedRate <= 0) {

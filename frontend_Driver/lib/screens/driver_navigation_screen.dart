@@ -112,6 +112,13 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
                 position.longitude,
               ),
             );
+            DriverSocketService.instance.emitLocationUpdate(
+              lat: position.latitude,
+              lng: position.longitude,
+              tripId: widget.trip.id,
+              customerId: widget.request.customerId,
+            );
+            _syncLocationThrottle(position.latitude, position.longitude);
             _scheduleRouteRefresh();
           },
           onError: (_) {
@@ -142,6 +149,10 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
 
       if (_roadRoute.isEmpty && !_loadingRoute) {
         _loadRoadRoute();
+      }
+    } catch (_) {
+      if (mounted && _driverPosition == null) {
+        setState(() => _locationError = 'Unable to get your current location.');
       }
     }
   }

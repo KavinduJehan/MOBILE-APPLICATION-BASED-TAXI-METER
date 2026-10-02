@@ -1,6 +1,7 @@
 const QRCode = require('qrcode');
 const Driver = require('../models/Driver');
 const Trip = require('../models/Trip');
+const SystemConfig = require('../models/SystemConfig');
 
 // PATCH /api/drivers/profile
 // Lets a driver update their own editable fields (not password, not verification status)
@@ -46,7 +47,11 @@ const getDriverProfile = async (req, res) => {
   try {
     const driver = await Driver.findById(req.user.id).select('-password');
     if (!driver) return res.status(404).json({ message: 'Driver not found' });
-    res.json(driver);
+    const config = await SystemConfig.findOne().lean();
+    const effectiveMode = driver.pricingMode || config?.rateMode || 'ADMIN';
+    const driverObj = driver.toObject();
+    driverObj.pricingMode = effectiveMode;
+    res.json(driverObj);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -88,9 +93,8 @@ const getNearbyDrivers = async (req, res) => {
   const locationFreshAfter = new Date(Date.now() - DRIVER_LOCATION_TTL_MINUTES * 60 * 1000);
 
   try {
-    const baseMatch = area ? { area, isVerified: true } : { isVerified: true };
-
     if (!hasPickup) {
+      const baseMatch = area ? { area, isVerified: true } : { isVerified: true };
       const drivers = await Driver.find(baseMatch)
         .select('name vehicleNumber vehicleType ratePerKm pricingMode area qrCode isVerified location')
         .lean();
@@ -105,7 +109,7 @@ const getNearbyDrivers = async (req, res) => {
           maxDistance: maxDistanceMeters,
           spherical: true,
           query: {
-            ...baseMatch,
+            isVerified: true,
             'location.coordinates': { $exists: true, $ne: [] },
             'location.updatedAt': { $gte: locationFreshAfter },
           },

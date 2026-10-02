@@ -55,12 +55,17 @@ const startServer = async () => {
   await connectDB();
   let config = await SystemConfig.findOne();
   if (!config) config = await SystemConfig.create({});
+  const targetMode = config.rateMode || 'ADMIN';
+  const syncUpdate = { pricingMode: targetMode };
+  if (targetMode === 'ADMIN' && config.autoBaseRate) {
+    syncUpdate.ratePerKm = config.autoBaseRate;
+  }
   const migration = await Driver.updateMany(
-    { pricingMode: { $exists: false } },
-    { $set: { pricingMode: config.rateMode || 'ADMIN' } }
+    { $or: [{ pricingMode: { $exists: false } }, { pricingMode: { $ne: targetMode } }] },
+    { $set: syncUpdate }
   );
   if (migration.modifiedCount > 0) {
-    console.log(`Assigned the current default pricing mode to ${migration.modifiedCount} existing drivers.`);
+    console.log(`Synchronized pricing mode (${targetMode}) for ${migration.modifiedCount} drivers.`);
   }
   server.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT} (0.0.0.0)`));
 };

@@ -3,6 +3,7 @@ const Trip = require('../models/Trip');
 const Receipt = require('../models/Receipt');
 const Driver = require('../models/Driver');
 const RideRequest = require('../models/RideRequest');
+const SystemConfig = require('../models/SystemConfig');
 const { computeAutoRate } = require('../services/pricingEngine');
 
 const activeRideMessage =
@@ -79,12 +80,21 @@ const createTrip = async (req, res) => {
       return res.status(403).json({ message: 'Driver is not verified' });
     }
 
-    // The driver's saved pricing mode is authoritative; never trust a submitted rate for ADMIN/AUTO.
+    // Check driver's setting first, falling back to global SystemConfig rateMode
+    const config = await SystemConfig.findOne().lean();
+    const effectivePricingMode = driver.pricingMode || config?.rateMode || 'ADMIN';
+
     let surgeBreakdown = null;
-    if (driver.pricingMode === 'AUTO') {
-      const priceResult = await computeAutoRate(driver.area || '');
-      ratePerKm     = priceResult.effectiveRate;
+    if (effectivePricingMode === 'AUTO') {
+      // Use pickup coords or driver's live GPS coords for hyper-local geofencing
+      const priceResult = await computeAutoRate({
+        lat:  pickupLat  != null ? Number(pickupLat)  : (driver.location?.coordinates?.[1] ?? null),
+        lng:  pickupLng  != null ? Number(pickupLng)  : (driver.location?.coordinates?.[0] ?? null),
+      });
+      ratePerKm      = priceResult.effectiveRate;
       surgeBreakdown = priceResult.breakdown;
+    } else if (effectivePricingMode === 'ADMIN') {
+      ratePerKm = config?.autoBaseRate || driver.ratePerKm || 100;
     } else {
       ratePerKm = driver.ratePerKm;
       if (!Number.isFinite(ratePerKm) || ratePerKm <= 0) {
@@ -314,11 +324,16 @@ const syncOfflineTrips = async (req, res) => {
       const distanceKm = Number(item.distanceKm) || 0;
       let ratePerKm = Number(item.ratePerKm) || 0;
       let surgeBreakdown = item.surgeBreakdown || null;
-      if (driver.pricingMode === 'ADMIN') {
-        ratePerKm = driver.ratePerKm;
+      const config = await SystemConfig.findOne().lean();
+      const effectivePricingMode = config?.rateMode || driver.pricingMode || 'ADMIN';
+      if (effectivePricingMode === 'ADMIN') {
+        ratePerKm = config?.autoBaseRate || driver.ratePerKm || 100;
         surgeBreakdown = null;
-      } else if (driver.pricingMode === 'AUTO') {
-        const priceResult = await computeAutoRate(driver.area || '');
+      } else if (effectivePricingMode === 'AUTO') {
+        const priceResult = await computeAutoRate({
+          lat: driver.location?.coordinates?.[1] ?? null,
+          lng: driver.location?.coordinates?.[0] ?? null,
+        });
         ratePerKm = priceResult.effectiveRate;
         surgeBreakdown = priceResult.breakdown;
       }

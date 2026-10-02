@@ -40,7 +40,7 @@ class _QRScanState extends State<QRScan> {
     await _controller.stop();
 
     try {
-      // QR payload is JSON: { token, name, licenseNumber, vehicleNumber, area, ratePerKm }
+      // QR payload: { token, name, licenseNumber, vehicleNumber, area, ratePerKm, pricingMode }
       final Map<String, dynamic> payload =
           jsonDecode(raw) as Map<String, dynamic>;
       final String? qrToken = payload['token'] as String?;
@@ -48,14 +48,38 @@ class _QRScanState extends State<QRScan> {
         throw 'QR code has no token field';
       }
 
-      final resp = await ApiService.getDriverByQR(qrToken);
-      final driver = resp.data as Map<String, dynamic>;
+      Map<String, dynamic> driver;
+      bool offlineMode = false;
+
+      try {
+        // Try to fetch fresh driver data from the server
+        final resp = await ApiService.getDriverByQR(qrToken);
+        driver = resp.data as Map<String, dynamic>;
+      } catch (_) {
+        // No internet — use data embedded in the QR payload directly
+        offlineMode = true;
+        driver = {
+          'token':          payload['token'],
+          'name':           payload['name']          ?? 'Unknown Driver',
+          'licenseNumber':  payload['licenseNumber'] ?? '—',
+          'vehicleNumber':  payload['vehicleNumber'] ?? '—',
+          'area':           payload['area']          ?? '',
+          'ratePerKm':      payload['ratePerKm']     ?? 0,
+          'pricingMode':    payload['pricingMode']   ?? 'DRIVER',
+          // Cannot confirm verified status without the server
+          'isVerified':     false,
+          '_offlineMode':   true,
+        };
+      }
 
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => DriverVerificationScreen(driver: driver),
+          builder: (_) => DriverVerificationScreen(
+            driver: driver,
+            offlineMode: offlineMode,
+          ),
         ),
       );
     } catch (e) {
@@ -134,3 +158,4 @@ class _QRScanState extends State<QRScan> {
     );
   }
 }
+
