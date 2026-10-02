@@ -242,7 +242,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(index: _index, children: _pages),
+      body: IndexedStack(index: _index, children: [
+        ..._pages.take(3),
+        EarningsScreen(isActive: _index == 3),
+        _pages[4],
+      ]),
       bottomNavigationBar: _DriverNavBar(
         selectedIndex: _index,
         pendingRequests: _pendingRequestCount,

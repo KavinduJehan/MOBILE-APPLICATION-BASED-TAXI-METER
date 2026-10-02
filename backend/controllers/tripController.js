@@ -275,13 +275,15 @@ const getIncome = async (req, res) => {
     );
     const totalTrips = trips.length;
 
-    // Group earnings by calendar date (YYYY-MM-DD)
+    // Group completed fares by Sri Lankan calendar date.
     const byDay = {};
+    const tripsByDay = {};
     for (const t of trips) {
-      const day = t.endTime
-        ? t.endTime.toISOString().slice(0, 10)
-        : t.createdAt.toISOString().slice(0, 10);
+      const day = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Colombo', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(t.endTime || t.createdAt);
       byDay[day] = parseFloat(((byDay[day] || 0) + t.totalFare).toFixed(2));
+      tripsByDay[day] = (tripsByDay[day] || 0) + 1;
     }
 
     res.json({
@@ -290,6 +292,7 @@ const getIncome = async (req, res) => {
       completedTrips: totalTrips,
       cancelledTrips,
       byDay,
+      tripsByDay,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });

@@ -1,306 +1,420 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/income_summary.dart';
 import '../providers/auth_provider.dart';
+import '../theme/app_theme.dart';
 import '../widgets/app_widgets.dart';
 
-enum _Period { week, month }
-
 class EarningsScreen extends StatefulWidget {
-  const EarningsScreen({super.key});
+  const EarningsScreen({super.key, this.isActive = true});
+  final bool isActive;
 
   @override
   State<EarningsScreen> createState() => _EarningsScreenState();
 }
 
 class _EarningsScreenState extends State<EarningsScreen> {
-  bool _loading = true;
+  bool _loading = false;
   IncomeSummary? _summary;
-  _Period _period = _Period.week;
+  String? _error;
+  int _days = 7;
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(_load);
+    if (widget.isActive) Future.microtask(_load);
+  }
+
+  @override
+  void didUpdateWidget(covariant EarningsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) _load();
   }
 
   Future<void> _load() async {
-    final auth = context.read<AuthProvider>();
-    setState(() => _loading = true);
+    if (_loading || !mounted) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
-      final summary = await auth.api.getIncomeSummary();
+      final summary = await context.read<AuthProvider>().api.getIncomeSummary();
       if (!mounted) return;
-      setState(() {
-        _summary = summary;
-        _loading = false;
-      });
-    } catch (error) {
+      setState(() => _summary = summary);
+    } catch (_) {
       if (!mounted) return;
-      setState(() => _loading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(auth.errorMessage ?? 'Unable to load earnings')),
+      setState(
+        () => _error = _summary == null
+            ? 'Unable to load earnings. Check your connection and try again.'
+            : 'Could not refresh. Showing your last loaded earnings.',
       );
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  List<IncomeByDay> get _periodData {
-    final days = _summary?.byDay ?? [];
-    if (_period == _Period.week) return days.take(7).toList();
-    return days.take(30).toList();
-  }
-
-  double get _periodTotal => _periodData.fold(0, (sum, d) => sum + d.amount);
-
-  IncomeByDay? get _bestDay {
-    final data = _periodData;
-    if (data.isEmpty) return null;
-    return data.reduce((a, b) => a.amount >= b.amount ? a : b);
-  }
+  DateTime get _today =>
+      DateTime.now().toUtc().add(const Duration(hours: 5, minutes: 30));
 
   @override
   Widget build(BuildContext context) {
     final summary = _summary;
-    final data    = _periodData;
-    final maxAmount = data.isEmpty ? 0.0
-        : data.map((d) => d.amount).fold<double>(0, (h, a) => a > h ? a : h);
-    final best = _bestDay;
+    final data = summary?.daysForPeriod(_days, _today) ?? <IncomeByDay>[];
+    final total = data.fold<double>(0, (sum, day) => sum + day.amount);
+    final max = data.fold<double>(
+      0,
+      (max, day) => day.amount > max ? day.amount : max,
+    );
+    final active = data.where((day) => day.amount > 0).toList();
+    final best = active.isEmpty
+        ? null
+        : active.reduce((a, b) => a.amount >= b.amount ? a : b);
+    final periodTrips = data.every((day) => day.trips != null)
+        ? data.fold<int>(0, (sum, day) => sum + day.trips!)
+        : null;
 
     return AppShellScaffold(
-      appBar: AppBar(title: const Text('Earnings')),
+      appBar: AppBar(
+        title: const Text('Earnings'),
+        actions: [
+          IconButton(
+            onPressed: _loading ? null : _load,
+            tooltip: 'Refresh earnings',
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
       child: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 110),
           children: [
-            const SectionTitle(
-              title: 'Income overview',
-              subtitle: 'Track earnings and completed trips at a glance.',
-            ),
-            const SizedBox(height: 16),
-
-            if (_loading)
-              const Padding(padding: EdgeInsets.only(top: 24), child: Center(child: CircularProgressIndicator()))
-            else if (summary == null || summary.byDay.isEmpty)
-              const EmptyStateCard(
-                title: 'No completed trips yet',
-                subtitle: 'Earnings will appear here after you close completed rides.',
-                icon: Icons.bar_chart_rounded,
-              )
-            else ...[
-              // Period toggle
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0E1422),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-                ),
-                padding: const EdgeInsets.all(4),
-                child: Row(
-                  children: _Period.values.map((p) {
-                    final active = _period == p;
-                    return Expanded(
-                      child: GestureDetector(
-                        onTap: () => setState(() => _period = p),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          decoration: BoxDecoration(
-                            color: active ? const Color(0xFF2F6BFF) : Colors.transparent,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Center(
-                            child: Text(
-                              p == _Period.week ? 'Last 7 days' : 'Last 30 days',
-                              style: TextStyle(
-                                color: active ? Colors.white : Colors.white54,
-                                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                                fontSize: 13,
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 600),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SectionTitle(
+                      title: 'Every trip counts',
+                      subtitle: 'Your income from completed rides.',
+                    ),
+                    const SizedBox(height: 20),
+                    if (_loading && summary == null)
+                      const Padding(
+                        padding: EdgeInsets.all(48),
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                    if (_error != null) ...[
+                      _card(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _error!,
+                              style: const TextStyle(
+                                color: Colors.orangeAccent,
+                                height: 1.5,
                               ),
                             ),
+                            TextButton.icon(
+                              onPressed: _loading ? null : _load,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Try again'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    if (summary != null) ...[
+                      SegmentedButton<int>(
+                        segments: const [
+                          ButtonSegment(value: 7, label: Text('Last 7 days')),
+                          ButtonSegment(value: 30, label: Text('Last 30 days')),
+                        ],
+                        selected: {_days},
+                        showSelectedIcon: false,
+                        onSelectionChanged: (value) =>
+                            setState(() => _days = value.first),
+                      ),
+                      const SizedBox(height: 18),
+                      _card(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF173967), Color(0xFF101826)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.account_balance_wallet_outlined,
+                                  color: AppTheme.accent,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'Last $_days days',
+                                    style: const TextStyle(
+                                      color: Colors.white70,
+                                    ),
+                                  ),
+                                ),
+                                if (_loading)
+                                  const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+                            Text(
+                              _money(total),
+                              style: const TextStyle(
+                                fontSize: 34,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -1,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              periodTrips == null
+                                  ? 'Completed-trip earnings'
+                                  : '$periodTrips completed ${periodTrips == 1 ? 'trip' : 'trips'}',
+                              style: const TextStyle(color: Colors.white60),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Sri Lanka time',
+                              style: TextStyle(
+                                color: Colors.white38,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _card(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Lifetime overview',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 18),
+                            Wrap(
+                              spacing: 28,
+                              runSpacing: 20,
+                              children: [
+                                _stat(
+                                  'Total earned',
+                                  _money(summary.totalEarnings),
+                                  Icons.payments_outlined,
+                                ),
+                                _stat(
+                                  'Completed trips',
+                                  '${summary.completedTrips}',
+                                  Icons.check_circle_outline,
+                                ),
+                                _stat(
+                                  'Average per trip',
+                                  _money(
+                                    summary.completedTrips == 0
+                                        ? 0
+                                        : summary.totalEarnings /
+                                              summary.completedTrips,
+                                  ),
+                                  Icons.trending_up_rounded,
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      if (summary.completedTrips == 0)
+                        const EmptyStateCard(
+                          title: 'Your first fare starts here',
+                          subtitle:
+                              'Complete a trip to start tracking earnings. Offline trips appear after syncing.',
+                          icon: Icons.route_rounded,
+                        )
+                      else
+                        _card(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const Text(
+                                'Daily earnings',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              const Text(
+                                'Completed fares, grouped by day',
+                                style: TextStyle(
+                                  color: Colors.white54,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              if (best != null) ...[
+                                Text(
+                                  'Best day: ${_label(best.label)}  /  ${_money(best.amount)}',
+                                  style: const TextStyle(
+                                    color: Color(0xFF34D399),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                              ],
+                              if (active.isEmpty)
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 24),
+                                  child: Text(
+                                    'No completed rides in this period.',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(color: Colors.white60),
+                                  ),
+                                ),
+                              ...data.reversed.map(
+                                (day) =>
+                                    _dayRow(day, max, day.label == best?.label),
+                              ),
+                            ],
                           ),
                         ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-              const SizedBox(height: 18),
-
-              // Stat cards
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final cardWidth = (constraints.maxWidth - 12) / 2;
-                  return Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      SizedBox(
-                        width: cardWidth,
-                        child: StatCard(
-                          label: _period == _Period.week ? '7-day earnings' : '30-day earnings',
-                          value: 'Rs. ${_periodTotal.toStringAsFixed(2)}',
-                          icon: Icons.payments_rounded,
-                          accentColor: const Color(0xFF2F6BFF),
-                        ),
-                      ),
-                      SizedBox(
-                        width: cardWidth,
-                        child: StatCard(
-                          label: 'Total earnings',
-                          value: 'Rs. ${summary.totalEarnings.toStringAsFixed(2)}',
-                          icon: Icons.account_balance_wallet_rounded,
-                          accentColor: const Color(0xFF38BDF8),
-                        ),
-                      ),
-                      SizedBox(
-                        width: cardWidth,
-                        child: StatCard(
-                          label: 'Completed rides',
-                          value: summary.completedTrips.toString(),
-                          icon: Icons.check_circle_rounded,
-                          accentColor: const Color(0xFF22C55E),
-                        ),
-                      ),
-                      SizedBox(
-                        width: cardWidth,
-                        child: StatCard(
-                          label: 'Cancelled rides',
-                          value: summary.cancelledTrips.toString(),
-                          icon: Icons.cancel_rounded,
-                          accentColor: const Color(0xFFEF4444),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Only completed trips count toward earnings. Offline fares appear after you sync your trips.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white54,
+                          fontSize: 12,
+                          height: 1.5,
                         ),
                       ),
                     ],
-                  );
-                },
-              ),
-
-              // Best day
-              if (best != null) ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1B2C1A),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFF22C55E).withValues(alpha: 0.25)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.star_rounded, color: Color(0xFF22C55E), size: 20),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Best day: ${best.label}',
-                          style: const TextStyle(color: Color(0xFF22C55E), fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                      Text(
-                        'Rs. ${best.amount.toStringAsFixed(2)}',
-                        style: const TextStyle(color: Color(0xFF22C55E), fontWeight: FontWeight.w800),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-
-              const SizedBox(height: 18),
-
-              // Bar chart
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0E1422),
-                  borderRadius: BorderRadius.circular(28),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Earnings by day',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 16),
-                    if (data.isEmpty)
-                      const Center(child: Text('No data for this period', style: TextStyle(color: Colors.white38)))
-                    else
-                      ...data.map(
-                        (day) => Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _DayBar(
-                            label: day.label,
-                            amount: day.amount,
-                            maxAmount: maxAmount,
-                            highlight: best != null && day.label == best.label,
-                          ),
-                        ),
-                      ),
                   ],
                 ),
               ),
-            ],
+            ),
           ],
         ),
       ),
     );
   }
-}
 
-class _DayBar extends StatelessWidget {
-  const _DayBar({
-    required this.label,
-    required this.amount,
-    required this.maxAmount,
-    this.highlight = false,
-  });
+  String _money(double amount) => 'Rs. ${amount.toStringAsFixed(2)}';
 
-  final String label;
-  final double amount;
-  final double maxAmount;
-  final bool highlight;
+  String _label(String key) {
+    final date = DateTime.tryParse(key);
+    if (date == null) return key;
+    final today = _today;
+    if (date.year == today.year &&
+        date.month == today.month &&
+        date.day == today.day) {
+      return 'Today';
+    }
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${date.day} ${months[date.month - 1]}';
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    final ratio = maxAmount <= 0 ? 0.0 : (amount / maxAmount).clamp(0.04, 1.0);
-    final color = highlight ? const Color(0xFF22C55E) : const Color(0xFF2F6BFF);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _card({required Widget child, Gradient? gradient}) => Container(
+    padding: const EdgeInsets.all(22),
+    decoration: BoxDecoration(
+      color: AppTheme.surface,
+      gradient: gradient,
+      borderRadius: BorderRadius.circular(24),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+    ),
+    child: child,
+  );
+
+  Widget _stat(String label, String value, IconData icon) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Icon(icon, color: AppTheme.accent, size: 20),
+      const SizedBox(height: 10),
+      Text(
+        value,
+        style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w700),
+      ),
+      const SizedBox(height: 4),
+      Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+    ],
+  );
+
+  Widget _dayRow(IncomeByDay day, double max, bool best) => Padding(
+    padding: const EdgeInsets.only(bottom: 18),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              label,
-              style: TextStyle(
-                color: highlight ? const Color(0xFF22C55E) : Colors.white,
-                fontWeight: highlight ? FontWeight.w700 : FontWeight.w600,
-                fontSize: 13,
+            Expanded(
+              child: Text(
+                _label(day.label),
+                style: const TextStyle(fontWeight: FontWeight.w500),
               ),
             ),
-            Text(
-              'Rs. ${amount.toStringAsFixed(2)}',
-              style: TextStyle(
-                color: highlight ? const Color(0xFF22C55E) : Colors.white70,
-                fontSize: 13,
+            if (day.trips != null)
+              Text(
+                '${day.trips} ${day.trips == 1 ? 'trip' : 'trips'}',
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+            const SizedBox(width: 12),
+            Flexible(
+              child: Text(
+                _money(day.amount),
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  color: best ? const Color(0xFF34D399) : Colors.white70,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 9),
         ClipRRect(
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: BorderRadius.circular(8),
           child: LinearProgressIndicator(
-            value: ratio,
-            minHeight: 10,
-            backgroundColor: Colors.white.withValues(alpha: 0.08),
-            valueColor: AlwaysStoppedAnimation<Color>(color),
+            value: max == 0 ? 0 : (day.amount / max).clamp(0, 1),
+            minHeight: 7,
+            backgroundColor: Colors.white.withValues(alpha: 0.06),
+            color: best ? const Color(0xFF34D399) : AppTheme.primary,
           ),
         ),
       ],
-    );
-  }
+    ),
+  );
 }
