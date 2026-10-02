@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -47,6 +48,29 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
   LatLng? _lastRouteOrigin;
   google_maps.GoogleMapController? _mapController;
   final ApiService _api = ApiService();
+
+  // ── Navigation camera state ────────────────────────────────────────────────
+  static const _distance = Distance();
+  static const double _navigationTilt = 50;
+  static const Duration _cameraAnimation = Duration(milliseconds: 900);
+  static const Duration _minCameraInterval = Duration(milliseconds: 750);
+
+  /// True while the camera follows the driver; false after the driver pans
+  /// the map manually, until they tap re-center.
+  bool _followDriver = true;
+  double _cameraBearing = 0;
+  double _speedMps = 0;
+  LatLng? _lastBearingOrigin;
+  DateTime? _lastCameraUpdate;
+  Timer? _cameraThrottle;
+  double _mapHeight = 0;
+  double _panelHeight = 240;
+  final GlobalKey _panelKey = GlobalKey();
+
+  // Cached position along the current road route, so the nearest-point search
+  // only scans a small window each GPS update.
+  List<LatLng>? _indexedRoute;
+  int _routeIndex = 0;
 
   LatLng get _pickup =>
       LatLng(widget.request.pickupLatitude, widget.request.pickupLongitude);
@@ -120,6 +144,7 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
             );
             _syncLocationThrottle(position.latitude, position.longitude);
             _scheduleRouteRefresh();
+            _onDriverMoved(position);
           },
           onError: (_) {
             if (mounted) {
@@ -146,6 +171,7 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
         customerId: widget.request.customerId,
       );
       _syncLocationThrottle(position.latitude, position.longitude);
+      _onDriverMoved(position);
 
       if (_roadRoute.isEmpty && !_loadingRoute) {
         _loadRoadRoute();
@@ -161,6 +187,7 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
   void dispose() {
     _positionSubscription?.cancel();
     _routeRefreshTimer?.cancel();
+    _cameraThrottle?.cancel();
     super.dispose();
   }
 
@@ -213,7 +240,7 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
             : null;
         _routeDuration = _formatDuration(data['duration']);
       });
-      _fitMapToRoute();
+      _updateNavigationCamera();
     } catch (_) {
       if (mounted) {
         setState(
@@ -265,19 +292,249 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
     );
   }
 
+  /// Re-enters follow mode and snaps the camera back onto the driver.
   void _recenterMap() {
-    if (_roadRoute.length > 1) {
-      _fitMapToRoute();
+    if (!_followDriver) setState(() => _followDriver = true);
+    _lastCameraUpdate = null;
+    if (_driverPosition != null) {
+      _updateNavigationCamera();
       return;
     }
-    final controller = _mapController;
-    if (controller == null) return;
-    controller.animateCamera(
+    _mapController?.animateCamera(
       google_maps.CameraUpdate.newLatLngZoom(
         google_maps.LatLng(_target.latitude, _target.longitude),
-        15,
+        16,
       ),
     );
+  }
+
+  /// Manual whole-route view; pauses follow mode until re-center is tapped.
+  void _showRouteOverview() {
+    setState(() => _followDriver = false);
+    _fitMapToRoute();
+  }
+
+  void _pauseFollow() {
+    if (!_followDriver) return;
+    _cameraThrottle?.cancel();
+    setState(() => _followDriver = false);
+  }
+
+  void _onDriverMoved(Position position) {
+    final driver = _driverPosition;
+    if (driver == null) return;
+    _speedMps = position.speed.isFinite && position.speed > 0
+        ? position.speed
+        : 0;
+    final bearing = _resolveBearing(position, driver);
+    if (bearing != null) {
+      _cameraBearing = _smoothBearing(_cameraBearing, bearing);
+    }
+    _updateNavigationCamera();
+  }
+
+  /// GPS heading when moving fast enough for it to be trustworthy, otherwise
+  /// the direction of the road route just ahead, otherwise recent movement.
+  double? _resolveBearing(Position position, LatLng driver) {
+    final headingAccuracy = position.headingAccuracy;
+    final gpsHeadingReliable = position.speed >= 2.5 &&
+        position.heading >= 0 &&
+        (headingAccuracy <= 0 || headingAccuracy <= 35);
+    if (gpsHeadingReliable) return position.heading;
+
+    final routeBearing = _routeBearingAhead(driver);
+    if (routeBearing != null) return routeBearing;
+
+    final origin = _lastBearingOrigin;
+    if (origin == null) {
+      _lastBearingOrigin = driver;
+      return null;
+    }
+    if (_distance.as(LengthUnit.Meter, origin, driver) < 10) return null;
+    _lastBearingOrigin = driver;
+    return _normalizeBearing(_distance.bearing(origin, driver));
+  }
+
+  double _smoothBearing(double current, double next) {
+    final delta = _bearingDelta(current, next);
+    // Ignore GPS jitter, follow real turns quickly.
+    if (delta.abs() < 4) return current;
+    final factor = delta.abs() > 60 ? 0.8 : 0.5;
+    return _normalizeBearing(current + delta * factor);
+  }
+
+  static double _normalizeBearing(double bearing) => (bearing % 360 + 360) % 360;
+
+  /// Signed shortest rotation from [from] to [to], in -180..180.
+  static double _bearingDelta(double from, double to) =>
+      ((to - from + 540) % 360) - 180;
+
+  int? _nearestRouteIndex(LatLng point) {
+    final route = _roadRoute;
+    if (route.length < 2) return null;
+    if (!identical(route, _indexedRoute)) {
+      _indexedRoute = route;
+      _routeIndex = 0;
+    }
+
+    int scan(int from, int to) {
+      var bestIndex = from;
+      var bestDistance = double.infinity;
+      for (var i = from; i < to; i++) {
+        final d = _distance.as(LengthUnit.Meter, point, route[i]);
+        if (d < bestDistance) {
+          bestDistance = d;
+          bestIndex = i;
+        }
+      }
+      return bestIndex;
+    }
+
+    final from = math.max(0, _routeIndex - 10);
+    final to = math.min(route.length, _routeIndex + 300);
+    var index = scan(from, to);
+    if (_distance.as(LengthUnit.Meter, point, route[index]) > 60) {
+      index = scan(0, route.length);
+    }
+    _routeIndex = index;
+    return index;
+  }
+
+  /// Walks [meters] forward along the route from [fromIndex].
+  ({LatLng point, int index}) _pointAlongRoute(int fromIndex, double meters) {
+    final route = _roadRoute;
+    var remaining = meters;
+    for (var i = fromIndex; i < route.length - 1; i++) {
+      final segment = _distance.as(LengthUnit.Meter, route[i], route[i + 1]);
+      if (segment >= remaining && segment > 0) {
+        final bearing = _distance.bearing(route[i], route[i + 1]);
+        return (point: _distance.offset(route[i], remaining, bearing), index: i);
+      }
+      remaining -= segment;
+    }
+    return (point: route.last, index: route.length - 1);
+  }
+
+  double? _routeBearingAhead(LatLng driver) {
+    final index = _nearestRouteIndex(driver);
+    if (index == null) return null;
+    final ahead = _pointAlongRoute(index, 35).point;
+    if (_distance.as(LengthUnit.Meter, driver, ahead) < 5) return null;
+    return _normalizeBearing(_distance.bearing(driver, ahead));
+  }
+
+  /// The next point within [lookAheadMeters] where the route bends by 35°+,
+  /// with the distance to it and the road bearing after the bend.
+  ({LatLng point, double distance, double bearingAfter})? _upcomingTurn(
+    LatLng driver, {
+    double lookAheadMeters = 220,
+  }) {
+    final index = _nearestRouteIndex(driver);
+    if (index == null) return null;
+    final route = _roadRoute;
+    final roadAhead = _pointAlongRoute(index, 20).point;
+    if (_distance.as(LengthUnit.Meter, route[index], roadAhead) < 2) {
+      return null;
+    }
+    final baseBearing = _distance.bearing(route[index], roadAhead);
+    var travelled = _distance.as(LengthUnit.Meter, driver, route[index]);
+    for (var i = index; i < route.length - 1; i++) {
+      final segment = _distance.as(LengthUnit.Meter, route[i], route[i + 1]);
+      if (travelled > lookAheadMeters) return null;
+      if (segment >= 3) {
+        final bearing = _distance.bearing(route[i], route[i + 1]);
+        if (_bearingDelta(baseBearing, bearing).abs() >= 35) {
+          return (
+            point: route[i],
+            distance: travelled,
+            bearingAfter: _normalizeBearing(bearing),
+          );
+        }
+      }
+      travelled += segment;
+    }
+    return null;
+  }
+
+  double _zoomForSpeed() {
+    final kmh = _speedMps * 3.6;
+    if (kmh > 60) return 16.4;
+    if (kmh > 30) return 16.9;
+    return 17.5;
+  }
+
+  /// How far ahead of the driver to aim the camera so the driver sits in the
+  /// lower part of the visible map, leaving the road ahead on screen.
+  double _lookAheadMeters(LatLng driver, double zoom) {
+    final visibleHeight = math.max(200.0, _mapHeight - _panelHeight);
+    final metersPerDp = 156543.03392 *
+        math.cos(driver.latitude * math.pi / 180) /
+        math.pow(2, zoom);
+    // Driver ~25% of the visible height below centre; tilt stretches ground
+    // distance on screen, hence the extra factor.
+    return visibleHeight * 0.25 * metersPerDp * 1.3;
+  }
+
+  void _updateNavigationCamera() {
+    final controller = _mapController;
+    final driver = _driverPosition;
+    if (controller == null || driver == null || !_followDriver) return;
+
+    // Throttle so overlapping animations don't make the camera stutter; the
+    // trailing call keeps the final position up to date.
+    final now = DateTime.now();
+    final last = _lastCameraUpdate;
+    if (last != null && now.difference(last) < _minCameraInterval) {
+      _cameraThrottle ??= Timer(_minCameraInterval - now.difference(last), () {
+        _cameraThrottle = null;
+        _updateNavigationCamera();
+      });
+      return;
+    }
+    _cameraThrottle?.cancel();
+    _cameraThrottle = null;
+    _lastCameraUpdate = now;
+
+    var zoom = _zoomForSpeed();
+    var bearing = _cameraBearing;
+    var lookAhead = _lookAheadMeters(driver, zoom);
+
+    if (_navigationState != _NavigationState.atPickup) {
+      final turn = _upcomingTurn(driver);
+      if (turn != null && turn.distance <= 160) {
+        // Close in on the junction and rotate slightly into the new road so
+        // the turn and the street after it are both in view.
+        final closeness = 1 - (turn.distance / 160);
+        zoom = math.max(zoom, 17.2);
+        lookAhead = math.min(lookAhead, math.max(turn.distance, 25.0));
+        bearing = _normalizeBearing(
+          bearing + _bearingDelta(bearing, turn.bearingAfter) * 0.25 * closeness,
+        );
+      }
+    }
+
+    final target = _distance.offset(driver, lookAhead, bearing);
+    controller.animateCamera(
+      google_maps.CameraUpdate.newCameraPosition(
+        google_maps.CameraPosition(
+          target: google_maps.LatLng(target.latitude, target.longitude),
+          zoom: zoom,
+          bearing: bearing,
+          tilt: _navigationTilt,
+        ),
+      ),
+      duration: _cameraAnimation,
+    );
+  }
+
+  void _measurePanel() {
+    final height = _panelKey.currentContext?.size?.height;
+    if (height == null) return;
+    // Panel height + its 16dp margin.
+    final total = height + 16;
+    if ((total - _panelHeight).abs() > 1) {
+      setState(() => _panelHeight = total);
+    }
   }
 
   void _markAtPickup() {
@@ -348,6 +605,9 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _measurePanel();
+    });
     final routePoints = _roadRoute;
     final distance = _routeDistanceMeters;
     final targetMarker = google_maps.Marker(
@@ -395,21 +655,40 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
       ),
       body: Stack(
         children: [
-          google_maps.GoogleMap(
-            initialCameraPosition: google_maps.CameraPosition(
-              target: google_maps.LatLng(_target.latitude, _target.longitude),
-              zoom: 14,
-            ),
-            onMapCreated: (controller) {
-              _mapController = controller;
-              WidgetsBinding.instance.addPostFrameCallback(
-                (_) => _fitMapToRoute(),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              _mapHeight = constraints.maxHeight;
+              final start = _driverPosition ?? _target;
+              // Any touch on the map hands the camera to the driver until
+              // they tap re-center.
+              return Listener(
+                onPointerDown: (_) => _pauseFollow(),
+                child: google_maps.GoogleMap(
+                  initialCameraPosition: google_maps.CameraPosition(
+                    target: google_maps.LatLng(start.latitude, start.longitude),
+                    zoom: _driverPosition != null ? 17.5 : 15,
+                    tilt: _driverPosition != null ? _navigationTilt : 0,
+                  ),
+                  onMapCreated: (controller) {
+                    _mapController = controller;
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      _measurePanel();
+                      _lastCameraUpdate = null;
+                      _updateNavigationCamera();
+                    });
+                  },
+                  padding: EdgeInsets.only(bottom: _panelHeight),
+                  myLocationEnabled: _driverPosition != null,
+                  myLocationButtonEnabled: false,
+                  compassEnabled: false,
+                  zoomControlsEnabled: false,
+                  mapToolbarEnabled: false,
+                  buildingsEnabled: true,
+                  markers: markers,
+                  polylines: polylines,
+                ),
               );
             },
-            myLocationEnabled: _driverPosition != null,
-            myLocationButtonEnabled: true,
-            markers: markers,
-            polylines: polylines,
           ),
           SafeArea(
             child: Stack(
@@ -417,15 +696,60 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
                 Positioned(
                   top: 16,
                   right: 16,
-                  child: FloatingActionButton.small(
-                    heroTag: 'recenter-navigation-map',
-                    onPressed: _recenterMap,
-                    child: const Icon(Icons.my_location),
+                  child: Column(
+                    children: [
+                      FloatingActionButton.small(
+                        heroTag: 'recenter-navigation-map',
+                        tooltip: 'Follow my location',
+                        onPressed: _recenterMap,
+                        backgroundColor: _followDriver
+                            ? const Color(0xFF2F6BFF)
+                            : null,
+                        foregroundColor: _followDriver ? Colors.white : null,
+                        child: const Icon(Icons.navigation_rounded),
+                      ),
+                      if (_roadRoute.length > 1) ...[
+                        const SizedBox(height: 10),
+                        FloatingActionButton.small(
+                          heroTag: 'overview-navigation-map',
+                          tooltip: 'Show whole route',
+                          onPressed: _showRouteOverview,
+                          child: const Icon(Icons.alt_route_rounded),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
+                if (!_followDriver)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: _panelHeight + 12,
+                    child: Center(
+                      child: FilledButton.icon(
+                        onPressed: _recenterMap,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF2F6BFF),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 12,
+                          ),
+                          shape: const StadiumBorder(),
+                          elevation: 4,
+                        ),
+                        icon: const Icon(Icons.navigation_rounded, size: 18),
+                        label: const Text(
+                          'Re-center',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ),
+                  ),
                 Align(
                   alignment: Alignment.bottomCenter,
                   child: Container(
+                    key: _panelKey,
                     width: double.infinity,
                     margin: const EdgeInsets.all(16),
                     padding: const EdgeInsets.all(18),
