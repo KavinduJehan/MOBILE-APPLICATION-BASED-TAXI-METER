@@ -48,7 +48,7 @@ const getDriverProfile = async (req, res) => {
     const driver = await Driver.findById(req.user.id).select('-password');
     if (!driver) return res.status(404).json({ message: 'Driver not found' });
     const config = await SystemConfig.findOne().lean();
-    const effectiveMode = config?.rateMode || driver.pricingMode || 'ADMIN';
+    const effectiveMode = driver.pricingMode || config?.rateMode || 'ADMIN';
     const driverObj = driver.toObject();
     driverObj.pricingMode = effectiveMode;
     res.json(driverObj);

@@ -50,7 +50,7 @@ class AuthProvider extends ChangeNotifier {
 
   String? _systemRateMode;
 
-  String get rateMode => _systemRateMode ?? _profile?.pricingMode ?? 'ADMIN';
+  String get rateMode => _profile?.pricingMode ?? _systemRateMode ?? 'ADMIN';
 
   Future<void> bootstrap() async {
     if (!_bootstrapping) {
@@ -60,29 +60,16 @@ class AuthProvider extends ChangeNotifier {
     try {
       _token = await SessionStore.readToken();
       if (_token != null) {
-        // Fetch current public config from server
-        try {
-          final config = await api.getPublicConfig();
-          if (config['rateMode'] != null) {
-            _systemRateMode = config['rateMode'].toString();
-          }
-        } catch (_) {}
-
         try {
           _profile = await api.getProfile();
-          if (_systemRateMode != null && _profile != null) {
-            _profile = _profile!.copyWith(pricingMode: _systemRateMode);
-          }
           if (_profile != null) {
+            _systemRateMode = _profile!.pricingMode;
             await OfflineDatabase.instance.cacheProfile(_profile!);
             await SessionStore.saveProfile(_profile!);
             DriverSocketService.instance.init(driverId: _profile!.id);
           }
         } catch (_) {
           _profile = await SessionStore.readProfile() ?? await OfflineDatabase.instance.getCachedProfile();
-          if (_systemRateMode != null && _profile != null) {
-            _profile = _profile!.copyWith(pricingMode: _systemRateMode);
-          }
         }
       }
     } catch (error) {
@@ -102,18 +89,9 @@ class AuthProvider extends ChangeNotifier {
       _token = result.token;
       await SessionStore.saveToken(result.token);
 
-      try {
-        final config = await api.getPublicConfig();
-        if (config['rateMode'] != null) {
-          _systemRateMode = config['rateMode'].toString();
-        }
-      } catch (_) {}
-
       _profile = result.profile ?? await api.getProfile();
-      if (_systemRateMode != null && _profile != null) {
-        _profile = _profile!.copyWith(pricingMode: _systemRateMode);
-      }
       if (_profile != null) {
+        _systemRateMode = _profile!.pricingMode;
         await OfflineDatabase.instance.cacheProfile(_profile!);
         await SessionStore.saveProfile(_profile!);
         DriverSocketService.instance.init(driverId: _profile!.id);
@@ -202,18 +180,9 @@ class AuthProvider extends ChangeNotifier {
     }
     _setBusy(true);
     try {
-      try {
-        final config = await api.getPublicConfig();
-        if (config['rateMode'] != null) {
-          _systemRateMode = config['rateMode'].toString();
-        }
-      } catch (_) {}
-
       _profile = await api.getProfile();
-      if (_systemRateMode != null && _profile != null) {
-        _profile = _profile!.copyWith(pricingMode: _systemRateMode);
-      }
       if (_profile != null) {
+        _systemRateMode = _profile!.pricingMode;
         await OfflineDatabase.instance.cacheProfile(_profile!);
         await SessionStore.saveProfile(_profile!);
         DriverSocketService.instance.init(driverId: _profile!.id);
