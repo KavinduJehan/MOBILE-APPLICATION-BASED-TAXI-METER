@@ -90,6 +90,28 @@ export default function Drivers() {
         .driver-table tbody tr:hover {
           background: #f8fbff;
         }
+        .driver-table {
+          width: 100%;
+          min-width: 0;
+          table-layout: fixed;
+        }
+        .driver-table th,
+        .driver-table td {
+          padding: 0.75rem 0.6rem;
+          overflow-wrap: anywhere;
+        }
+        .driver-table th:nth-child(1) { width: 7%; }
+        .driver-table th:nth-child(2) { width: 16%; }
+        .driver-table th:nth-child(3) { width: 9%; }
+        .driver-table th:nth-child(4) { width: 9%; }
+        .driver-table th:nth-child(5) { width: 8%; }
+        .driver-table th:nth-child(6) { width: 8%; }
+        .driver-table th:nth-child(7) { width: 8%; }
+        .driver-table th:nth-child(8) { width: 18%; }
+        .driver-table th:nth-child(9) { width: 9%; }
+        .driver-table th:nth-child(10) { width: 8%; }
+        .driver-table select,
+        .driver-table input { box-sizing: border-box; max-width: 100%; }
         @keyframes shimmer {
           0% { background-position: -200px 0; }
           100% { background-position: calc(200px + 100%) 0; }
@@ -148,7 +170,7 @@ export default function Drivers() {
 
         {!loading && visibleDrivers.length > 0 && (
           <div style={styles.tableWrap}>
-            <table style={styles.table}>
+            <table style={styles.table} className="driver-table">
               <thead>
                 <tr style={styles.thead}>
                   <th style={styles.th}>Name</th>
@@ -268,7 +290,7 @@ const styles = {
   skeletonWrapper: { background: '#fff', borderRadius: '16px', border: '1px solid rgba(206, 216, 240, 0.9)', padding: '1rem', boxShadow: '0 16px 40px rgba(20, 35, 90, 0.06)', display: 'grid', gap: '0.85rem', animation: 'fadeUp 0.35s ease-out' },
   skeletonRow: { display: 'grid', gridTemplateColumns: 'repeat(9, minmax(0, 1fr))', gap: '0.75rem', alignItems: 'center' },
   skeletonCell: { height: '1rem', borderRadius: '999px', background: 'linear-gradient(90deg, #eef2ff 0%, #f6f8ff 50%, #eef2ff 100%)', animation: 'shimmer 1.6s ease-in-out infinite' },
-  table: { width: '100%', borderCollapse: 'collapse', minWidth: '980px' },
+  table: { width: '100%', borderCollapse: 'collapse' },
   thead: { background: '#f4f7ff' },
   th: { padding: '0.85rem 1rem', textAlign: 'left', fontSize: '0.85rem', color: '#5d6b8b', borderBottom: '1px solid #eef1f8' },
   tr: { borderBottom: '1px solid #f2f4f8', background: '#fff' },
@@ -276,7 +298,7 @@ const styles = {
   badgeGreen: { background: '#d4edda', color: '#155724', padding: '0.2rem 0.6rem', borderRadius: '12px', fontSize: '0.8rem' },
   badgeOrange: { background: '#fff3cd', color: '#856404', padding: '0.2rem 0.6rem', borderRadius: '12px', fontSize: '0.8rem' },
   pricingBadge: { display: 'inline-block', background: '#e8edff', color: '#4658c8', padding: '0.25rem 0.55rem', borderRadius: '999px', fontSize: '0.76rem', fontWeight: 700, whiteSpace: 'nowrap' },
-  pricingSelect: { display: 'block', marginTop: '0.45rem', padding: '0.4rem', border: '1px solid #d2ddec', borderRadius: '8px', minWidth: '180px', background: '#fff' },
+  pricingSelect: { display: 'block', width: '100%', marginTop: '0.45rem', padding: '0.4rem', border: '1px solid #d2ddec', borderRadius: '8px', background: '#fff' },
   rateEditor: { display: 'flex', gap: '0.35rem', marginTop: '0.4rem' },
   rateInput: { width: '95px', padding: '0.35rem', border: '1px solid #d2ddec', borderRadius: '7px' },
   rateSave: { background: '#27314d', color: '#fff', border: 'none', padding: '0.35rem 0.55rem', borderRadius: '7px', cursor: 'pointer', whiteSpace: 'nowrap' },
