@@ -6,11 +6,28 @@ import '../services/api_service.dart';
 import '../services/driver_location_service.dart';
 import '../services/offline_database.dart';
 import '../services/session_store.dart';
+import '../services/socket_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   AuthProvider() {
     _locationService = DriverLocationService(api);
+    DriverSocketService.instance.addConfigListener(_handleSocketConfigUpdate);
   }
+
+  void _handleSocketConfigUpdate(String mode, double? rate) {
+    debugPrint('[AuthProvider] Live socket config received: mode=$mode, rate=$rate');
+    _systemRateMode = mode;
+    if (_profile != null) {
+      _profile = _profile!.copyWith(
+        pricingMode: mode,
+        ratePerKm: rate ?? _profile!.ratePerKm,
+      );
+      OfflineDatabase.instance.cacheProfile(_profile!);
+      SessionStore.saveProfile(_profile!);
+    }
+    notifyListeners();
+  }
+
 
   final ApiService api = ApiService();
   late final DriverLocationService _locationService;
@@ -31,7 +48,9 @@ class AuthProvider extends ChangeNotifier {
   bool get locationUpdatesRunning => _locationService.isRunning;
   DateTime? get lastLocationUpdate => _locationService.lastSuccessfulUpdate;
 
-  String get rateMode => _profile?.pricingMode ?? 'ADMIN';
+  String? _systemRateMode;
+
+  String get rateMode => _systemRateMode ?? _profile?.pricingMode ?? 'ADMIN';
 
   Future<void> bootstrap() async {
     if (!_bootstrapping) {
@@ -41,13 +60,29 @@ class AuthProvider extends ChangeNotifier {
     try {
       _token = await SessionStore.readToken();
       if (_token != null) {
+        // Fetch current public config from server
+        try {
+          final config = await api.getPublicConfig();
+          if (config['rateMode'] != null) {
+            _systemRateMode = config['rateMode'].toString();
+          }
+        } catch (_) {}
+
         try {
           _profile = await api.getProfile();
+          if (_systemRateMode != null && _profile != null) {
+            _profile = _profile!.copyWith(pricingMode: _systemRateMode);
+          }
           if (_profile != null) {
             await OfflineDatabase.instance.cacheProfile(_profile!);
+            await SessionStore.saveProfile(_profile!);
+            DriverSocketService.instance.init(driverId: _profile!.id);
           }
         } catch (_) {
           _profile = await SessionStore.readProfile() ?? await OfflineDatabase.instance.getCachedProfile();
+          if (_systemRateMode != null && _profile != null) {
+            _profile = _profile!.copyWith(pricingMode: _systemRateMode);
+          }
         }
       }
     } catch (error) {
@@ -66,9 +101,22 @@ class AuthProvider extends ChangeNotifier {
       final result = await api.login(email: email, password: password);
       _token = result.token;
       await SessionStore.saveToken(result.token);
+
+      try {
+        final config = await api.getPublicConfig();
+        if (config['rateMode'] != null) {
+          _systemRateMode = config['rateMode'].toString();
+        }
+      } catch (_) {}
+
       _profile = result.profile ?? await api.getProfile();
+      if (_systemRateMode != null && _profile != null) {
+        _profile = _profile!.copyWith(pricingMode: _systemRateMode);
+      }
       if (_profile != null) {
         await OfflineDatabase.instance.cacheProfile(_profile!);
+        await SessionStore.saveProfile(_profile!);
+        DriverSocketService.instance.init(driverId: _profile!.id);
       }
       _errorMessage = null;
     } catch (error) {
@@ -154,9 +202,21 @@ class AuthProvider extends ChangeNotifier {
     }
     _setBusy(true);
     try {
+      try {
+        final config = await api.getPublicConfig();
+        if (config['rateMode'] != null) {
+          _systemRateMode = config['rateMode'].toString();
+        }
+      } catch (_) {}
+
       _profile = await api.getProfile();
+      if (_systemRateMode != null && _profile != null) {
+        _profile = _profile!.copyWith(pricingMode: _systemRateMode);
+      }
       if (_profile != null) {
         await OfflineDatabase.instance.cacheProfile(_profile!);
+        await SessionStore.saveProfile(_profile!);
+        DriverSocketService.instance.init(driverId: _profile!.id);
       }
       _errorMessage = null;
     } catch (error) {
@@ -247,6 +307,7 @@ class AuthProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    DriverSocketService.instance.removeConfigListener(_handleSocketConfigUpdate);
     _locationService.stop();
     super.dispose();
   }

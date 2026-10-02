@@ -20,6 +20,7 @@ class _RateScreenState extends State<RateScreen> {
   // AUTO mode state
   Map<String, dynamic>? _autoRate;
   bool _autoLoading = false;
+  String? _lastMode;
 
   @override
   void initState() {
@@ -40,6 +41,7 @@ class _RateScreenState extends State<RateScreen> {
     if (!mounted || profile == null) return;
 
     _rateCtrl.text = profile.ratePerKm.toStringAsFixed(2);
+    _lastMode = auth.rateMode;
 
     if (auth.rateMode == 'AUTO') {
       // Fetch the live algorithm result
@@ -111,6 +113,22 @@ class _RateScreenState extends State<RateScreen> {
     final profile = auth.profile;
     final isAuto  = auth.rateMode == 'AUTO';
     final isAdmin = auth.rateMode == 'ADMIN';
+
+    if (_lastMode != null && _lastMode != auth.rateMode) {
+      _lastMode = auth.rateMode;
+      if (isAuto) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _refreshAutoRate(profile?.area);
+        });
+      } else if (isAdmin && profile != null) {
+        _rateCtrl.text = profile.ratePerKm.toStringAsFixed(2);
+      }
+    } else {
+      _lastMode = auth.rateMode;
+      if (isAdmin && profile != null && _rateCtrl.text != profile.ratePerKm.toStringAsFixed(2)) {
+        _rateCtrl.text = profile.ratePerKm.toStringAsFixed(2);
+      }
+    }
 
     return AppShellScaffold(
       appBar: AppBar(title: const Text('Rate')),

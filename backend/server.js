@@ -56,9 +56,13 @@ const startServer = async () => {
   let config = await SystemConfig.findOne();
   if (!config) config = await SystemConfig.create({});
   const targetMode = config.rateMode || 'ADMIN';
+  const syncUpdate = { pricingMode: targetMode };
+  if (targetMode === 'ADMIN' && config.autoBaseRate) {
+    syncUpdate.ratePerKm = config.autoBaseRate;
+  }
   const migration = await Driver.updateMany(
     { $or: [{ pricingMode: { $exists: false } }, { pricingMode: { $ne: targetMode } }] },
-    { $set: { pricingMode: targetMode } }
+    { $set: syncUpdate }
   );
   if (migration.modifiedCount > 0) {
     console.log(`Synchronized pricing mode (${targetMode}) for ${migration.modifiedCount} drivers.`);

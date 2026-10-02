@@ -92,7 +92,27 @@ const updateConfig = async (req, res) => {
     }
 
     if (rateMode !== undefined) {
-      await Driver.updateMany({}, { $set: { pricingMode: rateMode } });
+      const driverUpdate = { pricingMode: rateMode };
+      if (rateMode === 'ADMIN' && config.autoBaseRate) {
+        driverUpdate.ratePerKm = config.autoBaseRate;
+      }
+      await Driver.updateMany({}, { $set: driverUpdate });
+    } else if (autoBaseRate !== undefined && config.rateMode === 'ADMIN') {
+      await Driver.updateMany({}, { $set: { ratePerKm: autoBaseRate } });
+    }
+
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('config_updated', {
+        rateMode: config.rateMode,
+        autoBaseRate: config.autoBaseRate,
+        autoMinMultiplier: config.autoMinMultiplier,
+        autoMaxMultiplier: config.autoMaxMultiplier,
+      });
+      io.emit('pricing_mode_changed', {
+        rateMode: config.rateMode,
+        ratePerKm: config.autoBaseRate,
+      });
     }
 
     res.json(config);
