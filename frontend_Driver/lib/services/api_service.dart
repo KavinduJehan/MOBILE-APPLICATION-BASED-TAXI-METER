@@ -151,12 +151,17 @@ class ApiService {
     return DriverProfile.fromJson(_asMap(response.data));
   }
 
-  Future<double> getAreaRate(String area) async {
+  Future<double> getAreaRate(String area, {double? lat, double? lng}) async {
+    final Map<String, dynamic> queryParams = {'area': area};
+    if (lat != null && lng != null) {
+      queryParams['lat'] = lat;
+      queryParams['lng'] = lng;
+    }
     final response = await _request(
       'GET',
       '/rates/area',
       auth: false,
-      queryParameters: {'area': area},
+      queryParameters: queryParams,
     );
     final data = _asMap(response.data);
     return _readDouble(data, ['ratePerKm', 'averageRate', 'rate', 'value']);
@@ -164,12 +169,17 @@ class ApiService {
 
   /// Fetches the real-time auto-calculated rate with surge breakdown.
   /// Returns a map containing: effectiveRate, baseRate, multiplier, breakdown.
-  Future<Map<String, dynamic>> getAutoRate(String area) async {
+  Future<Map<String, dynamic>> getAutoRate(String area, {double? lat, double? lng}) async {
+    final Map<String, dynamic> queryParams = {'area': area};
+    if (lat != null && lng != null) {
+      queryParams['lat'] = lat;
+      queryParams['lng'] = lng;
+    }
     final response = await _request(
       'GET',
       '/rates/auto',
       auth: false,
-      queryParameters: {'area': area},
+      queryParameters: queryParams,
     );
     return _asMap(response.data);
   }

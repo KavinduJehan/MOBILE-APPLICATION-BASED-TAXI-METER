@@ -297,8 +297,14 @@ class ApiService {
   static Future<Response> getDriverByQR(String qrToken) =>
       _dio.get('/drivers/qr/$qrToken');
 
-  static Future<Response> getAreaRates(String area) =>
-      _dio.get('/rates/area', queryParameters: {'area': area});
+  static Future<Response> getAreaRates(String area, {double? lat, double? lng}) {
+    final Map<String, dynamic> queryParams = {'area': area};
+    if (lat != null && lng != null) {
+      queryParams['lat'] = lat;
+      queryParams['lng'] = lng;
+    }
+    return _dio.get('/rates/area', queryParameters: queryParams);
+  }
 
   static Future<Response> createRideRequest(Map<String, dynamic> body) =>
       _dio.post('/ride-requests', data: body);
