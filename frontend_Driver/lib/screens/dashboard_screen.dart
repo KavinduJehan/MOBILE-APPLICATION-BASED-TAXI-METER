@@ -145,10 +145,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     runSpacing: 12,
                     children: [
                       StatCard(
-                        label: 'Rate per km',
-                        value:
-                            'Rs. ${profile?.ratePerKm.toStringAsFixed(2) ?? '0.00'}',
-                        icon: Icons.payments_rounded,
+                        label: auth.rateMode == 'AUTO'
+                            ? 'Pricing Mode'
+                            : 'Rate per km',
+                        value: auth.rateMode == 'AUTO'
+                            ? 'Auto Surge'
+                            : 'Rs. ${profile?.ratePerKm.toStringAsFixed(2) ?? '0.00'}',
+                        icon: auth.rateMode == 'AUTO'
+                            ? Icons.bolt_rounded
+                            : Icons.payments_rounded,
                       ),
                       StatCard(
                         label: 'GPS Range',

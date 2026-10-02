@@ -1,6 +1,7 @@
 const QRCode = require('qrcode');
 const Driver = require('../models/Driver');
 const Trip = require('../models/Trip');
+const SystemConfig = require('../models/SystemConfig');
 
 // PATCH /api/drivers/profile
 // Lets a driver update their own editable fields (not password, not verification status)
@@ -46,7 +47,11 @@ const getDriverProfile = async (req, res) => {
   try {
     const driver = await Driver.findById(req.user.id).select('-password');
     if (!driver) return res.status(404).json({ message: 'Driver not found' });
-    res.json(driver);
+    const config = await SystemConfig.findOne().lean();
+    const effectiveMode = config?.rateMode || driver.pricingMode || 'ADMIN';
+    const driverObj = driver.toObject();
+    driverObj.pricingMode = effectiveMode;
+    res.json(driverObj);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
