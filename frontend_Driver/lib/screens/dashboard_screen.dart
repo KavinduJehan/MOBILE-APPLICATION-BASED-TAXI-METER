@@ -151,11 +151,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         icon: Icons.payments_rounded,
                       ),
                       StatCard(
-                        label: 'Area',
-                        value: profile?.area.isNotEmpty == true
-                            ? profile!.area
-                            : 'Unknown',
-                        icon: Icons.place_rounded,
+                        label: 'GPS Range',
+                        value: '10 km',
+                        icon: Icons.radar_rounded,
                       ),
                     ],
                   ),

@@ -4,7 +4,10 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-const String _configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
+const String _configuredBaseUrl = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: 'https://mobile-application-based-taxi-meter.onrender.com/api',
+);
 
 const String _tokenKey = 'auth_token';
 const String _refreshTokenKey = 'refresh_token';
@@ -27,13 +30,12 @@ String _resolveBaseUrl() {
 
   switch (defaultTargetPlatform) {
     case TargetPlatform.android:
-      return 'http://192.168.8.160:5000/api';
     case TargetPlatform.iOS:
     case TargetPlatform.macOS:
     case TargetPlatform.windows:
     case TargetPlatform.linux:
     case TargetPlatform.fuchsia:
-      return 'http://localhost:5000/api';
+      return 'https://mobile-application-based-taxi-meter.onrender.com/api';
   }
 }
 
@@ -48,9 +50,9 @@ class ApiService {
     final dio = Dio(
       BaseOptions(
         baseUrl: _resolveBaseUrl(),
-        connectTimeout: const Duration(seconds: 30),
-        receiveTimeout: const Duration(seconds: 30),
-        sendTimeout: const Duration(seconds: 30),
+        connectTimeout: const Duration(seconds: 60),
+        receiveTimeout: const Duration(seconds: 60),
+        sendTimeout: const Duration(seconds: 60),
         headers: {'Content-Type': 'application/json'},
       ),
     );
@@ -230,6 +232,19 @@ class ApiService {
 
   static Future<Response> customerVerifyOtp(String phone, String otp) =>
       _dio.post('/customers/verify-otp', data: {'phone': phone, 'otp': otp});
+
+  static Future<Response> customerPhoneLogin({
+    required String idToken,
+    String? firstName,
+    String? lastName,
+    String? email,
+  }) =>
+      _dio.post('/customers/phone-login', data: {
+        'idToken': idToken,
+        if (firstName != null && firstName.isNotEmpty) 'firstName': firstName,
+        if (lastName != null && lastName.isNotEmpty) 'lastName': lastName,
+        if (email != null && email.isNotEmpty) 'email': email,
+      });
 
   static Future<Response> updateCustomerProfile(Map<String, dynamic> body) =>
       _dio.patch('/customers/profile', data: body);

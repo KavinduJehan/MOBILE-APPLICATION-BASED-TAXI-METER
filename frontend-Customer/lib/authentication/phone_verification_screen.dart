@@ -8,6 +8,8 @@ import '../screens/onboarding_screen.dart';
 import '../theme.dart';
 import '../widgets/brand_logo.dart';
 
+import '../services/firebase_auth_service.dart';
+
 class PhoneVerificationScreen extends StatefulWidget {
   final String phoneNumber;
   final bool isNewUser;
@@ -39,6 +41,9 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
   bool _verifying = false;
   String? _error;
   String? _info;
+
+  String? _verificationId;
+  int? _resendToken;
 
   String get _otp => _controllers.map((c) => c.text).join();
   bool get _isComplete => _otp.length == _otpLength;
@@ -73,29 +78,70 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
       _error = null;
       _info = null;
     });
-    final auth = context.read<AuthProvider>();
-    final ok = await auth.requestOtp(widget.phoneNumber);
-    if (!mounted) return;
-    if (ok) {
-      setState(() {
-        _requesting = false;
-        _info = 'A verification code was sent.';
-      });
-    } else {
-      if (auth.error?.contains('No account') == true) {
+
+    try {
+      await FirebaseAuthService.verifyPhoneNumber(
+        phoneNumber: widget.phoneNumber,
+        resendToken: _resendToken,
+        onCodeSent: (verificationId, resendToken) {
+          if (!mounted) return;
+          setState(() {
+            _verificationId = verificationId;
+            _resendToken = resendToken;
+            _requesting = false;
+            _info = 'Verification code sent to $_displayPhone';
+          });
+        },
+        onVerificationFailed: (errorMessage) {
+          if (!mounted) return;
+          setState(() {
+            _requesting = false;
+            _error = errorMessage;
+          });
+        },
+        onAutoVerified: (idToken) async {
+          if (!mounted) return;
+          await _loginWithIdToken(idToken);
+        },
+      );
+    } catch (_) {
+      if (!mounted) return;
+      // Graceful fallback to backend direct OTP
+      final auth = context.read<AuthProvider>();
+      final ok = await auth.requestOtp(widget.phoneNumber);
+      if (mounted) {
         setState(() {
-          _error = 'No account found for this phone number.';
           _requesting = false;
+          if (ok) {
+            _info = 'Verification code sent.';
+          } else {
+            _error = auth.error ?? 'Failed to send OTP';
+          }
         });
-        auth.clearError();
-      } else {
-        setState(() {
-          _error = auth.error ?? 'Failed to send OTP';
-          _requesting = false;
-        });
-        auth.clearError();
       }
     }
+  }
+
+  Future<void> _loginWithIdToken(String idToken) async {
+    setState(() => _verifying = true);
+    final auth = context.read<AuthProvider>();
+    final ok = await auth.loginWithFirebasePhone(idToken: idToken);
+    if (!mounted) return;
+    if (ok) {
+      final destination = widget.isNewUser
+          ? const OnboardingScreen()
+          : const MainNavigation();
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => destination),
+        (_) => false,
+      );
+      return;
+    }
+    setState(() {
+      _verifying = false;
+      _error = auth.error ?? 'Login failed. Please try again.';
+    });
   }
 
   void _onCodeChanged(String value, int index) {
@@ -117,32 +163,50 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
       _error = null;
       _info = null;
     });
-    try {
-      final auth = context.read<AuthProvider>();
-      final ok = await auth.verifyOtp(widget.phoneNumber, _otp);
-      if (!mounted) return;
-      if (ok) {
-        final destination = widget.isNewUser
-            ? const OnboardingScreen()
-            : const MainNavigation();
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => destination),
-          (_) => false,
-        );
-        return;
-      }
 
-      final message = auth.error ?? 'Invalid OTP';
-      auth.clearError();
-      _clearOtp();
-      setState(() {
-        _error = message.toLowerCase().contains('expired')
-            ? 'Code expired. Press Resend code to get a new one.'
-            : message;
-        _info = null;
-      });
-      _focusNodes[0].requestFocus();
+    try {
+      if (_verificationId != null) {
+        final idToken = await FirebaseAuthService.verifyOtp(
+          verificationId: _verificationId!,
+          smsCode: _otp,
+        );
+        await _loginWithIdToken(idToken);
+      } else {
+        // Fallback to backend direct OTP
+        final auth = context.read<AuthProvider>();
+        final ok = await auth.verifyOtp(widget.phoneNumber, _otp);
+        if (!mounted) return;
+        if (ok) {
+          final destination = widget.isNewUser
+              ? const OnboardingScreen()
+              : const MainNavigation();
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => destination),
+            (_) => false,
+          );
+          return;
+        }
+
+        final message = auth.error ?? 'Invalid OTP';
+        auth.clearError();
+        _clearOtp();
+        setState(() {
+          _error = message.toLowerCase().contains('expired')
+              ? 'Code expired. Press Resend code to get a new one.'
+              : message;
+          _info = null;
+        });
+        _focusNodes[0].requestFocus();
+      }
+    } catch (e) {
+      if (mounted) {
+        _clearOtp();
+        setState(() {
+          _error = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
+        });
+        _focusNodes[0].requestFocus();
+      }
     } finally {
       if (mounted) {
         setState(() => _verifying = false);
@@ -162,6 +226,7 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
     _focusNodes[0].requestFocus();
     await _sendOtp();
   }
+
 
   @override
   Widget build(BuildContext context) {

@@ -23,17 +23,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _vehicleController = TextEditingController();
   bool _passwordVisible = false;
   bool _confirmPasswordVisible = false;
-  String _area = 'Colombo';
-
-  final List<String> _areas = const [
-    'Colombo',
-    'Kandy',
-    'Galle',
-    'Jaffna',
-    'Negombo',
-    'Kurunegala',
-    'Matara',
-  ];
 
   @override
   void dispose() {
@@ -58,7 +47,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
         password: _passwordController.text,
         licenseNumber: _licenseController.text.trim(),
         vehicleNumber: _vehicleController.text.trim(),
-        area: _area,
       );
       if (!mounted) return;
       Navigator.of(context).pop('$message - pending admin verification');
@@ -154,13 +142,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 14),
                 TextFormField(controller: _vehicleController, decoration: const InputDecoration(labelText: 'Vehicle number'), validator: _required),
-                const SizedBox(height: 14),
-                DropdownButtonFormField<String>(
-                  initialValue: _area,
-                  decoration: const InputDecoration(labelText: 'Area'),
-                  items: _areas.map((area) => DropdownMenuItem(value: area, child: Text(area))).toList(),
-                  onChanged: (value) => setState(() => _area = value ?? _area),
-                ),
                 const SizedBox(height: 20),
                 PrimaryActionButton(label: 'Register', isBusy: auth.busy, onPressed: _submit),
               ],

@@ -397,13 +397,78 @@ const updateSavedPlaces = async (req, res) => {
   }
 };
 
+// POST /api/customers/phone-login
+// Called by Flutter customer app after Firebase OTP verification succeeds.
+// Flutter sends the Firebase ID token; we verify it, extract the phone number,
+// then find or create the Customer and return session tokens.
+const phoneLogin = async (req, res) => {
+  const { idToken, firstName, lastName, email } = req.body;
+  if (!idToken) return res.status(400).json({ message: 'idToken is required' });
+
+  let admin;
+  try {
+    admin = require('../config/firebase');
+  } catch {
+    return res.status(500).json({ message: 'Firebase not configured on this server' });
+  }
+
+  try {
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    const phoneNumber = decoded.phone_number;
+
+    if (!phoneNumber) {
+      return res.status(400).json({
+        message: 'Token does not contain a phone number. Ensure Firebase phone auth was used.',
+      });
+    }
+
+    // Convert E.164 (+94...) to local 0-prefixed phone number if applicable
+    const localPhone = phoneNumber.startsWith('+94')
+      ? '0' + phoneNumber.slice(3)
+      : phoneNumber;
+
+    let customer = await Customer.findOne({
+      $or: [{ phone: phoneNumber }, { phone: localPhone }],
+    });
+
+    if (!customer) {
+      const cFirst = String(firstName || 'Customer').trim();
+      const cLast = String(lastName || '').trim();
+      const cName = `${cFirst} ${cLast}`.trim();
+      const cEmail =
+        normalizeEmail(email) ||
+        `${localPhone.replace(/[^0-9]/g, '')}@customer.taximeter.local`;
+
+      customer = await Customer.create({
+        firstName: cFirst,
+        lastName: cLast,
+        name: cName,
+        email: cEmail,
+        phone: localPhone,
+      });
+    }
+
+    res.json(issueSession(customer));
+  } catch (err) {
+    if (err.code === 'auth/id-token-expired') {
+      return res.status(401).json({ message: 'OTP session expired. Please verify again.' });
+    }
+    if (err.code?.startsWith('auth/')) {
+      return res.status(401).json({ message: 'Invalid Firebase token' });
+    }
+    res.status(500).json({ message: err.message });
+  }
+};
+
 module.exports = {
   register,
   login,
   requestOtp,
   verifyOtp,
+  phoneLogin,
   refreshToken,
   updateProfile,
   getSavedPlaces,
   updateSavedPlaces,
 };
+

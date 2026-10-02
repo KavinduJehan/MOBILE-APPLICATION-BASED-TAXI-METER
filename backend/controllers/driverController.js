@@ -88,9 +88,8 @@ const getNearbyDrivers = async (req, res) => {
   const locationFreshAfter = new Date(Date.now() - DRIVER_LOCATION_TTL_MINUTES * 60 * 1000);
 
   try {
-    const baseMatch = area ? { area, isVerified: true } : { isVerified: true };
-
     if (!hasPickup) {
+      const baseMatch = area ? { area, isVerified: true } : { isVerified: true };
       const drivers = await Driver.find(baseMatch)
         .select('name vehicleNumber vehicleType ratePerKm pricingMode area qrCode isVerified location')
         .lean();
@@ -105,7 +104,7 @@ const getNearbyDrivers = async (req, res) => {
           maxDistance: maxDistanceMeters,
           spherical: true,
           query: {
-            ...baseMatch,
+            isVerified: true,
             'location.coordinates': { $exists: true, $ne: [] },
             'location.updatedAt': { $gte: locationFreshAfter },
           },

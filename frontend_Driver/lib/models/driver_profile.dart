@@ -8,7 +8,7 @@ class DriverProfile {
     required this.email,
     required this.licenseNumber,
     required this.vehicleNumber,
-    required this.area,
+    this.area = '',
     required this.ratePerKm,
     this.pricingMode = 'ADMIN',
     required this.isVerified,
