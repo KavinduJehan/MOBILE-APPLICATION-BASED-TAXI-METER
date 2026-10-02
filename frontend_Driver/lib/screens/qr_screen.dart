@@ -62,7 +62,7 @@ class _QrScreenState extends State<QrScreen> {
                   const SizedBox(height: 20),
                   Text(profile?.name ?? 'Driver name', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 6),
-                  Text('${profile?.vehicleNumber ?? ''}  |  ${profile?.area ?? ''}', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.white60)),
+                  Text(profile?.vehicleNumber ?? '', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.white60)),
                   const SizedBox(height: 6),
                   Text('Rs. ${profile?.ratePerKm.toStringAsFixed(2) ?? '0.00'} per km', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.white60)),
                 ],

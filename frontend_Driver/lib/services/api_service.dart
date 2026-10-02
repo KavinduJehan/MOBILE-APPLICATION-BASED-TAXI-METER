@@ -16,8 +16,8 @@ class ApiService {
     : _dio = Dio(
         BaseOptions(
           baseUrl: baseUrl ?? AppConfig.baseUrl,
-          connectTimeout: const Duration(seconds: 20),
-          receiveTimeout: const Duration(seconds: 20),
+          connectTimeout: const Duration(seconds: 60),
+          receiveTimeout: const Duration(seconds: 60),
         ),
       );
 
@@ -74,14 +74,14 @@ class ApiService {
     return _asMap(response.data);
   }
 
-  Future<AuthResult> register({
+  Future<String> register({
     required String name,
     required String phone,
     required String email,
     required String password,
     required String licenseNumber,
     required String vehicleNumber,
-    required String area,
+    String area = '',
   }) async {
     final response = await _request(
       'POST',
@@ -99,16 +99,7 @@ class ApiService {
       },
     );
     final data = _asMap(response.data);
-    final token = _readString(data, ['token', 'jwt', 'accessToken']);
-    if (token.isEmpty) {
-      throw ApiException('Registration succeeded but no token was returned.');
-    }
-    final profileMap = _readMap(data, ['driver', 'user', 'profile']);
-    return AuthResult(
-      token: token,
-      profile: profileMap == null ? null : DriverProfile.fromJson(profileMap),
-      message: _readString(data, ['message'], fallback: 'Account created.'),
-    );
+    return _readString(data, ['message'], fallback: 'Account created.');
   }
 
   Future<DriverProfile> getProfile() async {
@@ -135,7 +126,7 @@ class ApiService {
     required String email,
     required String phone,
     required String vehicleNumber,
-    required String area,
+    String area = '',
   }) async {
     final response = await _request(
       'PATCH',
@@ -151,17 +142,12 @@ class ApiService {
     return DriverProfile.fromJson(_asMap(response.data));
   }
 
-  Future<double> getAreaRate(String area, {double? lat, double? lng}) async {
-    final Map<String, dynamic> queryParams = {'area': area};
-    if (lat != null && lng != null) {
-      queryParams['lat'] = lat;
-      queryParams['lng'] = lng;
-    }
+  Future<double> getAreaRate(String area) async {
     final response = await _request(
       'GET',
       '/rates/area',
       auth: false,
-      queryParameters: queryParams,
+      queryParameters: {'area': area},
     );
     final data = _asMap(response.data);
     return _readDouble(data, ['ratePerKm', 'averageRate', 'rate', 'value']);
@@ -169,17 +155,19 @@ class ApiService {
 
   /// Fetches the real-time auto-calculated rate with surge breakdown.
   /// Returns a map containing: effectiveRate, baseRate, multiplier, breakdown.
-  Future<Map<String, dynamic>> getAutoRate(String area, {double? lat, double? lng}) async {
-    final Map<String, dynamic> queryParams = {'area': area};
+  Future<Map<String, dynamic>> getAutoRate({String? area, double? lat, double? lng}) async {
+    final query = <String, dynamic>{};
     if (lat != null && lng != null) {
-      queryParams['lat'] = lat;
-      queryParams['lng'] = lng;
+      query['lat'] = lat;
+      query['lng'] = lng;
+    } else if (area != null && area.isNotEmpty) {
+      query['area'] = area;
     }
     final response = await _request(
       'GET',
       '/rates/auto',
       auth: false,
-      queryParameters: queryParams,
+      queryParameters: query,
     );
     return _asMap(response.data);
   }

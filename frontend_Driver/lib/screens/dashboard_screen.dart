@@ -12,6 +12,7 @@ import 'earnings_screen.dart';
 import 'incoming_requests_screen.dart';
 import 'qr_screen.dart';
 import 'rate_screen.dart';
+import 'scan_trip_offer_screen.dart';
 import 'settings_screen.dart';
 import 'trip_history_screen.dart';
 
@@ -150,11 +151,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         icon: Icons.payments_rounded,
                       ),
                       StatCard(
-                        label: 'Area',
-                        value: profile?.area.isNotEmpty == true
-                            ? profile!.area
-                            : 'Unknown',
-                        icon: Icons.place_rounded,
+                        label: 'GPS Range',
+                        value: '10 km',
+                        icon: Icons.radar_rounded,
                       ),
                     ],
                   ),
@@ -185,6 +184,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onTap: () => Navigator.of(
                 context,
               ).push(MaterialPageRoute(builder: (_) => const QrScreen())),
+            ),
+            const SizedBox(height: 12),
+            ActionCard(
+              title: 'Scan Trip Offer QR',
+              subtitle: 'Scan passenger offer QR to start offline or agreed-rate ride.',
+              icon: Icons.qr_code_scanner_rounded,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const ScanTripOfferScreen(),
+                ),
+              ),
             ),
             const SizedBox(height: 12),
             ActionCard(

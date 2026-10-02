@@ -108,6 +108,58 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  // ── Firebase Phone Login ──────────────────────────────────────────────────
+  Future<bool> loginWithFirebasePhone({
+    required String idToken,
+    String? firstName,
+    String? lastName,
+    String? email,
+  }) async {
+    _setLoading(true);
+    try {
+      final res = await ApiService.customerPhoneLogin(
+        idToken: idToken,
+        firstName: firstName,
+        lastName: lastName,
+        email: email,
+      );
+      final data = res.data as Map<String, dynamic>;
+      _token = (data['token'] ?? data['accessToken']) as String;
+      final refreshToken = data['refreshToken'] as String?;
+      final customerData = data['customer'] as Map<String, dynamic>;
+      _customer = CustomerModel.fromJson(customerData);
+
+      try {
+        await ApiService.saveSession(
+          accessToken: _token!,
+          refreshToken: refreshToken,
+          customer: customerData,
+        );
+      } catch (e) {
+        if (kDebugMode) {
+          print('Session persistence failed after Firebase phone login: $e');
+        }
+      }
+
+      _error = null;
+      notifyListeners();
+      return true;
+    } on DioException catch (e) {
+      _error = _extractMessage(e) ?? 'Firebase phone login failed';
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _error = 'Phone verification failed';
+      if (kDebugMode) {
+        print('Unexpected Firebase phone login error: $e');
+      }
+      notifyListeners();
+      return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   // ── Register new customer ─────────────────────────────────────────────────
 
   Future<bool> register({

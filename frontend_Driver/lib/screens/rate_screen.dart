@@ -33,24 +33,6 @@ class _RateScreenState extends State<RateScreen> {
     super.dispose();
   }
 
-  Future<Position?> _getGpsPosition() async {
-    try {
-      if (await Geolocator.isLocationServiceEnabled()) {
-        final perm = await Geolocator.checkPermission();
-        if (perm == LocationPermission.always || perm == LocationPermission.whileInUse) {
-          return await Geolocator.getLastKnownPosition() ??
-              await Geolocator.getCurrentPosition(
-                locationSettings: const LocationSettings(
-                  accuracy: LocationAccuracy.low,
-                  timeLimit: Duration(seconds: 4),
-                ),
-              );
-        }
-      }
-    } catch (_) {}
-    return null;
-  }
-
   Future<void> _load() async {
     final auth = context.read<AuthProvider>();
     await auth.loadProfile(force: true);
@@ -58,34 +40,43 @@ class _RateScreenState extends State<RateScreen> {
     if (!mounted || profile == null) return;
 
     _rateCtrl.text = profile.ratePerKm.toStringAsFixed(2);
-    final pos = await _getGpsPosition();
 
     if (auth.rateMode == 'AUTO') {
       // Fetch the live algorithm result
-      await _refreshAutoRate(profile.area, lat: pos?.latitude, lng: pos?.longitude);
+      await _refreshAutoRate(profile.area);
     } else {
       // Fetch the area average for context
       try {
-        final avg = await auth.api.getAreaRate(profile.area, lat: pos?.latitude, lng: pos?.longitude);
+        final avg = await auth.api.getAreaRate(profile.area);
         if (!mounted) return;
         setState(() => _areaAverage = avg);
       } catch (_) {}
     }
   }
 
-  Future<void> _refreshAutoRate(String area, {double? lat, double? lng}) async {
+  Future<void> _refreshAutoRate([String? area]) async {
     if (!mounted) return;
+    final auth = context.read<AuthProvider>();
     setState(() => _autoLoading = true);
     try {
-      final pos = (lat == null || lng == null) ? await _getGpsPosition() : null;
-      if (!mounted) return;
-      final targetLat = lat ?? pos?.latitude;
-      final targetLng = lng ?? pos?.longitude;
+      double? lat;
+      double? lng;
+      try {
+        final permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
+          final pos = await Geolocator.getLastKnownPosition() ??
+              await Geolocator.getCurrentPosition(
+                locationSettings: const LocationSettings(timeLimit: Duration(seconds: 4)),
+              );
+          lat = pos.latitude;
+          lng = pos.longitude;
+        }
+      } catch (_) {}
 
-      final result = await context.read<AuthProvider>().api.getAutoRate(
-        area,
-        lat: targetLat,
-        lng: targetLng,
+      final result = await auth.api.getAutoRate(
+        lat: lat,
+        lng: lng,
+        area: area ?? auth.profile?.area,
       );
       if (!mounted) return;
       setState(() => _autoRate = result);

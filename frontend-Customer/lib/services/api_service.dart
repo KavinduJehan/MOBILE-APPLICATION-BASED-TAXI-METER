@@ -1,9 +1,13 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-const String _configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
+const String _configuredBaseUrl = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: 'https://mobile-application-based-taxi-meter.onrender.com/api',
+);
 
 const String _tokenKey = 'auth_token';
 const String _refreshTokenKey = 'refresh_token';
@@ -19,7 +23,20 @@ String _resolveBaseUrl() {
   if (_configuredBaseUrl.isNotEmpty) {
     return _configuredBaseUrl;
   }
-  return 'https://mobile-application-based-taxi-meter.onrender.com/api';
+
+  if (kIsWeb) {
+    return 'http://localhost:5000/api';
+  }
+
+  switch (defaultTargetPlatform) {
+    case TargetPlatform.android:
+    case TargetPlatform.iOS:
+    case TargetPlatform.macOS:
+    case TargetPlatform.windows:
+    case TargetPlatform.linux:
+    case TargetPlatform.fuchsia:
+      return 'https://mobile-application-based-taxi-meter.onrender.com/api';
+  }
 }
 
 class ApiService {
@@ -33,9 +50,9 @@ class ApiService {
     final dio = Dio(
       BaseOptions(
         baseUrl: _resolveBaseUrl(),
-        connectTimeout: const Duration(seconds: 30),
-        receiveTimeout: const Duration(seconds: 30),
-        sendTimeout: const Duration(seconds: 30),
+        connectTimeout: const Duration(seconds: 60),
+        receiveTimeout: const Duration(seconds: 60),
+        sendTimeout: const Duration(seconds: 60),
         headers: {'Content-Type': 'application/json'},
       ),
     );
@@ -216,6 +233,19 @@ class ApiService {
   static Future<Response> customerVerifyOtp(String phone, String otp) =>
       _dio.post('/customers/verify-otp', data: {'phone': phone, 'otp': otp});
 
+  static Future<Response> customerPhoneLogin({
+    required String idToken,
+    String? firstName,
+    String? lastName,
+    String? email,
+  }) =>
+      _dio.post('/customers/phone-login', data: {
+        'idToken': idToken,
+        if (firstName != null && firstName.isNotEmpty) 'firstName': firstName,
+        if (lastName != null && lastName.isNotEmpty) 'lastName': lastName,
+        if (email != null && email.isNotEmpty) 'email': email,
+      });
+
   static Future<Response> updateCustomerProfile(Map<String, dynamic> body) =>
       _dio.patch('/customers/profile', data: body);
 
@@ -297,14 +327,8 @@ class ApiService {
   static Future<Response> getDriverByQR(String qrToken) =>
       _dio.get('/drivers/qr/$qrToken');
 
-  static Future<Response> getAreaRates(String area, {double? lat, double? lng}) {
-    final Map<String, dynamic> queryParams = {'area': area};
-    if (lat != null && lng != null) {
-      queryParams['lat'] = lat;
-      queryParams['lng'] = lng;
-    }
-    return _dio.get('/rates/area', queryParameters: queryParams);
-  }
+  static Future<Response> getAreaRates(String area) =>
+      _dio.get('/rates/area', queryParameters: {'area': area});
 
   static Future<Response> createRideRequest(Map<String, dynamic> body) =>
       _dio.post('/ride-requests', data: body);
