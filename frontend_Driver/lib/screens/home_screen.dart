@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 
 import '../models/ride_request.dart';
@@ -58,6 +59,20 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
   Future<void> _showLocationExplanation() async {
     if (!mounted) return;
+    final auth = context.read<AuthProvider>();
+
+    // Already granted: start updates silently instead of asking again every
+    // time the home screen is opened (app start, login, after each trip).
+    final permission = await Geolocator.checkPermission();
+    if (!mounted) return;
+    if (permission == LocationPermission.always ||
+        permission == LocationPermission.whileInUse) {
+      await auth.startLocationUpdates();
+      return;
+    }
+    // Permanently denied: Android won't show its prompt again, so don't nag.
+    if (permission == LocationPermission.deniedForever) return;
+
     final allow = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -79,7 +94,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     );
     if (allow != true || !mounted) return;
 
-    final auth = context.read<AuthProvider>();
     await auth.startLocationUpdates();
     if (mounted && auth.locationError != null) {
       ScaffoldMessenger.of(
