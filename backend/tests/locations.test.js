@@ -8,6 +8,12 @@ const customerToken = () => jwt.sign(
   { expiresIn: '1h' },
 );
 
+const driverToken = () => jwt.sign(
+  { id: '000000000000000000000002', role: 'driver', name: 'Test Driver' },
+  process.env.JWT_SECRET,
+  { expiresIn: '1h' },
+);
+
 describe('Google Places proxy', () => {
   const originalApiKey = process.env.GOOGLE_MAPS_API_KEY;
   const originalFetch = global.fetch;
@@ -238,6 +244,37 @@ describe('Google Places proxy', () => {
       travelMode: 'DRIVE',
       routingPreference: 'TRAFFIC_AWARE',
     });
+  });
+
+  it('lets drivers fetch a road route to the pickup', async () => {
+    process.env.GOOGLE_MAPS_API_KEY = 'test-key';
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        routes: [
+          {
+            distanceMeters: 2300,
+            duration: '420s',
+            polyline: { encodedPolyline: 'driver-polyline' },
+          },
+        ],
+      }),
+    });
+
+    const res = await request(app)
+      .post('/api/locations/route')
+      .set('Authorization', 'Bearer ' + driverToken())
+      .send({
+        pickupLat: 6.9271,
+        pickupLng: 79.8612,
+        destinationLat: 6.9147,
+        destinationLng: 79.8737,
+      });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.encodedPolyline).toBe('driver-polyline');
+    expect(JSON.parse(global.fetch.mock.calls[0][1].body).polylineQuality)
+      .toBe('HIGH_QUALITY');
   });
 
   it('rejects invalid route coordinates before calling Google', async () => {

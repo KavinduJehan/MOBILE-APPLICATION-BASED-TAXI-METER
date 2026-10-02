@@ -268,8 +268,7 @@ class ApiService {
     final tripMap = _readMap(data, ['trip']) ?? data;
     return TripCompletionResult(
       trip: TripRecord.fromJson(tripMap),
-      receiptNumber: _readString(data, [
-        'receipt',
+      receiptNumber: _readString(_readMap(data, ['receipt']) ?? data, [
         'receiptNumber',
         'receiptId',
       ], fallback: ''),
