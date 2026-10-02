@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
@@ -53,11 +54,30 @@ class _RateScreenState extends State<RateScreen> {
     }
   }
 
-  Future<void> _refreshAutoRate(String area) async {
+  Future<void> _refreshAutoRate([String? area]) async {
     if (!mounted) return;
+    final auth = context.read<AuthProvider>();
     setState(() => _autoLoading = true);
     try {
-      final result = await context.read<AuthProvider>().api.getAutoRate(area);
+      double? lat;
+      double? lng;
+      try {
+        final permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
+          final pos = await Geolocator.getLastKnownPosition() ??
+              await Geolocator.getCurrentPosition(
+                locationSettings: const LocationSettings(timeLimit: Duration(seconds: 4)),
+              );
+          lat = pos.latitude;
+          lng = pos.longitude;
+        }
+      } catch (_) {}
+
+      final result = await auth.api.getAutoRate(
+        lat: lat,
+        lng: lng,
+        area: area ?? auth.profile?.area,
+      );
       if (!mounted) return;
       setState(() => _autoRate = result);
     } catch (_) {

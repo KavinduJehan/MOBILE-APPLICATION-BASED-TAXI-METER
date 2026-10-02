@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
@@ -17,7 +17,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late final TextEditingController _emailCtrl;
   late final TextEditingController _phoneCtrl;
   late final TextEditingController _vehicleCtrl;
-  late final TextEditingController _areaCtrl;
   bool _dirty = false;
 
   @override
@@ -28,15 +27,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _emailCtrl   = TextEditingController(text: p?.email ?? '');
     _phoneCtrl   = TextEditingController(text: p?.phone ?? '');
     _vehicleCtrl = TextEditingController(text: p?.vehicleNumber ?? '');
-    _areaCtrl    = TextEditingController(text: p?.area ?? '');
-    for (final c in [_nameCtrl, _emailCtrl, _phoneCtrl, _vehicleCtrl, _areaCtrl]) {
+    for (final c in [_nameCtrl, _emailCtrl, _phoneCtrl, _vehicleCtrl]) {
       c.addListener(() => setState(() => _dirty = true));
     }
   }
 
   @override
   void dispose() {
-    for (final c in [_nameCtrl, _emailCtrl, _phoneCtrl, _vehicleCtrl, _areaCtrl]) {
+    for (final c in [_nameCtrl, _emailCtrl, _phoneCtrl, _vehicleCtrl]) {
       c.dispose();
     }
     super.dispose();
@@ -51,7 +49,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         email:         _emailCtrl.text.trim(),
         phone:         _phoneCtrl.text.trim(),
         vehicleNumber: _vehicleCtrl.text.trim(),
-        area:          _areaCtrl.text.trim(),
       );
       // Refresh provider so the rest of the app sees the new values
       await auth.loadProfile(force: true);
@@ -199,13 +196,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     label: 'Vehicle number',
                     icon: Icons.directions_car_rounded,
                     validator: (v) => (v?.trim().isEmpty == true) ? 'Vehicle number is required' : null,
-                  ),
-                  const SizedBox(height: 14),
-                  _Field(
-                    controller: _areaCtrl,
-                    label: 'Operating area',
-                    icon: Icons.place_rounded,
-                    validator: (v) => (v?.trim().isEmpty == true) ? 'Area is required' : null,
                   ),
                 ],
               ),

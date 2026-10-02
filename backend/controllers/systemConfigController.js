@@ -1,4 +1,5 @@
 const SystemConfig = require('../models/SystemConfig');
+const Driver = require('../models/Driver');
 
 const getConfig = async (req, res) => {
   try {
@@ -88,6 +89,10 @@ const updateConfig = async (req, res) => {
     } else {
       Object.assign(config, update);
       await config.save();
+    }
+
+    if (rateMode !== undefined) {
+      await Driver.updateMany({}, { $set: { pricingMode: rateMode } });
     }
 
     res.json(config);

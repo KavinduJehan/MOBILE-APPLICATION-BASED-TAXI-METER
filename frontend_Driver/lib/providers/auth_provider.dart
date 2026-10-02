@@ -122,7 +122,7 @@ class AuthProvider extends ChangeNotifier {
     required String password,
     required String licenseNumber,
     required String vehicleNumber,
-    required String area,
+    String area = '',
   }) async {
     _setBusy(true);
     try {

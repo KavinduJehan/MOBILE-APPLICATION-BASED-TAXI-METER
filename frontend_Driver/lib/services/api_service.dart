@@ -81,7 +81,7 @@ class ApiService {
     required String password,
     required String licenseNumber,
     required String vehicleNumber,
-    required String area,
+    String area = '',
   }) async {
     final response = await _request(
       'POST',
@@ -126,7 +126,7 @@ class ApiService {
     required String email,
     required String phone,
     required String vehicleNumber,
-    required String area,
+    String area = '',
   }) async {
     final response = await _request(
       'PATCH',
@@ -155,12 +155,19 @@ class ApiService {
 
   /// Fetches the real-time auto-calculated rate with surge breakdown.
   /// Returns a map containing: effectiveRate, baseRate, multiplier, breakdown.
-  Future<Map<String, dynamic>> getAutoRate(String area) async {
+  Future<Map<String, dynamic>> getAutoRate({String? area, double? lat, double? lng}) async {
+    final query = <String, dynamic>{};
+    if (lat != null && lng != null) {
+      query['lat'] = lat;
+      query['lng'] = lng;
+    } else if (area != null && area.isNotEmpty) {
+      query['area'] = area;
+    }
     final response = await _request(
       'GET',
       '/rates/auto',
       auth: false,
-      queryParameters: {'area': area},
+      queryParameters: query,
     );
     return _asMap(response.data);
   }

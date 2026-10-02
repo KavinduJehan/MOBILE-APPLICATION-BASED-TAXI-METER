@@ -33,7 +33,6 @@ class _NearbyDriversScreenState extends State<NearbyDriversScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<NearbyDriversProvider>().load(
-        area: widget.area ?? '',
         pickupLat: widget.pickupLat,
         pickupLng: widget.pickupLng,
       );
