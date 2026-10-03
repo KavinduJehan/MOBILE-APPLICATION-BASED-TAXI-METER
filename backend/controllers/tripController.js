@@ -80,9 +80,9 @@ const createTrip = async (req, res) => {
       return res.status(403).json({ message: 'Driver is not verified' });
     }
 
-    // Check global SystemConfig rateMode first, falling back to driver's setting
+    // Check driver's setting first, falling back to global SystemConfig rateMode
     const config = await SystemConfig.findOne().lean();
-    const effectivePricingMode = config?.rateMode || driver.pricingMode || 'ADMIN';
+    const effectivePricingMode = driver.pricingMode || config?.rateMode || 'ADMIN';
 
     let surgeBreakdown = null;
     if (effectivePricingMode === 'AUTO') {

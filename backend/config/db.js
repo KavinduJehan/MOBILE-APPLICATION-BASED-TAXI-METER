@@ -12,10 +12,12 @@ const connectDB = async () => {
     console.error(`DB connection error: ${error.message}`);
     if (/bad auth|authentication failed/i.test(error.message)) {
       console.error('[Atlas Tip] Authentication failed. Check your database username & password in MONGO_URI.');
-    } else if (/whitelist|timed out|enotfound/i.test(error.message)) {
-      console.error('[Atlas Tip] Network timeout. Ensure your current IP (or 0.0.0.0/0) is in MongoDB Atlas Network Access whitelist.');
+    } else if (/querysrv|enotfound|econnrefused|getaddrinfo/i.test(error.message)) {
+      console.error('[MongoDB Tip] Could not resolve the Atlas SRV record. Check DNS/network access, verify the cluster hostname in MONGO_URI, and try another DNS resolver or network.');
+    } else if (/whitelist|timed out|server selection/i.test(error.message)) {
+      console.error('[MongoDB Tip] Connection timed out. Check MongoDB Atlas Network Access and allow this machine IP.');
     }
-    process.exit(1);
+    throw error;
   }
 };
 

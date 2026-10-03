@@ -27,8 +27,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    final auth = context.read<AuthProvider>();
-    Future.microtask(auth.loadProfile);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<AuthProvider>().loadProfile(force: true);
+      }
+    });
   }
 
   @override
@@ -36,7 +39,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final auth = context.watch<AuthProvider>();
     final profile = auth.profile;
     return AppShellScaffold(
-      child: SingleChildScrollView(
+      child: RefreshIndicator(
+        onRefresh: () => auth.loadProfile(force: true),
+        child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -140,15 +145,67 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                   const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: auth.rateMode == 'AUTO'
+                          ? Colors.amber.withValues(alpha: 0.15)
+                          : (auth.rateMode == 'ADMIN'
+                              ? Colors.blueAccent.withValues(alpha: 0.15)
+                              : Colors.green.withValues(alpha: 0.15)),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: auth.rateMode == 'AUTO'
+                            ? Colors.amber
+                            : (auth.rateMode == 'ADMIN' ? Colors.blueAccent : Colors.green),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          auth.rateMode == 'AUTO'
+                              ? Icons.bolt_rounded
+                              : (auth.rateMode == 'ADMIN' ? Icons.lock_rounded : Icons.person_rounded),
+                          size: 16,
+                          color: auth.rateMode == 'AUTO'
+                              ? Colors.amber
+                              : (auth.rateMode == 'ADMIN' ? Colors.blueAccent : Colors.green),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          auth.rateMode == 'AUTO'
+                              ? 'Active Mode: Auto Surge ⚡'
+                              : (auth.rateMode == 'ADMIN'
+                                  ? 'Active Mode: Admin Controlled 🔒'
+                                  : 'Active Mode: Driver Set 🧑‍✈️'),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: auth.rateMode == 'AUTO'
+                                ? Colors.amber
+                                : (auth.rateMode == 'ADMIN' ? Colors.blueAccent : Colors.green),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   Wrap(
                     spacing: 12,
                     runSpacing: 12,
                     children: [
                       StatCard(
-                        label: 'Rate per km',
-                        value:
-                            'Rs. ${profile?.ratePerKm.toStringAsFixed(2) ?? '0.00'}',
-                        icon: Icons.payments_rounded,
+                        label: auth.rateMode == 'AUTO'
+                            ? 'Pricing Mode'
+                            : (auth.rateMode == 'ADMIN' ? 'Admin Rate' : 'Rate per km'),
+                        value: auth.rateMode == 'AUTO'
+                            ? 'Auto Surge'
+                            : 'Rs. ${profile?.ratePerKm.toStringAsFixed(2) ?? '0.00'}',
+                        icon: auth.rateMode == 'AUTO'
+                            ? Icons.bolt_rounded
+                            : (auth.rateMode == 'ADMIN' ? Icons.lock_clock_rounded : Icons.payments_rounded),
                       ),
                       StatCard(
                         label: 'GPS Range',
@@ -238,6 +295,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ],
         ),
+      ),
       ),
     );
   }

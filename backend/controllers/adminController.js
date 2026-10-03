@@ -16,6 +16,21 @@ const setDriverPricing = async (req, res) => {
     if (ratePerKm !== undefined) update.ratePerKm = Number(ratePerKm);
     const driver = await Driver.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true }).select('-password');
     if (!driver) return res.status(404).json({ message: 'Driver not found' });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(driver._id.toString()).emit('pricing_mode_changed', {
+        rateMode: driver.pricingMode,
+        ratePerKm: driver.ratePerKm,
+      });
+      io.to(driver._id.toString()).emit('driver_profile_updated', driver);
+      io.emit('driver_pricing_updated', {
+        driverId: driver._id,
+        pricingMode: driver.pricingMode,
+        ratePerKm: driver.ratePerKm,
+      });
+    }
+
     res.json(driver);
   } catch (err) {
     res.status(500).json({ message: err.message });

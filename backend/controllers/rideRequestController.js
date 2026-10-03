@@ -53,7 +53,7 @@ const createRideRequest = async (req, res) => {
     if (!driver.isVerified) return res.status(403).json({ message: 'Driver is not verified' });
 
     const config = await SystemConfig.findOne().lean();
-    const effectivePricingMode = config?.rateMode || driver.pricingMode || 'ADMIN';
+    const effectivePricingMode = driver.pricingMode || config?.rateMode || 'ADMIN';
 
     // suggestedRatePerKm is a negotiation (customer proposes lower rate).
     // If it's >= driver's rate or <= 0, ignore it — no negotiation needed.

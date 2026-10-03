@@ -148,7 +148,7 @@ export default function Drivers() {
 
         {!loading && visibleDrivers.length > 0 && (
           <div style={styles.tableWrap}>
-            <table style={styles.table}>
+            <table style={styles.table} className="driver-table">
               <thead>
                 <tr style={styles.thead}>
                   <th style={styles.th}>Name</th>
@@ -252,7 +252,7 @@ const styles = {
     cursor: 'pointer', marginLeft: '1rem', fontSize: '0.95rem', transition: 'opacity 150ms ease',
   },
   navBtnActive: { background: 'rgba(255,255,255,0.06)', borderRadius: '8px', padding: '0.45rem 0.7rem', fontWeight: 600, boxShadow: 'inset 0 -2px 0 rgba(173,185,230,0.55)' },
-  content: { padding: '2rem', maxWidth: '1180px', margin: '0 auto' },
+  content: { padding: '2rem', width: '100%', maxWidth: 'none', margin: '0 auto', boxSizing: 'border-box' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem', flexWrap: 'wrap' },
   headerActions: { display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' },
   pageTitle: { margin: 0, fontSize: '1.4rem', color: '#1a1a2e' },
@@ -268,7 +268,7 @@ const styles = {
   skeletonWrapper: { background: '#fff', borderRadius: '16px', border: '1px solid rgba(206, 216, 240, 0.9)', padding: '1rem', boxShadow: '0 16px 40px rgba(20, 35, 90, 0.06)', display: 'grid', gap: '0.85rem', animation: 'fadeUp 0.35s ease-out' },
   skeletonRow: { display: 'grid', gridTemplateColumns: 'repeat(9, minmax(0, 1fr))', gap: '0.75rem', alignItems: 'center' },
   skeletonCell: { height: '1rem', borderRadius: '999px', background: 'linear-gradient(90deg, #eef2ff 0%, #f6f8ff 50%, #eef2ff 100%)', animation: 'shimmer 1.6s ease-in-out infinite' },
-  table: { width: '100%', borderCollapse: 'collapse', minWidth: '980px' },
+  table: { width: '100%', borderCollapse: 'collapse', minWidth: '1100px' },
   thead: { background: '#f4f7ff' },
   th: { padding: '0.85rem 1rem', textAlign: 'left', fontSize: '0.85rem', color: '#5d6b8b', borderBottom: '1px solid #eef1f8' },
   tr: { borderBottom: '1px solid #f2f4f8', background: '#fff' },

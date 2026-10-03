@@ -5,6 +5,7 @@ import '../config/app_config.dart';
 import '../models/ride_request.dart';
 
 typedef OnNewRequestCallback = void Function(RideRequest request);
+typedef OnConfigUpdatedCallback = void Function(String rateMode, double? ratePerKm);
 
 class DriverSocketService {
   DriverSocketService._();
@@ -13,12 +14,29 @@ class DriverSocketService {
   io.Socket? _socket;
   String? _driverId;
   OnNewRequestCallback? _onNewRequest;
+  final List<OnConfigUpdatedCallback> _configListeners = [];
 
   bool get isConnected => _socket?.connected ?? false;
 
-  void init({required String driverId, required OnNewRequestCallback onNewRequest}) {
+  void addConfigListener(OnConfigUpdatedCallback listener) {
+    if (!_configListeners.contains(listener)) {
+      _configListeners.add(listener);
+    }
+  }
+
+  void removeConfigListener(OnConfigUpdatedCallback listener) {
+    _configListeners.remove(listener);
+  }
+
+  void setOnNewRequest(OnNewRequestCallback callback) {
+    _onNewRequest = callback;
+  }
+
+  void init({required String driverId, OnNewRequestCallback? onNewRequest}) {
     _driverId = driverId;
-    _onNewRequest = onNewRequest;
+    if (onNewRequest != null) {
+      _onNewRequest = onNewRequest;
+    }
 
     if (_socket != null && _socket!.connected) {
       _socket!.emit('join', driverId);
@@ -54,6 +72,57 @@ class DriverSocketService {
           _onNewRequest!(request);
         } catch (e) {
           debugPrint('[Socket] Error parsing new_request: $e');
+        }
+      }
+    });
+
+    _socket!.on('pricing_mode_changed', (data) {
+      debugPrint('[Socket] Received pricing_mode_changed: $data');
+      if (data is Map) {
+        final mode = data['rateMode']?.toString() ?? 'ADMIN';
+        final rate = data['ratePerKm'] != null ? (data['ratePerKm'] as num).toDouble() : null;
+        for (final listener in List.of(_configListeners)) {
+          listener(mode, rate);
+        }
+      }
+    });
+
+    _socket!.on('config_updated', (data) {
+      debugPrint('[Socket] Received config_updated: $data');
+      if (data is Map) {
+        final mode = data['rateMode']?.toString() ?? 'ADMIN';
+        final rate = data['autoBaseRate'] != null ? (data['autoBaseRate'] as num).toDouble() : null;
+        for (final listener in List.of(_configListeners)) {
+          listener(mode, rate);
+        }
+      }
+    });
+
+    _socket!.on('driver_profile_updated', (data) {
+      debugPrint('[Socket] Received driver_profile_updated: $data');
+      if (data is Map) {
+        final mode = data['pricingMode']?.toString();
+        final rate = data['ratePerKm'] != null ? (data['ratePerKm'] as num).toDouble() : null;
+        if (mode != null) {
+          for (final listener in List.of(_configListeners)) {
+            listener(mode, rate);
+          }
+        }
+      }
+    });
+
+    _socket!.on('driver_pricing_updated', (data) {
+      debugPrint('[Socket] Received driver_pricing_updated: $data');
+      if (data is Map) {
+        final mode = data['pricingMode']?.toString();
+        final targetDriverId = data['driverId']?.toString();
+        if (targetDriverId == null || targetDriverId == _driverId) {
+          final rate = data['ratePerKm'] != null ? (data['ratePerKm'] as num).toDouble() : null;
+          if (mode != null) {
+            for (final listener in List.of(_configListeners)) {
+              listener(mode, rate);
+            }
+          }
         }
       }
     });
