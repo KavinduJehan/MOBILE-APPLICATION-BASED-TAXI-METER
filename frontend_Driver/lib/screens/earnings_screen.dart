@@ -84,6 +84,7 @@ class _EarningsScreenState extends State<EarningsScreen> {
 
     return AppShellScaffold(
       appBar: AppBar(
+        leading: tabBackButton(context),
         title: const Text('Earnings'),
         actions: [
           IconButton(

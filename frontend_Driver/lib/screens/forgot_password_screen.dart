@@ -109,10 +109,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     return AppShellScaffold(
       appBar: AppBar(
         title: const Text('Reset Password'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
       ),
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
