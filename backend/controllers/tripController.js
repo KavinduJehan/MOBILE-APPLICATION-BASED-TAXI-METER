@@ -278,13 +278,20 @@ const getIncome = async (req, res) => {
     // Group completed fares by Sri Lankan calendar date.
     const byDay = {};
     const tripsByDay = {};
+    const dateFormatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Colombo', year: 'numeric', month: '2-digit', day: '2-digit',
+    });
+    const today = dateFormatter.format(new Date());
+    const todayTrips = [];
     for (const t of trips) {
       const day = new Intl.DateTimeFormat('en-CA', {
         timeZone: 'Asia/Colombo', year: 'numeric', month: '2-digit', day: '2-digit',
       }).format(t.endTime || t.createdAt);
       byDay[day] = parseFloat(((byDay[day] || 0) + t.totalFare).toFixed(2));
       tripsByDay[day] = (tripsByDay[day] || 0) + 1;
+      if (day === today) todayTrips.push(t);
     }
+    todayTrips.sort((a, b) => (b.endTime || b.createdAt) - (a.endTime || a.createdAt));
 
     res.json({
       totalEarnings,
@@ -293,6 +300,7 @@ const getIncome = async (req, res) => {
       cancelledTrips,
       byDay,
       tripsByDay,
+      todayTrips,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });

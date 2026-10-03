@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/income_summary.dart';
+import '../models/trip_record.dart';
+import '../utils/trip_place_label.dart';
+import 'driver_receipt_screen.dart';
 import '../providers/auth_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_widgets.dart';
@@ -277,6 +280,48 @@ class _EarningsScreenState extends State<EarningsScreen> {
                           ],
                         ),
                       ),
+                      if (_days == 1) ...[
+                        const SizedBox(height: 16),
+                        _card(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const Text(
+                                "Today's trips",
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              const Text(
+                                'Destination and fare • Tap to view receipt',
+                                style: TextStyle(
+                                  color: Colors.white54,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              if (summary.todayTrips == null)
+                                const Text(
+                                  'Trip details are currently unavailable.',
+                                  style: TextStyle(color: Colors.white60),
+                                )
+                              else if (summary.todayTrips!.isEmpty)
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 20),
+                                  child: Text(
+                                    'No completed trips today yet.',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(color: Colors.white60),
+                                  ),
+                                )
+                              else
+                                ...summary.todayTrips!.map(_tripTile),
+                            ],
+                          ),
+                        ),
+                      ],
                       if (_days != 1) ...[
                         const SizedBox(height: 16),
                         _card(
@@ -403,6 +448,78 @@ class _EarningsScreenState extends State<EarningsScreen> {
   }
 
   String _money(double amount) => 'Rs. ${amount.toStringAsFixed(2)}';
+
+  Widget _tripTile(TripRecord trip) {
+    final time = trip.date?.toUtc().add(const Duration(hours: 5, minutes: 30));
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: AppTheme.surfaceAlt,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => DriverReceiptScreen(trip: trip)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.location_on_outlined,
+                  color: AppTheme.accent,
+                  size: 22,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        tripPlaceLabel(trip.endAddress),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          height: 1.4,
+                        ),
+                      ),
+                      if (time != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')} • Completed',
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text(
+                    _money(trip.fare),
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(
+                      color: Color(0xFF34D399),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: Colors.white38,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   String _label(String key) {
     final date = DateTime.tryParse(key);

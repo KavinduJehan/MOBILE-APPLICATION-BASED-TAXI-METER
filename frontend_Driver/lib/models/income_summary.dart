@@ -1,4 +1,5 @@
 import '../utils/json_helpers.dart';
+import 'trip_record.dart';
 
 class IncomeByDay {
   IncomeByDay({required this.label, required this.amount, this.trips});
@@ -22,6 +23,7 @@ class IncomeSummary {
     this.completedTrips = 0,
     this.cancelledTrips = 0,
     required this.byDay,
+    this.todayTrips,
   });
 
   final double totalEarnings;
@@ -29,6 +31,7 @@ class IncomeSummary {
   final int completedTrips;
   final int cancelledTrips;
   final List<IncomeByDay> byDay;
+  final List<TripRecord>? todayTrips;
 
   factory IncomeSummary.fromJson(Map<String, dynamic> json) {
     final raw = json['byDay'];
@@ -65,6 +68,9 @@ class IncomeSummary {
         'cancelled',
       ]).round(),
       byDay: days,
+      todayTrips: json['todayTrips'] is List
+          ? readMapList(json, ['todayTrips']).map(TripRecord.fromJson).toList()
+          : null,
     );
   }
 
