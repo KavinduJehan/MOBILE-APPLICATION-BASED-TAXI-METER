@@ -9,6 +9,7 @@ import '../providers/auth_provider.dart';
 import '../services/ride_alert_service.dart';
 import '../services/socket_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_widgets.dart';
 import 'dashboard_screen.dart';
 import 'earnings_screen.dart';
 import 'incoming_requests_screen.dart';
@@ -142,7 +143,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       return;
     }
     if (!mounted) return;
-    final freshRequests = requests.where((r) => !_knownRequestIds.contains(r.id)).toList();
+    final freshRequests = requests
+        .where((r) => !_knownRequestIds.contains(r.id))
+        .toList();
     final firstCheck = !_requestSnapshotLoaded;
     _requestSnapshotLoaded = true;
     _knownRequestIds = requests.map((r) => r.id).toSet();
@@ -182,11 +185,16 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     var request = alerted;
     try {
       // The alert may be stale: only open requests still waiting for a driver.
-      final pending = await context.read<AuthProvider>().api.getIncomingRequests();
+      final pending = await context
+          .read<AuthProvider>()
+          .api
+          .getIncomingRequests();
       final match = pending.where((r) => r.id == alerted.id);
       if (match.isEmpty) {
         messenger.showSnackBar(
-          const SnackBar(content: Text('This ride request is no longer available.')),
+          const SnackBar(
+            content: Text('This ride request is no longer available.'),
+          ),
         );
         return;
       }
@@ -258,7 +266,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               decoration: BoxDecoration(
                 color: AppTheme.primary.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppTheme.accent.withValues(alpha: 0.35)),
+                border: Border.all(
+                  color: AppTheme.accent.withValues(alpha: 0.35),
+                ),
               ),
               child: Row(
                 children: [
@@ -266,7 +276,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                     child: _RequestStat(
                       icon: Icons.straighten_rounded,
                       label: 'Distance',
-                      value: '${request.estimatedDistanceKm.toStringAsFixed(1)} km',
+                      value:
+                          '${request.estimatedDistanceKm.toStringAsFixed(1)} km',
                     ),
                   ),
                   Container(width: 1, height: 34, color: Colors.white24),
@@ -275,7 +286,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                     child: _RequestStat(
                       icon: Icons.payments_outlined,
                       label: 'Rate',
-                      value: 'Rs. ${request.driverRatePerKm.toStringAsFixed(2)} / km',
+                      value:
+                          'Rs. ${request.driverRatePerKm.toStringAsFixed(2)} / km',
                     ),
                   ),
                 ],
@@ -305,21 +317,44 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     );
   }
 
+  void _goHomeTab() {
+    if (_index != 0) setState(() => _index = 0);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(index: _index, children: [
-        ..._pages.take(3),
-        EarningsScreen(isActive: _index == 3),
-        _pages[4],
-      ]),
-      bottomNavigationBar: _DriverNavBar(
-        selectedIndex: _index,
-        pendingRequests: _pendingRequestCount,
-        onSelected: (i) {
-          if (i == 1) setState(() => _pendingRequestCount = 0);
-          setState(() => _index = i);
-        },
+    // On any tab other than Home, back (arrow or Android system back) returns
+    // to the Home tab; on Home it leaves the app as usual.
+    return PopScope(
+      canPop: _index == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _goHomeTab();
+      },
+      child: Scaffold(
+        body: HomeTabScope(
+          goHome: _goHomeTab,
+          child: IndexedStack(
+            index: _index,
+            children: [
+              DashboardScreen(
+                isActive: _index == 0,
+                onViewEarnings: () => setState(() => _index = 3),
+              ),
+              _pages[1],
+              _pages[2],
+              EarningsScreen(isActive: _index == 3),
+              _pages[4],
+            ],
+          ),
+        ),
+        bottomNavigationBar: _DriverNavBar(
+          selectedIndex: _index,
+          pendingRequests: _pendingRequestCount,
+          onSelected: (i) {
+            if (i == 1) setState(() => _pendingRequestCount = 0);
+            setState(() => _index = i);
+          },
+        ),
       ),
     );
   }
@@ -339,7 +374,7 @@ class _DriverNavBar extends StatelessWidget {
   final ValueChanged<int> onSelected;
 
   static const _labels = ['Home', 'Requests', 'Trips', 'Earnings', 'Settings'];
-  static const _icons  = [
+  static const _icons = [
     Icons.dashboard_rounded,
     Icons.receipt_long_rounded,
     Icons.route_rounded,
@@ -359,18 +394,29 @@ class _DriverNavBar extends StatelessWidget {
           color: const Color(0xFF1F2937),
           borderRadius: BorderRadius.circular(10),
           boxShadow: const [
-            BoxShadow(color: Color(0x80000000), blurRadius: 10, offset: Offset(0, 4)),
-            BoxShadow(color: Color(0x4D000000), blurRadius: 4,  offset: Offset(0, 2)),
+            BoxShadow(
+              color: Color(0x80000000),
+              blurRadius: 10,
+              offset: Offset(0, 4),
+            ),
+            BoxShadow(
+              color: Color(0x4D000000),
+              blurRadius: 4,
+              offset: Offset(0, 2),
+            ),
           ],
         ),
         child: Row(
-          children: List.generate(_labels.length, (i) => _NavItem(
-            icon: _icons[i],
-            label: _labels[i],
-            selected: selectedIndex == i,
-            badge: i == 1 ? pendingRequests : 0,
-            onTap: () => onSelected(i),
-          )),
+          children: List.generate(
+            _labels.length,
+            (i) => _NavItem(
+              icon: _icons[i],
+              label: _labels[i],
+              selected: selectedIndex == i,
+              badge: i == 1 ? pendingRequests : 0,
+              onTap: () => onSelected(i),
+            ),
+          ),
         ),
       ),
     );
@@ -396,14 +442,18 @@ class _NavItem extends StatefulWidget {
   State<_NavItem> createState() => _NavItemState();
 }
 
-class _NavItemState extends State<_NavItem> with SingleTickerProviderStateMixin {
+class _NavItemState extends State<_NavItem>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _pulse;
   bool _pressed = false;
 
   @override
   void initState() {
     super.initState();
-    _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 700));
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
     _syncPulse();
   }
 
@@ -434,7 +484,10 @@ class _NavItemState extends State<_NavItem> with SingleTickerProviderStateMixin 
     return Expanded(
       child: GestureDetector(
         onTapDown: (_) => setState(() => _pressed = true),
-        onTapUp: (_) { setState(() => _pressed = false); widget.onTap(); },
+        onTapUp: (_) {
+          setState(() => _pressed = false);
+          widget.onTap();
+        },
         onTapCancel: () => setState(() => _pressed = false),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -452,33 +505,58 @@ class _NavItemState extends State<_NavItem> with SingleTickerProviderStateMixin 
                     height: 36,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: active ? const Color(0xFF4B5563) : const Color(0xFF374151),
-                      border: Border.all(color: active ? AppTheme.primary : Colors.transparent, width: 2),
+                      color: active
+                          ? const Color(0xFF4B5563)
+                          : const Color(0xFF374151),
+                      border: Border.all(
+                        color: active ? AppTheme.primary : Colors.transparent,
+                        width: 2,
+                      ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: active ? 0.24 : 0.14),
+                          color: Colors.black.withValues(
+                            alpha: active ? 0.24 : 0.14,
+                          ),
                           blurRadius: active ? 6 : 3,
                           offset: const Offset(0, 2),
                         ),
                       ],
                     ),
-                    child: Icon(widget.icon, size: 20, color: active ? AppTheme.accent : Colors.white38),
+                    child: Icon(
+                      widget.icon,
+                      size: 20,
+                      color: active ? AppTheme.accent : Colors.white38,
+                    ),
                   ),
                   if (widget.badge > 0)
                     Positioned(
-                      top: -4, right: -6,
+                      top: -4,
+                      right: -6,
                       child: FadeTransition(
-                        opacity: Tween<double>(begin: 0.4, end: 1.0).animate(_pulse),
+                        opacity: Tween<double>(
+                          begin: 0.4,
+                          end: 1.0,
+                        ).animate(_pulse),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 1,
+                          ),
                           decoration: BoxDecoration(
                             color: const Color(0xFFEF4444),
                             borderRadius: BorderRadius.circular(999),
-                            border: Border.all(color: const Color(0xFF040404), width: 1.5),
+                            border: Border.all(
+                              color: const Color(0xFF040404),
+                              width: 1.5,
+                            ),
                           ),
                           child: Text(
                             widget.badge > 9 ? '9+' : widget.badge.toString(),
-                            style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
                         ),
                       ),

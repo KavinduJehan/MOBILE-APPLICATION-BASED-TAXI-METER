@@ -6,6 +6,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 
 import '../models/ride_request.dart';
+import '../models/income_summary.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/app_widgets.dart';
 import 'earnings_screen.dart';
@@ -17,19 +18,48 @@ import 'settings_screen.dart';
 import 'trip_history_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  const DashboardScreen({super.key, this.isActive = true, this.onViewEarnings});
+  final bool isActive;
+  final VoidCallback? onViewEarnings;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  IncomeSummary? _income;
+  bool _incomeLoading = false;
+  bool _incomeFailed = false;
+
+  Future<void> _loadIncome() async {
+    if (_incomeLoading || !mounted) return;
+    setState(() {
+      _incomeLoading = true;
+      _incomeFailed = false;
+    });
+    try {
+      final income = await context.read<AuthProvider>().api.getIncomeSummary();
+      if (mounted) setState(() => _income = income);
+    } catch (_) {
+      if (mounted) setState(() => _incomeFailed = true);
+    } finally {
+      if (mounted) setState(() => _incomeLoading = false);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant DashboardScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) _loadIncome();
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         context.read<AuthProvider>().loadProfile(force: true);
+        if (widget.isActive) _loadIncome();
       }
     });
   }
@@ -40,262 +70,426 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final profile = auth.profile;
     return AppShellScaffold(
       child: RefreshIndicator(
-        onRefresh: () => auth.loadProfile(force: true),
+        onRefresh: () async {
+          await Future.wait([auth.loadProfile(force: true), _loadIncome()]);
+        },
         child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Hello, ${profile?.name.split(' ').first ?? 'Driver'}!',
-                        style: Theme.of(context).textTheme.headlineSmall
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Manage your rides from one secure dashboard.',
-                        style: Theme.of(
-                          context,
-                        ).textTheme.bodyMedium?.copyWith(color: Colors.white60),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const DriverLogo(size: 58),
-              ],
-            ),
-            const SizedBox(height: 20),
-            if (profile != null) ...[
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF6C7CFF).withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: const Color(0xFF6C7CFF).withValues(alpha: 0.3)),
-                  ),
-                  child: Text(
-                    'Pricing mode: ${auth.rateMode == 'DRIVER' ? 'Driver-Set' : auth.rateMode == 'AUTO' ? 'Auto Surge' : 'Admin-Controlled'}',
-                    style: const TextStyle(color: Color(0xFFAEB8FF), fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
-            ],
-            if (profile != null && !profile.isVerified)
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF3E2F00),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: const Color(0xFFFFC107).withValues(alpha: 0.25),
-                  ),
-                ),
-                child: const Text(
-                  'Your account is pending admin approval. You cannot receive ride requests yet.',
-                  style: TextStyle(
-                    color: Color(0xFFFFE08A),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            if (profile != null && !profile.isVerified)
-              const SizedBox(height: 18),
-            const _DriverHomeMap(),
-            const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    const Color(0xFF0E1422),
-                    const Color(0xFF14253D).withValues(alpha: 0.95),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
                 children: [
-                  Text(
-                    'Live status',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.labelLarge?.copyWith(color: Colors.white70),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    profile?.isVerified == true
-                        ? 'Verified and ready for requests'
-                        : 'Pending verification',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: auth.rateMode == 'AUTO'
-                          ? Colors.amber.withValues(alpha: 0.15)
-                          : (auth.rateMode == 'ADMIN'
-                              ? Colors.blueAccent.withValues(alpha: 0.15)
-                              : Colors.green.withValues(alpha: 0.15)),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: auth.rateMode == 'AUTO'
-                            ? Colors.amber
-                            : (auth.rateMode == 'ADMIN' ? Colors.blueAccent : Colors.green),
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
-                          auth.rateMode == 'AUTO'
-                              ? Icons.bolt_rounded
-                              : (auth.rateMode == 'ADMIN' ? Icons.lock_rounded : Icons.person_rounded),
-                          size: 16,
-                          color: auth.rateMode == 'AUTO'
-                              ? Colors.amber
-                              : (auth.rateMode == 'ADMIN' ? Colors.blueAccent : Colors.green),
-                        ),
-                        const SizedBox(width: 6),
                         Text(
-                          auth.rateMode == 'AUTO'
-                              ? 'Active Mode: Auto Surge ⚡'
-                              : (auth.rateMode == 'ADMIN'
-                                  ? 'Active Mode: Admin Controlled 🔒'
-                                  : 'Active Mode: Driver Set 🧑‍✈️'),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: auth.rateMode == 'AUTO'
-                                ? Colors.amber
-                                : (auth.rateMode == 'ADMIN' ? Colors.blueAccent : Colors.green),
-                          ),
+                          'Hello, ${profile?.name.split(' ').first ?? 'Driver'}!',
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Manage your rides from one secure dashboard.',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: Colors.white60),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      StatCard(
-                        label: auth.rateMode == 'AUTO'
-                            ? 'Pricing Mode'
-                            : (auth.rateMode == 'ADMIN' ? 'Admin Rate' : 'Rate per km'),
-                        value: auth.rateMode == 'AUTO'
-                            ? 'Auto Surge'
-                            : 'Rs. ${profile?.ratePerKm.toStringAsFixed(2) ?? '0.00'}',
-                        icon: auth.rateMode == 'AUTO'
-                            ? Icons.bolt_rounded
-                            : (auth.rateMode == 'ADMIN' ? Icons.lock_clock_rounded : Icons.payments_rounded),
+                  const SizedBox(width: 12),
+                  const DriverLogo(size: 58),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _todayEarningsCard(),
+              const SizedBox(height: 20),
+              if (profile != null) ...[
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6C7CFF).withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: const Color(0xFF6C7CFF).withValues(alpha: 0.3),
                       ),
-                      StatCard(
-                        label: 'GPS Range',
-                        value: '10 km',
-                        icon: Icons.radar_rounded,
+                    ),
+                    child: Text(
+                      'Pricing mode: ${auth.rateMode == 'DRIVER'
+                          ? 'Driver-Set'
+                          : auth.rateMode == 'AUTO'
+                          ? 'Auto Surge'
+                          : 'Admin-Controlled'}',
+                      style: const TextStyle(
+                        color: Color(0xFFAEB8FF),
+                        fontWeight: FontWeight.w700,
                       ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+              ],
+              if (profile != null && !profile.isVerified)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF3E2F00),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: const Color(0xFFFFC107).withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: const Text(
+                    'Your account is pending admin approval. You cannot receive ride requests yet.',
+                    style: TextStyle(
+                      color: Color(0xFFFFE08A),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              if (profile != null && !profile.isVerified)
+                const SizedBox(height: 18),
+              const _DriverHomeMap(),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFF0E1422),
+                      const Color(0xFF14253D).withValues(alpha: 0.95),
                     ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.05),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Live status',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.labelLarge?.copyWith(color: Colors.white70),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      profile?.isVerified == true
+                          ? 'Verified and ready for requests'
+                          : 'Pending verification',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: auth.rateMode == 'AUTO'
+                            ? Colors.amber.withValues(alpha: 0.15)
+                            : (auth.rateMode == 'ADMIN'
+                                  ? Colors.blueAccent.withValues(alpha: 0.15)
+                                  : Colors.green.withValues(alpha: 0.15)),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: auth.rateMode == 'AUTO'
+                              ? Colors.amber
+                              : (auth.rateMode == 'ADMIN'
+                                    ? Colors.blueAccent
+                                    : Colors.green),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            auth.rateMode == 'AUTO'
+                                ? Icons.bolt_rounded
+                                : (auth.rateMode == 'ADMIN'
+                                      ? Icons.lock_rounded
+                                      : Icons.person_rounded),
+                            size: 16,
+                            color: auth.rateMode == 'AUTO'
+                                ? Colors.amber
+                                : (auth.rateMode == 'ADMIN'
+                                      ? Colors.blueAccent
+                                      : Colors.green),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            auth.rateMode == 'AUTO'
+                                ? 'Active Mode: Auto Surge ⚡'
+                                : (auth.rateMode == 'ADMIN'
+                                      ? 'Active Mode: Admin Controlled 🔒'
+                                      : 'Active Mode: Driver Set 🧑‍✈️'),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: auth.rateMode == 'AUTO'
+                                  ? Colors.amber
+                                  : (auth.rateMode == 'ADMIN'
+                                        ? Colors.blueAccent
+                                        : Colors.green),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        StatCard(
+                          label: auth.rateMode == 'AUTO'
+                              ? 'Pricing Mode'
+                              : (auth.rateMode == 'ADMIN'
+                                    ? 'Admin Rate'
+                                    : 'Rate per km'),
+                          value: auth.rateMode == 'AUTO'
+                              ? 'Auto Surge'
+                              : 'Rs. ${profile?.ratePerKm.toStringAsFixed(2) ?? '0.00'}',
+                          icon: auth.rateMode == 'AUTO'
+                              ? Icons.bolt_rounded
+                              : (auth.rateMode == 'ADMIN'
+                                    ? Icons.lock_clock_rounded
+                                    : Icons.payments_rounded),
+                        ),
+                        StatCard(
+                          label: 'GPS Range',
+                          value: '10 km',
+                          icon: Icons.radar_rounded,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              const SectionTitle(
+                title: 'Quick Actions',
+                subtitle: 'Jump straight to the tasks you use every day.',
+              ),
+              const SizedBox(height: 14),
+              ActionCard(
+                title: 'Incoming Requests',
+                subtitle: 'Review pending ride requests and respond.',
+                icon: Icons.receipt_long_rounded,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const IncomingRequestsScreen(),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              ActionCard(
+                title: 'My QR Code',
+                subtitle: 'Show riders your verification QR.',
+                icon: Icons.qr_code_rounded,
+                onTap: () => Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const QrScreen())),
+              ),
+              const SizedBox(height: 12),
+              ActionCard(
+                title: 'Scan Trip Offer QR',
+                subtitle:
+                    'Scan passenger offer QR to start offline or agreed-rate ride.',
+                icon: Icons.qr_code_scanner_rounded,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ScanTripOfferScreen(),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              ActionCard(
+                title: 'Pricing',
+                subtitle: auth.rateMode == 'DRIVER'
+                    ? 'View and update your driver-set rate.'
+                    : 'View your current rate and pricing mode.',
+                icon: Icons.price_change_rounded,
+                onTap: () => Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const RateScreen())),
+              ),
+              const SizedBox(height: 12),
+              ActionCard(
+                title: 'Trip History',
+                subtitle: 'Check completed rides and receipts.',
+                icon: Icons.route_rounded,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const TripHistoryScreen()),
+                ),
+              ),
+              const SizedBox(height: 12),
+              ActionCard(
+                title: 'Earnings',
+                subtitle: 'Track daily income and completed trips.',
+                icon: Icons.bar_chart_rounded,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const EarningsScreen()),
+                ),
+              ),
+              const SizedBox(height: 12),
+              ActionCard(
+                title: 'Settings',
+                subtitle: 'Review profile and sign out.',
+                icon: Icons.settings_rounded,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                ),
+              ),
+              if (auth.busy) ...[
+                const SizedBox(height: 18),
+                const LinearProgressIndicator(minHeight: 3),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _todayEarningsCard() {
+    final now = DateTime.now().toUtc().add(
+      const Duration(hours: 5, minutes: 30),
+    );
+    final today = _income?.daysForPeriod(1, now).single;
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(24),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap:
+            widget.onViewEarnings ??
+            () async {
+              await Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const EarningsScreen()));
+              if (mounted) _loadIncome();
+            },
+        child: Container(
+          padding: const EdgeInsets.all(22),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF173967), Color(0xFF101826)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: const Color(0xFF69A8FF).withValues(alpha: 0.2),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.account_balance_wallet_outlined,
+                    color: Color(0xFF69A8FF),
+                    size: 22,
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      "Today's earnings",
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (_incomeLoading)
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  else
+                    const Icon(
+                      Icons.chevron_right_rounded,
+                      color: Colors.white54,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Text(
+                today == null
+                    ? (_incomeLoading ? 'Loading...' : 'Unavailable')
+                    : 'Rs. ${today.amount.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.8,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 18,
+                runSpacing: 8,
+                children: [
+                  if (today?.trips != null)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.check_circle_outline_rounded,
+                          size: 16,
+                          color: Color(0xFF34D399),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          '${today!.trips} completed ${today.trips == 1 ? 'trip' : 'trips'}',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  const Text(
+                    'View earnings',
+                    style: TextStyle(
+                      color: Color(0xFF69A8FF),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 24),
-            const SectionTitle(
-              title: 'Quick Actions',
-              subtitle: 'Jump straight to the tasks you use every day.',
-            ),
-            const SizedBox(height: 14),
-            ActionCard(
-              title: 'Incoming Requests',
-              subtitle: 'Review pending ride requests and respond.',
-              icon: Icons.receipt_long_rounded,
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const IncomingRequestsScreen(),
+              if (_incomeFailed) ...[
+                const SizedBox(height: 10),
+                Text(
+                  _income == null
+                      ? 'Pull down to retry.'
+                      : 'Showing last loaded earnings. Pull down to refresh.',
+                  style: const TextStyle(
+                    color: Colors.orangeAccent,
+                    fontSize: 11,
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            ActionCard(
-              title: 'My QR Code',
-              subtitle: 'Show riders your verification QR.',
-              icon: Icons.qr_code_rounded,
-              onTap: () => Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const QrScreen())),
-            ),
-            const SizedBox(height: 12),
-            ActionCard(
-              title: 'Scan Trip Offer QR',
-              subtitle: 'Scan passenger offer QR to start offline or agreed-rate ride.',
-              icon: Icons.qr_code_scanner_rounded,
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const ScanTripOfferScreen(),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            ActionCard(
-              title: 'Pricing',
-              subtitle: auth.rateMode == 'DRIVER' ? 'View and update your driver-set rate.' : 'View your current rate and pricing mode.',
-              icon: Icons.price_change_rounded,
-              onTap: () => Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const RateScreen())),
-            ),
-            const SizedBox(height: 12),
-            ActionCard(
-              title: 'Trip History',
-              subtitle: 'Check completed rides and receipts.',
-              icon: Icons.route_rounded,
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const TripHistoryScreen()),
-              ),
-            ),
-            const SizedBox(height: 12),
-            ActionCard(
-              title: 'Earnings',
-              subtitle: 'Track daily income and completed trips.',
-              icon: Icons.bar_chart_rounded,
-              onTap: () => Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const EarningsScreen())),
-            ),
-            const SizedBox(height: 12),
-            ActionCard(
-              title: 'Settings',
-              subtitle: 'Review profile and sign out.',
-              icon: Icons.settings_rounded,
-              onTap: () => Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
-            ),
-            if (auth.busy) ...[
-              const SizedBox(height: 18),
-              const LinearProgressIndicator(minHeight: 3),
+              ],
             ],
-          ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -527,4 +721,3 @@ class _DriverHomeMapState extends State<_DriverHomeMap> {
     );
   }
 }
-
