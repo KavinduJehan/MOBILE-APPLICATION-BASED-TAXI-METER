@@ -18,7 +18,7 @@ class _EarningsScreenState extends State<EarningsScreen> {
   bool _loading = false;
   IncomeSummary? _summary;
   String? _error;
-  int _days = 7;
+  int _days = 1;
 
   @override
   void initState() {
@@ -61,18 +61,23 @@ class _EarningsScreenState extends State<EarningsScreen> {
   Widget build(BuildContext context) {
     final summary = _summary;
     final data = summary?.daysForPeriod(_days, _today) ?? <IncomeByDay>[];
+    final chartData = _days == 1
+        ? summary?.daysForPeriod(7, _today) ?? <IncomeByDay>[]
+        : data;
     final total = data.fold<double>(0, (sum, day) => sum + day.amount);
-    final max = data.fold<double>(
+    final max = chartData.fold<double>(
       0,
       (max, day) => day.amount > max ? day.amount : max,
     );
-    final active = data.where((day) => day.amount > 0).toList();
+    final active = chartData.where((day) => day.amount > 0).toList();
     final best = active.isEmpty
         ? null
         : active.reduce((a, b) => a.amount >= b.amount ? a : b);
     final periodTrips = data.every((day) => day.trips != null)
         ? data.fold<int>(0, (sum, day) => sum + day.trips!)
         : null;
+    final yesterday = summary?.daysForPeriod(2, _today).first.amount ?? 0;
+    final difference = total - yesterday;
 
     return AppShellScaffold(
       appBar: AppBar(
@@ -132,8 +137,9 @@ class _EarningsScreenState extends State<EarningsScreen> {
                     if (summary != null) ...[
                       SegmentedButton<int>(
                         segments: const [
-                          ButtonSegment(value: 7, label: Text('Last 7 days')),
-                          ButtonSegment(value: 30, label: Text('Last 30 days')),
+                          ButtonSegment(value: 1, label: Text('Today')),
+                          ButtonSegment(value: 7, label: Text('7 days')),
+                          ButtonSegment(value: 30, label: Text('30 days')),
                         ],
                         selected: {_days},
                         showSelectedIcon: false,
@@ -159,7 +165,9 @@ class _EarningsScreenState extends State<EarningsScreen> {
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
-                                    'Last $_days days',
+                                    _days == 1
+                                        ? "Today's earnings"
+                                        : 'Last $_days days',
                                     style: const TextStyle(
                                       color: Colors.white70,
                                     ),
@@ -191,6 +199,46 @@ class _EarningsScreenState extends State<EarningsScreen> {
                                   : '$periodTrips completed ${periodTrips == 1 ? 'trip' : 'trips'}',
                               style: const TextStyle(color: Colors.white60),
                             ),
+                            if (_days == 1) ...[
+                              const SizedBox(height: 18),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.06),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      difference > 0
+                                          ? Icons.trending_up_rounded
+                                          : difference < 0
+                                          ? Icons.trending_down_rounded
+                                          : Icons.trending_flat_rounded,
+                                      color: difference < 0
+                                          ? Colors.orangeAccent
+                                          : const Color(0xFF34D399),
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        difference == 0
+                                            ? 'Same earnings as yesterday'
+                                            : '${_money(difference.abs())} ${difference > 0 ? 'more' : 'less'} than yesterday',
+                                        style: const TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                             const SizedBox(height: 8),
                             const Text(
                               'Sri Lanka time',
@@ -204,101 +252,135 @@ class _EarningsScreenState extends State<EarningsScreen> {
                       ),
                       const SizedBox(height: 16),
                       _card(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        child: Wrap(
+                          spacing: 32,
+                          runSpacing: 20,
                           children: [
-                            const Text(
-                              'Lifetime overview',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 16,
-                              ),
+                            _stat(
+                              _days == 1
+                                  ? 'Trips completed today'
+                                  : 'Trips in this period',
+                              periodTrips?.toString() ?? 'Unavailable',
+                              Icons.route_rounded,
                             ),
-                            const SizedBox(height: 18),
-                            Wrap(
-                              spacing: 28,
-                              runSpacing: 20,
-                              children: [
-                                _stat(
-                                  'Total earned',
-                                  _money(summary.totalEarnings),
-                                  Icons.payments_outlined,
-                                ),
-                                _stat(
-                                  'Completed trips',
-                                  '${summary.completedTrips}',
-                                  Icons.check_circle_outline,
-                                ),
-                                _stat(
-                                  'Average per trip',
-                                  _money(
-                                    summary.completedTrips == 0
-                                        ? 0
-                                        : summary.totalEarnings /
-                                              summary.completedTrips,
-                                  ),
-                                  Icons.trending_up_rounded,
-                                ),
-                              ],
+                            _stat(
+                              'Average fare per trip',
+                              periodTrips == null
+                                  ? 'Unavailable'
+                                  : _money(
+                                      periodTrips == 0
+                                          ? 0
+                                          : total / periodTrips,
+                                    ),
+                              Icons.payments_outlined,
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 18),
-                      if (summary.completedTrips == 0)
-                        const EmptyStateCard(
-                          title: 'Your first fare starts here',
-                          subtitle:
-                              'Complete a trip to start tracking earnings. Offline trips appear after syncing.',
-                          icon: Icons.route_rounded,
-                        )
-                      else
+                      if (_days != 1) ...[
+                        const SizedBox(height: 16),
                         _card(
                           child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text(
-                                'Daily earnings',
+                                'Lifetime overview',
                                 style: TextStyle(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 16,
                                 ),
                               ),
-                              const SizedBox(height: 6),
-                              const Text(
-                                'Completed fares, grouped by day',
-                                style: TextStyle(
-                                  color: Colors.white54,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              const SizedBox(height: 20),
-                              if (best != null) ...[
-                                Text(
-                                  'Best day: ${_label(best.label)}  /  ${_money(best.amount)}',
-                                  style: const TextStyle(
-                                    color: Color(0xFF34D399),
-                                    fontWeight: FontWeight.w600,
+                              const SizedBox(height: 18),
+                              Wrap(
+                                spacing: 28,
+                                runSpacing: 20,
+                                children: [
+                                  _stat(
+                                    'Total earned',
+                                    _money(summary.totalEarnings),
+                                    Icons.payments_outlined,
                                   ),
-                                ),
-                                const SizedBox(height: 20),
-                              ],
-                              if (active.isEmpty)
-                                const Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 24),
-                                  child: Text(
-                                    'No completed rides in this period.',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(color: Colors.white60),
+                                  _stat(
+                                    'Completed trips',
+                                    '${summary.completedTrips}',
+                                    Icons.check_circle_outline,
                                   ),
-                                ),
-                              ...data.reversed.map(
-                                (day) =>
-                                    _dayRow(day, max, day.label == best?.label),
+                                  _stat(
+                                    'Average per trip',
+                                    _money(
+                                      summary.completedTrips == 0
+                                          ? 0
+                                          : summary.totalEarnings /
+                                                summary.completedTrips,
+                                    ),
+                                    Icons.trending_up_rounded,
+                                  ),
+                                ],
                               ),
                             ],
                           ),
                         ),
+                        const SizedBox(height: 18),
+                        if (summary.completedTrips == 0)
+                          const EmptyStateCard(
+                            title: 'Your first fare starts here',
+                            subtitle:
+                                'Complete a trip to start tracking earnings. Offline trips appear after syncing.',
+                            icon: Icons.route_rounded,
+                          )
+                        else
+                          _card(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Text(
+                                  _days == 1
+                                      ? 'Your week at a glance'
+                                      : 'Daily earnings',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                const Text(
+                                  'Completed fares, grouped by day',
+                                  style: TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                                if (best != null) ...[
+                                  Text(
+                                    'Best day: ${_label(best.label)}  /  ${_money(best.amount)}',
+                                    style: const TextStyle(
+                                      color: Color(0xFF34D399),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 20),
+                                ],
+                                if (active.isEmpty)
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 24),
+                                    child: Text(
+                                      'No completed rides in this period.',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(color: Colors.white60),
+                                    ),
+                                  ),
+                                ...chartData.reversed.map(
+                                  (day) => _dayRow(
+                                    day,
+                                    max,
+                                    day.label == best?.label,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
                       const SizedBox(height: 16),
                       const Text(
                         'Only completed trips count toward earnings. Offline fares appear after you sync your trips.',
