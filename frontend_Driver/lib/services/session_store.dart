@@ -8,6 +8,14 @@ class SessionStore {
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
   static const String _tokenKey = 'ridex_driver_jwt';
   static const String _profileKey = 'ridex_driver_profile';
+  static const String _onboardingSeenKey = 'ridex_driver_onboarding_seen';
+
+  static Future<bool> hasSeenOnboarding() async {
+    final value = await _storage.read(key: _onboardingSeenKey);
+    return value == 'true';
+  }
+
+  static Future<void> markOnboardingSeen() => _storage.write(key: _onboardingSeenKey, value: 'true');
 
   static Future<String?> readToken() => _storage.read(key: _tokenKey);
 

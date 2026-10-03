@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const rawBaseURL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const rawBaseURL = process.env.REACT_APP_API_URL || 'https://mobile-application-based-taxi-meter.onrender.com/api';
 const baseURL = rawBaseURL.replace(/\/$/, '');
 
 const api = axios.create({

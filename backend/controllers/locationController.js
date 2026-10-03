@@ -352,7 +352,7 @@ const getDrivingRoute = async (req, res) => {
         },
         travelMode: 'DRIVE',
         routingPreference: 'TRAFFIC_AWARE',
-        polylineQuality: 'OVERVIEW',
+        polylineQuality: 'HIGH_QUALITY',
         polylineEncoding: 'ENCODED_POLYLINE',
         languageCode: 'en-US',
         units: 'METRIC',

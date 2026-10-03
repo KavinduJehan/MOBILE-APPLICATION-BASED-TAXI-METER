@@ -313,3 +313,29 @@ class SecondaryActionButton extends StatelessWidget {
     );
   }
 }
+
+/// Provided by the home screen around its bottom-navigation tabs so a tab's
+/// AppBar can offer a back arrow that returns to the Home tab.
+class HomeTabScope extends InheritedWidget {
+  const HomeTabScope({super.key, required this.goHome, required super.child});
+
+  final VoidCallback goHome;
+
+  static HomeTabScope? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<HomeTabScope>();
+
+  @override
+  bool updateShouldNotify(HomeTabScope oldWidget) => false;
+}
+
+/// AppBar `leading` for screens that are shown both as a bottom-navigation tab
+/// and as a pushed route.
+///
+/// Pushed: returns null so the AppBar keeps its automatic back button (no
+/// duplicate). As a tab: the same standard [BackButton], returning to Home.
+Widget? tabBackButton(BuildContext context) {
+  if (ModalRoute.of(context)?.canPop ?? false) return null;
+  final scope = HomeTabScope.maybeOf(context);
+  if (scope == null) return null;
+  return BackButton(onPressed: scope.goHome);
+}

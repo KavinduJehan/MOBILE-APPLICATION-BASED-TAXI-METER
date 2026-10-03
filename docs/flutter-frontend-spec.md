@@ -1,7 +1,7 @@
 # Flutter Frontend — API Integration Specification
 
 **Backend base URL (development):** `http://localhost:5000/api`  
-**Backend base URL (production):** TBD — replace with deployed server URL  
+**Backend base URL (production):** `https://mobile-application-based-taxi-meter.onrender.com/api`  
 
 All authenticated requests must include the header:
 ```

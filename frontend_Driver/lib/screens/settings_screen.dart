@@ -28,7 +28,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final auth = context.watch<AuthProvider>();
     final profile = auth.profile;
     return AppShellScaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(
+        leading: tabBackButton(context),
+        title: const Text('Settings'),
+      ),
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
         child: Column(

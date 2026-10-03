@@ -74,7 +74,7 @@ class ApiService {
     return _asMap(response.data);
   }
 
-  Future<String> register({
+  Future<AuthResult> register({
     required String name,
     required String phone,
     required String email,
@@ -99,7 +99,17 @@ class ApiService {
       },
     );
     final data = _asMap(response.data);
-    return _readString(data, ['message'], fallback: 'Account created.');
+    final token = _readString(data, ['token', 'jwt', 'accessToken']);
+    if (token.isEmpty) {
+      throw ApiException('Registration succeeded but no token was returned.');
+    }
+    final profileMap = _readMap(data, ['driver', 'user', 'profile']);
+    final message = _readString(data, ['message']);
+    return AuthResult(
+      token: token,
+      profile: profileMap == null ? null : DriverProfile.fromJson(profileMap),
+      message: message.isEmpty ? null : message,
+    );
   }
 
   Future<DriverProfile> getProfile() async {
@@ -258,8 +268,7 @@ class ApiService {
     final tripMap = _readMap(data, ['trip']) ?? data;
     return TripCompletionResult(
       trip: TripRecord.fromJson(tripMap),
-      receiptNumber: _readString(data, [
-        'receipt',
+      receiptNumber: _readString(_readMap(data, ['receipt']) ?? data, [
         'receiptNumber',
         'receiptId',
       ], fallback: ''),
