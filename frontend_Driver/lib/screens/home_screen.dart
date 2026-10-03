@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../models/ride_request.dart';
 import '../providers/auth_provider.dart';
+import '../services/ride_alert_service.dart';
 import '../services/socket_service.dart';
 import '../theme/app_theme.dart';
 import 'dashboard_screen.dart';
@@ -31,6 +32,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   bool _requestCheckStarted = false;
   bool _requestSnapshotLoaded = false;
   int _pendingRequestCount = 0;
+  StreamSubscription<RideRequest>? _alertTaps;
 
   final _pages = const [
     DashboardScreen(),
@@ -44,15 +46,17 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   void initState() {
     super.initState();
     _index = widget.initialIndex;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _showLocationExplanation();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       _startRequestNotifications();
+      await _showLocationExplanation();
+      await _setUpRideAlerts();
     });
   }
 
   @override
   void dispose() {
     _requestTimer?.cancel();
+    _alertTaps?.cancel();
     DriverSocketService.instance.disconnect();
     super.dispose();
   }
@@ -116,7 +120,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           if (!_knownRequestIds.contains(request.id)) {
             _knownRequestIds.add(request.id);
             setState(() => _pendingRequestCount += 1);
-            _showNewRequestDialog(request);
+            _announceRequest(request);
           }
         },
       );
@@ -145,7 +149,55 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     // Update the badge count live
     if (mounted) setState(() => _pendingRequestCount = requests.length);
     if (firstCheck || freshRequests.isEmpty || !mounted) return;
-    _showNewRequestDialog(freshRequests.first);
+    _announceRequest(freshRequests.first);
+  }
+
+  /// Sets up the ringing alert used while the app is in the background, and
+  /// opens any request the driver tapped an alert for.
+  Future<void> _setUpRideAlerts() async {
+    if (!mounted) return;
+    final alerts = RideAlertService.instance;
+    await alerts.requestPermission();
+    _alertTaps ??= alerts.openedRequests.listen(_openRequestFromAlert);
+    final launchedFrom = alerts.takePendingOpen();
+    if (launchedFrom != null) await _openRequestFromAlert(launchedFrom);
+  }
+
+  /// In the app: the in-app popup. In the background: the ringing alert.
+  void _announceRequest(RideRequest request) {
+    final inForeground =
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    if (inForeground) {
+      RideAlertService.instance.cancelFor(request.id);
+      _showNewRequestDialog(request);
+    } else {
+      RideAlertService.instance.showIncomingRequest(request);
+    }
+  }
+
+  Future<void> _openRequestFromAlert(RideRequest alerted) async {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    var request = alerted;
+    try {
+      // The alert may be stale: only open requests still waiting for a driver.
+      final pending = await context.read<AuthProvider>().api.getIncomingRequests();
+      final match = pending.where((r) => r.id == alerted.id);
+      if (match.isEmpty) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('This ride request is no longer available.')),
+        );
+        return;
+      }
+      request = match.first;
+    } catch (_) {
+      // Offline: fall back to the details carried by the alert.
+    }
+    if (!mounted) return;
+    navigator.push(
+      MaterialPageRoute(builder: (_) => RequestDetailScreen(request: request)),
+    );
   }
 
   Future<void> _showNewRequestDialog(RideRequest request) async {

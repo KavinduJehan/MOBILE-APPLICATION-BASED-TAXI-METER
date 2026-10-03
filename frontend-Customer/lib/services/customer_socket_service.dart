@@ -28,6 +28,9 @@ class CustomerSocketService {
       socketUrl,
       io.OptionBuilder()
           .setTransports(['websocket'])
+          // A fresh socket each time: socket_io_client otherwise hands back
+          // the cached one and every reconnect stacks duplicate listeners.
+          .enableForceNew()
           .enableAutoConnect()
           .enableReconnection()
           .build(),
@@ -107,7 +110,8 @@ class CustomerSocketService {
   }
 
   void disconnect() {
-    _socket?.disconnect();
+    // dispose() also removes the event listeners registered on this socket.
+    _socket?.dispose();
     _socket = null;
   }
 }

@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../models/ride_request.dart';
 import '../models/trip_record.dart';
 import '../providers/auth_provider.dart';
+import '../services/ride_alert_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/google_polyline.dart';
 import '../widgets/app_widgets.dart';
@@ -54,6 +55,8 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
   @override
   void initState() {
     super.initState();
+    // The driver is looking at it now: stop the ringing alert.
+    RideAlertService.instance.cancelFor(widget.request.id);
     _loadTripRoute();
     _locateDriver();
   }
