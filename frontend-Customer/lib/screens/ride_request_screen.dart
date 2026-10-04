@@ -120,6 +120,20 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
       (widget.driver['ratePerKm'] as num?)?.toDouble() ??
       0.0;
 
+  double get _driverRating {
+    final rawRating = widget.driver['rating'] ??
+        widget.driver['averageRating'] ??
+        widget.driver['overallRating'] ??
+        widget.driver['ratingScore'];
+
+    if (rawRating is num) return rawRating.toDouble();
+    if (rawRating is String) {
+      final parsed = double.tryParse(rawRating);
+      if (parsed != null) return parsed;
+    }
+    return 0.0;
+  }
+
   double get _distanceKm {
     final routeDistanceKm = _routeDistanceKm;
     if (routeDistanceKm != null) return routeDistanceKm;
@@ -300,6 +314,7 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
     final vehicleType = widget.driver['vehicleType'] as String? ?? 'Taxi';
     final pickupAddress = widget.initialPickup ?? _pickup;
     final destinationAddress = widget.initialDestination ?? _dest;
+    final driverRating = _driverRating;
     final pickupPoint = _pickupPoint;
     final destinationPoint = _destinationPoint;
     final center = LatLng(
@@ -387,6 +402,7 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
                 driverName: driverName,
                 vehicle: vehicle,
                 vehicleType: vehicleType,
+                driverRating: driverRating,
                 pickupAddress: pickupAddress,
                 destinationAddress: destinationAddress,
                 distance: '${dist.toStringAsFixed(1)} km',
@@ -485,6 +501,7 @@ class _RideArrivalPanel extends StatelessWidget {
     required this.driverName,
     required this.vehicle,
     required this.vehicleType,
+    required this.driverRating,
     required this.pickupAddress,
     required this.destinationAddress,
     required this.distance,
@@ -500,6 +517,7 @@ class _RideArrivalPanel extends StatelessWidget {
   final String driverName;
   final String vehicle;
   final String vehicleType;
+  final double driverRating;
   final String pickupAddress;
   final String destinationAddress;
   final String distance;
@@ -599,14 +617,14 @@ class _RideArrivalPanel extends StatelessWidget {
                     color: AppTheme.primary.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(999),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.star, color: AppTheme.primary, size: 16),
-                      SizedBox(width: 4),
+                      const Icon(Icons.star, color: AppTheme.primary, size: 16),
+                      const SizedBox(width: 4),
                       Text(
-                        '4.8',
-                        style: TextStyle(fontWeight: FontWeight.w800),
+                        driverRating > 0 ? driverRating.toStringAsFixed(1) : 'N/A',
+                        style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
                     ],
                   ),
