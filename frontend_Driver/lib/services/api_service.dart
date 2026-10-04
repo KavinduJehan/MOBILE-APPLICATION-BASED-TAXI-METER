@@ -232,16 +232,25 @@ class ApiService {
   Future<Map<String, dynamic>> respondToRequest({
     required String requestId,
     required String action,
-    double? agreedRatePerKm,
+    double? counterRatePerKm,
   }) async {
     final data = <String, dynamic>{'action': action};
-    if (agreedRatePerKm != null) {
-      data['agreedRatePerKm'] = agreedRatePerKm;
+    if (counterRatePerKm != null) {
+      data['counterRatePerKm'] = counterRatePerKm;
     }
     final response = await _request(
       'PATCH',
       '/ride-requests/$requestId/respond',
       data: data,
+    );
+    return _asMap(response.data);
+  }
+
+  /// Current state of a ride request, with its trip once it is accepted.
+  Future<Map<String, dynamic>> getRequestStatus(String requestId) async {
+    final response = await _request(
+      'GET',
+      '/ride-requests/$requestId/status',
     );
     return _asMap(response.data);
   }

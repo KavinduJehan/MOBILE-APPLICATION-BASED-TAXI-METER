@@ -336,6 +336,18 @@ class ApiService {
   static Future<Response> getRequestStatus(String requestId) =>
       _dio.get('/ride-requests/$requestId/status');
 
+  /// Answers the driver's counter-offer: [action] is 'accept' or 'reject'.
+  static Future<Response> respondToCounterOffer(
+    String requestId,
+    String action,
+  ) => _dio.patch(
+    '/ride-requests/$requestId/counter-response',
+    data: {'action': action},
+  );
+
+  /// System flags set by the admin (e.g. whether fare negotiation is allowed).
+  static Future<Response> getPublicConfig() => _dio.get('/config/public');
+
   static Future<Response> createTrip(Map<String, dynamic> body) =>
       _dio.post('/trips', data: body);
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import 'package:provider/provider.dart';
 import '../models/ride_request.dart';
 import '../models/trip_record.dart';
 import '../providers/auth_provider.dart';
+import '../services/counter_offer_tracker.dart';
 import '../services/ride_alert_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/google_polyline.dart';
@@ -16,6 +18,7 @@ import 'driver_navigation_screen.dart';
 
 const _pickupColor = Color(0xFF34D399);
 const _destinationColor = Color(0xFFF87171);
+const _offerColor = Color(0xFFFBBF24);
 
 class RequestDetailScreen extends StatefulWidget {
   const RequestDetailScreen({super.key, required this.request});
@@ -27,8 +30,14 @@ class RequestDetailScreen extends StatefulWidget {
 }
 
 class _RequestDetailScreenState extends State<RequestDetailScreen> {
-  bool _acceptSuggestedRate = false;
+  // Kept as state because sending a counter-offer changes its negotiation
+  // status while this screen stays open.
+  late RideRequest _request = widget.request;
+  bool _accepting = false;
   bool _rejecting = false;
+  bool _countering = false;
+  bool _resolved = false;
+  Timer? _answerPoll;
   GoogleMapController? _mapController;
 
   LatLng? _driverPosition;
@@ -43,7 +52,6 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
   List<LatLng> _tripRoute = const [];
   String? _tripDuration;
 
-  RideRequest get _request => widget.request;
   LatLng get _pickup => LatLng(_request.pickupLatitude, _request.pickupLongitude);
   LatLng get _destination =>
       LatLng(_request.destinationLatitude, _request.destinationLongitude);
@@ -57,8 +65,20 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
     super.initState();
     // The driver is looking at it now: stop the ringing alert.
     RideAlertService.instance.cancelFor(widget.request.id);
+    CounterOfferTracker.instance.activeRequestId = widget.request.id;
+    if (_request.awaitingCustomer) _watchForCustomerAnswer();
     _loadTripRoute();
     _locateDriver();
+  }
+
+  @override
+  void dispose() {
+    _answerPoll?.cancel();
+    final tracker = CounterOfferTracker.instance;
+    if (tracker.activeRequestId == widget.request.id) {
+      tracker.activeRequestId = null;
+    }
+    super.dispose();
   }
 
   Future<void> _locateDriver() async {
@@ -197,32 +217,39 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
     );
   }
 
+  void _openNavigation(TripRecord trip, {String? receiptNumber}) {
+    _resolved = true;
+    _answerPoll?.cancel();
+    CounterOfferTracker.instance.remove(_request.id);
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => DriverNavigationScreen(
+          trip: trip,
+          request: _request,
+          receiptNumber: receiptNumber,
+        ),
+      ),
+    );
+  }
+
   Future<void> _accept(AuthProvider auth) async {
     final messenger = ScaffoldMessenger.of(context);
-    final navigator = Navigator.of(context);
+    setState(() => _accepting = true);
     try {
       final response = await auth.api.respondToRequest(
         requestId: _request.id,
         action: 'accept',
-        agreedRatePerKm:
-            _acceptSuggestedRate ? _request.suggestedRatePerKm : null,
       );
       final trip = TripRecord.fromJson(_readTrip(response));
       if (!mounted) return;
-      navigator.pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => DriverNavigationScreen(
-            trip: trip,
-            request: _request,
-            receiptNumber: _readReceipt(response),
-          ),
-        ),
-      );
+      _openNavigation(trip, receiptNumber: _readReceipt(response));
     } catch (error) {
       if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text(auth.errorMessage ?? 'Unable to accept request')),
+        SnackBar(content: Text(_errorText(error, 'Unable to accept request'))),
       );
+    } finally {
+      if (mounted) setState(() => _accepting = false);
     }
   }
 
@@ -232,16 +259,115 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
     setState(() => _rejecting = true);
     try {
       await auth.api.respondToRequest(requestId: _request.id, action: 'reject');
+      _resolved = true;
+      _answerPoll?.cancel();
+      CounterOfferTracker.instance.remove(_request.id);
       if (!mounted) return;
       navigator.pop();
     } catch (error) {
       if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text(auth.errorMessage ?? 'Unable to reject request')),
+        SnackBar(content: Text(_errorText(error, 'Unable to reject request'))),
       );
     } finally {
       if (mounted) setState(() => _rejecting = false);
     }
+  }
+
+  /// Lets the driver answer the customer's offer with a rate of their own.
+  Future<void> _sendCounterOffer(AuthProvider auth) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final counterRate = await showModalBottomSheet<double>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.surfaceAlt,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _CounterOfferSheet(request: _request),
+    );
+    if (counterRate == null || !mounted) return;
+
+    setState(() => _countering = true);
+    try {
+      await auth.api.respondToRequest(
+        requestId: _request.id,
+        action: 'counter',
+        counterRatePerKm: counterRate,
+      );
+      if (!mounted) return;
+      setState(() => _request = _request.withCounterOffer(counterRate));
+      CounterOfferTracker.instance.add(_request);
+      _watchForCustomerAnswer();
+    } catch (error) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(_errorText(error, 'Unable to send your offer'))),
+      );
+    } finally {
+      if (mounted) setState(() => _countering = false);
+    }
+  }
+
+  void _watchForCustomerAnswer() {
+    _answerPoll?.cancel();
+    _answerPoll = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => _checkCustomerAnswer(),
+    );
+  }
+
+  Future<void> _checkCustomerAnswer() async {
+    if (_resolved || !mounted) return;
+    late final Map<String, dynamic> data;
+    try {
+      data = await context.read<AuthProvider>().api.getRequestStatus(
+        _request.id,
+      );
+    } catch (_) {
+      return; // Offline or server hiccup: try again on the next tick.
+    }
+    if (_resolved || !mounted) return;
+    final status = data['status']?.toString() ?? 'pending';
+    if (status == 'pending') return;
+
+    final trip = data['trip'];
+    if (status == 'accepted' && trip is Map) {
+      _openNavigation(TripRecord.fromJson(Map<String, dynamic>.from(trip)));
+      return;
+    }
+
+    _resolved = true;
+    _answerPoll?.cancel();
+    CounterOfferTracker.instance.remove(_request.id);
+    final navigator = Navigator.of(context);
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppTheme.surfaceAlt,
+        surfaceTintColor: Colors.transparent,
+        title: const Text(
+          'Offer declined',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          '${_request.customerName} did not accept your fare offer. This request is closed.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+    if (mounted) navigator.pop();
+  }
+
+  String _errorText(Object error, String fallback) {
+    final text = error.toString().replaceFirst('Exception: ', '').trim();
+    return text.isEmpty ? fallback : text;
   }
 
   @override
@@ -522,59 +648,105 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
   }
 
   Widget _buildFareCard() {
-    final suggestedRate = _request.suggestedRatePerKm;
-    final useSuggested = _acceptSuggestedRate && suggestedRate != null;
-    final activeRate = useSuggested ? suggestedRate : _request.driverRatePerKm;
-    final fare = _request.fareAt(activeRate);
+    final offer = _request.suggestedRatePerKm;
+    final listedRate = _request.driverRatePerKm;
+    final distance = _request.estimatedDistanceKm.toStringAsFixed(1);
+
+    if (offer == null) {
+      return _Panel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _PanelTitle('Estimated fare'),
+            const SizedBox(height: 8),
+            Text(
+              'Rs. ${_request.fareAt(listedRate).toStringAsFixed(2)}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 30,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            Text(
+              '$distance km × Rs. ${listedRate.toStringAsFixed(2)} / km',
+              style: const TextStyle(color: Colors.white60, fontSize: 13),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final counter = _request.counterRatePerKm;
+    final waiting = _request.awaitingCustomer && counter != null;
+    final saving = _request.fareAt(listedRate) - _request.fareAt(offer);
 
     return _Panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _PanelTitle('Estimated fare'),
-          const SizedBox(height: 8),
-          Text(
-            'Rs. ${fare.toStringAsFixed(2)}',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 30,
-              fontWeight: FontWeight.w800,
+          Row(
+            children: [
+              const Icon(Icons.handshake_outlined, color: _offerColor, size: 18),
+              const SizedBox(width: 8),
+              const Expanded(child: _PanelTitle('Fare negotiation')),
+              Text(
+                '$distance km',
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _RateTile(
+                  title: 'Listed rate',
+                  rate: listedRate,
+                  fare: _request.fareAt(listedRate),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _RateTile(
+                  title: 'Customer offers',
+                  rate: offer,
+                  fare: _request.fareAt(offer),
+                  color: _offerColor,
+                ),
+              ),
+            ],
+          ),
+          if (waiting) ...[
+            const SizedBox(height: 10),
+            _RateTile(
+              title: 'Your offer',
+              rate: counter,
+              fare: _request.fareAt(counter),
+              color: AppTheme.accent,
             ),
-          ),
-          Text(
-            '${_request.estimatedDistanceKm.toStringAsFixed(1)} km × Rs. ${activeRate.toStringAsFixed(2)} / km'
-            '${useSuggested ? '  (customer rate)' : '  (your rate)'}',
-            style: const TextStyle(color: Colors.white60, fontSize: 13),
-          ),
-          if (suggestedRate != null) ...[
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
             Row(
               children: [
-                Expanded(
-                  child: _RateOption(
-                    title: 'Your rate',
-                    rate: _request.driverRatePerKm,
-                    fare: _request.fareAt(_request.driverRatePerKm),
-                    selected: !_acceptSuggestedRate,
-                    onTap: () => setState(() => _acceptSuggestedRate = false),
-                  ),
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: _RateOption(
-                    title: 'Customer offer',
-                    rate: suggestedRate,
-                    fare: _request.fareAt(suggestedRate),
-                    selected: _acceptSuggestedRate,
-                    onTap: () => setState(() => _acceptSuggestedRate = true),
+                  child: Text(
+                    'Waiting for ${_request.customerName} to answer your offer…',
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            const Text(
-              'Tap the rate you want to accept this ride with.',
-              style: TextStyle(color: Colors.white54, fontSize: 12),
+          ] else ...[
+            const SizedBox(height: 10),
+            Text(
+              'The customer is asking for Rs. ${saving.toStringAsFixed(2)} off the listed fare. '
+              'Accept it, send your own offer, or reject the request.',
+              style: const TextStyle(color: Colors.white60, fontSize: 12.5),
             ),
           ],
         ],
@@ -583,77 +755,127 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
   }
 
   Widget _buildActionBar(AuthProvider auth) {
-    final busy = auth.busy || _rejecting;
+    final busy = _accepting || _rejecting || _countering;
+    final offer = _request.suggestedRatePerKm;
+    final waiting = _request.awaitingCustomer;
+
+    Widget spinner([Color? color]) => SizedBox(
+      width: 18,
+      height: 18,
+      child: CircularProgressIndicator(
+        strokeWidth: 2,
+        valueColor: color == null ? null : AlwaysStoppedAnimation(color),
+      ),
+    );
+
+    Widget rejectButton(String label) => SizedBox(
+      height: 54,
+      child: OutlinedButton.icon(
+        onPressed: busy ? null : () => _reject(auth),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: _destinationColor,
+          side: BorderSide(color: _destinationColor.withValues(alpha: 0.6)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        icon: _rejecting ? spinner() : const Icon(Icons.close_rounded),
+        label: Text(
+          label,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
+      ),
+    );
+
+    Widget acceptButton(String label) => SizedBox(
+      height: 54,
+      child: FilledButton.icon(
+        onPressed: busy ? null : () => _accept(auth),
+        style: FilledButton.styleFrom(
+          backgroundColor: AppTheme.primary,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        icon: _accepting
+            ? spinner(Colors.white)
+            : const Icon(Icons.check_rounded),
+        label: Text(
+          label,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
+      ),
+    );
+
+    final Widget content;
+    if (waiting) {
+      // Counter-offer sent: the only thing left to do is withdraw.
+      content = SizedBox(
+        width: double.infinity,
+        child: rejectButton('Withdraw offer and reject'),
+      );
+    } else if (offer != null) {
+      content = Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          acceptButton(
+            'Accept offer · Rs. ${_request.fareAt(offer).toStringAsFixed(0)}',
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(child: rejectButton('Reject')),
+              const SizedBox(width: 12),
+              Expanded(
+                child: SizedBox(
+                  height: 54,
+                  child: OutlinedButton.icon(
+                    onPressed: busy ? null : () => _sendCounterOffer(auth),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _offerColor,
+                      side: BorderSide(
+                        color: _offerColor.withValues(alpha: 0.7),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    icon: _countering
+                        ? spinner(_offerColor)
+                        : const Icon(Icons.swap_vert_rounded),
+                    label: const Text(
+                      'My offer',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    } else {
+      content = Row(
+        children: [
+          Expanded(flex: 2, child: rejectButton('Reject')),
+          const SizedBox(width: 12),
+          Expanded(flex: 3, child: acceptButton('Accept ride')),
+        ],
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       decoration: const BoxDecoration(
         color: AppTheme.surface,
         border: Border(top: BorderSide(color: Colors.white12)),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: SizedBox(
-              height: 54,
-              child: OutlinedButton.icon(
-                onPressed: busy ? null : () => _reject(auth),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: _destinationColor,
-                  side: BorderSide(
-                    color: _destinationColor.withValues(alpha: 0.6),
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
-                icon: _rejecting
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.close_rounded),
-                label: const Text(
-                  'Reject',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 3,
-            child: SizedBox(
-              height: 54,
-              child: FilledButton.icon(
-                onPressed: busy ? null : () => _accept(auth),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppTheme.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
-                icon: auth.busy && !_rejecting
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation(Colors.white),
-                        ),
-                      )
-                    : const Icon(Icons.check_rounded),
-                label: const Text(
-                  'Accept ride',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+      child: content,
     );
   }
 
@@ -830,74 +1052,218 @@ class _StatTile extends StatelessWidget {
   }
 }
 
-class _RateOption extends StatelessWidget {
-  const _RateOption({
+class _RateTile extends StatelessWidget {
+  const _RateTile({
     required this.title,
     required this.rate,
     required this.fare,
-    required this.selected,
-    required this.onTap,
+    this.color,
   });
 
   final String title;
   final double rate;
   final double fare;
-  final bool selected;
-  final VoidCallback onTap;
+
+  /// Highlights the tile; null renders it as a neutral reference value.
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppTheme.primary.withValues(alpha: 0.18)
-              : AppTheme.surfaceAlt,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: selected ? AppTheme.accent : Colors.white12,
-            width: selected ? 1.5 : 1,
-          ),
+    final accent = color;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: accent == null
+            ? AppTheme.surfaceAlt
+            : accent.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: accent == null
+              ? Colors.white12
+              : accent.withValues(alpha: 0.55),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                ),
-                Icon(
-                  selected
-                      ? Icons.check_circle_rounded
-                      : Icons.radio_button_unchecked,
-                  size: 18,
-                  color: selected ? AppTheme.accent : Colors.white38,
-                ),
-              ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              color: accent ?? Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
             ),
-            const SizedBox(height: 6),
-            Text(
-              'Rs. ${rate.toStringAsFixed(2)} / km',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Rs. ${rate.toStringAsFixed(2)} / km',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          Text(
+            'Fare Rs. ${fare.toStringAsFixed(2)}',
+            style: const TextStyle(color: Colors.white60, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Bottom sheet where the driver enters a counter-offer between the
+/// customer's offer and the listed rate. Pops with the chosen rate.
+class _CounterOfferSheet extends StatefulWidget {
+  const _CounterOfferSheet({required this.request});
+
+  final RideRequest request;
+
+  @override
+  State<_CounterOfferSheet> createState() => _CounterOfferSheetState();
+}
+
+class _CounterOfferSheetState extends State<_CounterOfferSheet> {
+  late final TextEditingController _controller;
+
+  double get _offer => widget.request.suggestedRatePerKm ?? 0;
+  double get _listed => widget.request.driverRatePerKm;
+  double get _midpoint => double.parse(((_offer + _listed) / 2).toStringAsFixed(0));
+
+  @override
+  void initState() {
+    super.initState();
+    // Start from the middle when it is a valid counter, else the listed rate.
+    final start = _midpoint > _offer && _midpoint <= _listed ? _midpoint : _listed;
+    _controller = TextEditingController(text: _format(start));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  static String _format(double value) => value == value.roundToDouble()
+      ? value.toStringAsFixed(0)
+      : value.toStringAsFixed(2);
+
+  double? get _value => double.tryParse(_controller.text.trim());
+
+  String? get _error {
+    final value = _value;
+    if (value == null) return 'Enter a rate per km';
+    if (value <= _offer) {
+      return 'Must be more than the customer\'s Rs. ${_format(_offer)}';
+    }
+    if (value > _listed) {
+      return 'Cannot be more than the listed Rs. ${_format(_listed)}';
+    }
+    return null;
+  }
+
+  void _set(double value) {
+    _controller.text = _format(value);
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final value = _value;
+    final error = _error;
+    final quickRates = <double>{
+      if (_midpoint > _offer && _midpoint < _listed) _midpoint,
+      _listed,
+    };
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        20,
+        20,
+        20 + MediaQuery.viewInsetsOf(context).bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Send your offer',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Customer offers Rs. ${_format(_offer)} / km · listed rate Rs. ${_format(_listed)} / km',
+            style: const TextStyle(color: Colors.white60, fontSize: 13),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            onChanged: (_) => setState(() {}),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+            ),
+            decoration: InputDecoration(
+              labelText: 'Your rate per km',
+              prefixText: 'Rs. ',
+              suffixText: '/ km',
+              errorText: error,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final rate in quickRates)
+                ActionChip(
+                  label: Text(
+                    rate == _listed
+                        ? 'Listed · Rs. ${_format(rate)}'
+                        : 'Meet halfway · Rs. ${_format(rate)}',
+                  ),
+                  onPressed: () => _set(rate),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            value != null && error == null
+                ? 'Fare at your offer: Rs. ${widget.request.fareAt(value).toStringAsFixed(2)} '
+                      'for ${widget.request.estimatedDistanceKm.toStringAsFixed(1)} km'
+                : 'The customer has to agree before the trip starts.',
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
+          ),
+          const SizedBox(height: 18),
+          SizedBox(
+            height: 52,
+            child: FilledButton(
+              onPressed: error == null && value != null
+                  ? () => Navigator.pop(context, value)
+                  : null,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              child: const Text(
+                'Send offer to customer',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
               ),
             ),
-            Text(
-              'Fare Rs. ${fare.toStringAsFixed(2)}',
-              style: const TextStyle(color: Colors.white60, fontSize: 12),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

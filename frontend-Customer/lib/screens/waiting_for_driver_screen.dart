@@ -41,6 +41,12 @@ class _WaitingForDriverScreenState extends State<WaitingForDriverScreen> {
   double? _agreedRate;
   bool _handled = false;
 
+  // Fare negotiation
+  double? _myOffer; // the rate this customer asked for
+  double? _counterRate; // the driver's counter-offer, waiting for an answer
+  bool _answering = false;
+  bool _declinedByMe = false;
+
   @override
   void initState() {
     super.initState();
@@ -63,6 +69,57 @@ class _WaitingForDriverScreenState extends State<WaitingForDriverScreen> {
       _handleAccepted(data);
     } else if (status == 'rejected') {
       _handleRejected();
+    } else if (status == 'countered') {
+      final counter = (data['counterRatePerKm'] as num?)?.toDouble();
+      if (counter != null) {
+        setState(() {
+          _counterRate = counter;
+          _myOffer =
+              (data['suggestedRatePerKm'] as num?)?.toDouble() ?? _myOffer;
+        });
+      }
+    }
+  }
+
+  /// Sends the customer's answer to the driver's counter-offer.
+  Future<void> _answerCounterOffer(bool accept) async {
+    if (_answering || _handled) return;
+    setState(() {
+      _answering = true;
+      _error = null;
+    });
+    try {
+      final resp = await ApiService.respondToCounterOffer(
+        widget.requestId,
+        accept ? 'accept' : 'reject',
+      );
+      if (!mounted) return;
+      if (!accept) {
+        _declinedByMe = true;
+        await _handleRejected();
+        return;
+      }
+      final data = Map<String, dynamic>.from(resp.data as Map);
+      final request = data['rideRequest'];
+      await _handleAccepted({
+        'status': 'accepted',
+        'trip': data['trip'],
+        if (request is Map) ...{
+          'agreedRatePerKm': request['agreedRatePerKm'],
+          'pickupAddress': request['pickupAddress'],
+          'destAddress': request['destAddress'],
+          'pickupLat': request['pickupLat'],
+          'pickupLng': request['pickupLng'],
+          'destLat': request['destLat'],
+          'destLng': request['destLng'],
+        },
+      });
+    } catch (_) {
+      if (mounted && !_handled) {
+        setState(() => _error = 'Could not send your answer. Please try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _answering = false);
     }
   }
 
@@ -91,7 +148,8 @@ class _WaitingForDriverScreenState extends State<WaitingForDriverScreen> {
     await context.read<TripProvider>().clearPendingSearch();
     if (!mounted) return;
 
-    final tripObj = data['trip'] as Map<String, dynamic>?;
+    final rawTrip = data['trip'];
+    final tripObj = rawTrip is Map ? Map<String, dynamic>.from(rawTrip) : null;
     final totalFare = (tripObj?['totalFare'] as num?)?.toDouble();
     final effectiveRate = agreedRate ?? widget.ratePerKm;
     final trip = tripObj == null
@@ -171,10 +229,15 @@ class _WaitingForDriverScreenState extends State<WaitingForDriverScreen> {
         await _handleRejected();
       } else {
         final agreedRate = (data['agreedRatePerKm'] as num?)?.toDouble();
+        final countered = data['negotiationStatus'] == 'driver_countered';
         setState(() {
           _status = newStatus;
           _agreedRate = agreedRate;
-          _error = null;
+          _myOffer = (data['suggestedRatePerKm'] as num?)?.toDouble();
+          _counterRate = countered
+              ? (data['counterRatePerKm'] as num?)?.toDouble()
+              : null;
+          if (!_answering) _error = null;
         });
       }
     } catch (e) {
@@ -188,12 +251,30 @@ class _WaitingForDriverScreenState extends State<WaitingForDriverScreen> {
   Widget build(BuildContext context) {
     final driverName = widget.driver['name'] as String? ?? 'Driver';
     final isRejected = _status == 'rejected';
+    final counterRate = isRejected ? null : _counterRate;
+    final hasCounter = counterRate != null;
+
+    final String statusText;
+    if (isRejected) {
+      statusText = _declinedByMe
+          ? 'You declined the driver\'s offer. The request is closed.'
+          : 'Your ride request was declined.';
+    } else if (hasCounter) {
+      statusText = 'The driver sent you a fare offer.';
+    } else if (_myOffer != null) {
+      statusText =
+          'Waiting for the driver to answer your offer of Rs. ${_myOffer!.toStringAsFixed(0)} / km…';
+    } else {
+      statusText = 'Waiting for driver to accept your request…';
+    }
 
     return Scaffold(
       backgroundColor: AppTheme.background,
-      appBar: AppBar(title: const Text('Waiting for Driver')),
+      appBar: AppBar(
+        title: Text(hasCounter ? 'Driver\'s Offer' : 'Waiting for Driver'),
+      ),
       body: Center(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(32),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -204,6 +285,12 @@ class _WaitingForDriverScreenState extends State<WaitingForDriverScreen> {
                   Icons.cancel_rounded,
                   size: 80,
                   color: Colors.redAccent,
+                )
+              else if (hasCounter)
+                const Icon(
+                  Icons.handshake_rounded,
+                  size: 72,
+                  color: AppTheme.warningOrange,
                 )
               else
                 const WarpSearchLoader(),
@@ -222,15 +309,25 @@ class _WaitingForDriverScreenState extends State<WaitingForDriverScreen> {
 
               // ── Status text ────────────────────────────────────────────────
               Text(
-                isRejected
-                    ? 'Your ride request was declined.'
-                    : 'Waiting for driver to accept your request…',
+                statusText,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: isRejected ? Colors.redAccent : Colors.white70,
                   fontSize: 16,
                 ),
               ),
+
+              if (hasCounter) ...[
+                const SizedBox(height: 20),
+                _CounterOfferCard(
+                  counterRate: counterRate,
+                  myOffer: _myOffer,
+                  distanceKm: widget.distanceKm,
+                  answering: _answering,
+                  onAccept: () => _answerCounterOffer(true),
+                  onDecline: () => _answerCounterOffer(false),
+                ),
+              ],
 
               if (_agreedRate != null && !isRejected) ...[
                 const SizedBox(height: 8),
@@ -251,7 +348,9 @@ class _WaitingForDriverScreenState extends State<WaitingForDriverScreen> {
               const SizedBox(height: 40),
 
               // ── Loading spinner or rejection button ────────────────────────
-              if (!isRejected)
+              if (hasCounter)
+                const SizedBox.shrink()
+              else if (!isRejected)
                 const CircularProgressIndicator(color: AppTheme.primaryBlue)
               else
                 ElevatedButton(
@@ -264,6 +363,95 @@ class _WaitingForDriverScreenState extends State<WaitingForDriverScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Shows the driver's counter-offer with Accept / Decline.
+class _CounterOfferCard extends StatelessWidget {
+  const _CounterOfferCard({
+    required this.counterRate,
+    required this.myOffer,
+    required this.distanceKm,
+    required this.answering,
+    required this.onAccept,
+    required this.onDecline,
+  });
+
+  final double counterRate;
+  final double? myOffer;
+  final double distanceKm;
+  final bool answering;
+  final VoidCallback onAccept;
+  final VoidCallback onDecline;
+
+  @override
+  Widget build(BuildContext context) {
+    final fare = distanceKm * counterRate;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: AppTheme.warningOrange.withValues(alpha: 0.6),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Driver offers',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppTheme.mutedText, fontSize: 13),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Rs. ${counterRate.toStringAsFixed(0)} / km',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 28,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Total fare Rs. ${fare.toStringAsFixed(0)} for ${distanceKm.toStringAsFixed(1)} km',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+          if (myOffer != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              'You offered Rs. ${myOffer!.toStringAsFixed(0)} / km',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppTheme.mutedText, fontSize: 13),
+            ),
+          ],
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: answering ? null : onAccept,
+            child: answering
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Accept and start trip'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton(
+            onPressed: answering ? null : onDecline,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.redAccent,
+              side: const BorderSide(color: Colors.redAccent),
+            ),
+            child: const Text('Decline offer'),
+          ),
+        ],
       ),
     );
   }
