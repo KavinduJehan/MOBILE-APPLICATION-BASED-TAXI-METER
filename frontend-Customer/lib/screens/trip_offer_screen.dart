@@ -21,6 +21,7 @@ class TripOfferScreen extends StatelessWidget {
     required this.agreedRatePerKm,
     this.isOffline = false,
   });
+  /// test
 
   String get _qrPayload {
     return jsonEncode({

@@ -3,6 +3,7 @@ const Trip = require('../models/Trip');
 const Receipt = require('../models/Receipt');
 const Driver = require('../models/Driver');
 const RideRequest = require('../models/RideRequest');
+const Customer = require('../models/Customer');
 const SystemConfig = require('../models/SystemConfig');
 const { computeAutoRate } = require('../services/pricingEngine');
 
@@ -366,8 +367,24 @@ const syncOfflineTrips = async (req, res) => {
       const startTime = item.startTime ? new Date(item.startTime) : (item.date ? new Date(item.date) : new Date());
       const endTime = item.endTime ? new Date(item.endTime) : new Date();
 
+      let customerId = null;
+      if (item.customerPhone) {
+        const cleanPhone = String(item.customerPhone).trim();
+        if (cleanPhone) {
+          const matchedCustomer = await Customer.findOne({
+            $or: [
+              { phone: cleanPhone },
+              { phone: cleanPhone.replace(/^0/, '+94') },
+              { phone: cleanPhone.replace(/^\+94/, '0') },
+            ],
+          });
+          if (matchedCustomer) customerId = matchedCustomer._id;
+        }
+      }
+
       const trip = new Trip({
         driver: req.user.id,
+        customer: customerId,
         customerName: item.customerName || 'Offline Passenger',
         startLocation: item.startLocation || item.startAddress || 'Offline Pickup',
         endLocation: item.endLocation || item.endAddress || 'Offline Destination',
