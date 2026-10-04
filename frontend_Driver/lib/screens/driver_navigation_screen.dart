@@ -90,6 +90,98 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
   void initState() {
     super.initState();
     _startLocationTracking();
+    _watchTripClosedByCustomer();
+  }
+
+  // ── Trip ended or cancelled from the customer's side ─────────────────────
+  Timer? _tripStatusPoll;
+
+  /// Set once the trip is over, so the socket, the status check and the End
+  /// Trip button can't all act on it.
+  bool _tripClosed = false;
+
+  void _watchTripClosedByCustomer() {
+    DriverSocketService.instance.listenForTripClosed((event, tripId) {
+      if (tripId != widget.trip.id) return;
+      _onTripClosedElsewhere(cancelled: event == 'trip_cancelled');
+    });
+    // The socket can drop, so also ask the server directly.
+    _tripStatusPoll = Timer.periodic(const Duration(seconds: 4), (_) async {
+      if (_tripClosed || _actionBusy || !mounted) return;
+      try {
+        final status = await _api.getTripStatus(widget.trip.id);
+        if (status == 'completed') {
+          _onTripClosedElsewhere(cancelled: false);
+        } else if (status == 'cancelled') {
+          _onTripClosedElsewhere(cancelled: true);
+        }
+      } catch (_) {
+        // Offline: try again on the next tick.
+      }
+    });
+  }
+
+  Future<void> _stopTripTracking() async {
+    _tripClosed = true;
+    _tripStatusPoll?.cancel();
+    DriverSocketService.instance.stopListeningForTripClosed();
+    context.read<AuthProvider>().stopLocationUpdates();
+    await _positionSubscription?.cancel();
+    _positionSubscription = null;
+  }
+
+  Future<void> _onTripClosedElsewhere({required bool cancelled}) async {
+    if (_tripClosed || !mounted) return;
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    await _stopTripTracking();
+    if (!mounted) return;
+
+    if (cancelled) {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Trip cancelled'),
+          content: const Text('The customer cancelled this trip.'),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      if (mounted) navigator.pop();
+      return;
+    }
+
+    try {
+      // Ending an already-completed trip just returns it with its receipt.
+      final result = await _api.endTrip(widget.trip.id);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('The customer ended the trip.')),
+      );
+      navigator.pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => TripSummaryScreen(
+            trip: result.trip,
+            receiptNumber: result.receiptNumber ?? widget.receiptNumber,
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'The customer ended the trip. Open Trips to see the receipt.',
+          ),
+        ),
+      );
+      navigator.pop();
+    }
   }
 
   DateTime? _lastSyncTime;
@@ -188,6 +280,8 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
     _positionSubscription?.cancel();
     _routeRefreshTimer?.cancel();
     _cameraThrottle?.cancel();
+    _tripStatusPoll?.cancel();
+    DriverSocketService.instance.stopListeningForTripClosed();
     super.dispose();
   }
 
@@ -539,6 +633,8 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
 
   void _markAtPickup() {
     if (_actionBusy) return;
+    // Lets the customer's app show "Your driver has arrived".
+    _api.markArrived(widget.trip.id).catchError((_) {});
     setState(() {
       _navigationState = _NavigationState.atPickup;
       _roadRoute = const [];
@@ -573,8 +669,7 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
   }
 
   Future<void> _endTrip() async {
-    if (_actionBusy || !_tripInProgress) return;
-    final auth = context.read<AuthProvider>();
+    if (_actionBusy || !_tripInProgress || _tripClosed) return;
     final navigator = Navigator.of(context);
     setState(() {
       _actionBusy = true;
@@ -582,10 +677,8 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
     });
     try {
       final result = await _api.endTrip(widget.trip.id);
-      if (!mounted) return;
-      auth.stopLocationUpdates();
-      await _positionSubscription?.cancel();
-      _positionSubscription = null;
+      if (!mounted || _tripClosed) return;
+      await _stopTripTracking();
       navigator.pushReplacement(
         MaterialPageRoute(
           builder: (_) => TripSummaryScreen(

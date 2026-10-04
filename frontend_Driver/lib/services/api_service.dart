@@ -264,11 +264,23 @@ class ApiService {
     return _asMap(response.data);
   }
 
+  /// Tells the customer the driver is waiting at the pickup point.
+  Future<void> markArrived(String tripId) async {
+    await _request('PATCH', '/trips/$tripId/arrive');
+  }
+
   Future<TripRecord> startTrip(String tripId) async {
     final response = await _request('PATCH', '/trips/$tripId/start');
     final data = _asMap(response.data);
     final tripMap = _readMap(data, ['trip']) ?? data;
     return TripRecord.fromJson(tripMap);
+  }
+
+  /// Current status of a trip: pending, ongoing, completed or cancelled.
+  Future<String> getTripStatus(String tripId) async {
+    final response = await _request('GET', '/trips/$tripId');
+    final data = _asMap(response.data);
+    return _readString(_readMap(data, ['trip']) ?? data, ['status']);
   }
 
   Future<TripCompletionResult> endTrip(String tripId) async {
