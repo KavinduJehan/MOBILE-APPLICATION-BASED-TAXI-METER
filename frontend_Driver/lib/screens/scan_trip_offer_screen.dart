@@ -344,16 +344,114 @@ class _ScanTripOfferScreenState extends State<ScanTripOfferScreen> {
                   ),
                   const SizedBox(height: 12),
                 ],
-                if (!_processing)
+                if (!_processing) ...[
                   const Text(
                     'Align passenger QR inside the frame',
                     style: TextStyle(color: Colors.white70, fontSize: 14),
                   ),
+                  const SizedBox(height: 12),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.white12,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    ),
+                    icon: const Icon(Icons.edit_note_rounded, size: 18),
+                    label: const Text('Enter Agreed Rate Manually', style: TextStyle(fontSize: 13)),
+                    onPressed: _showManualOfferModal,
+                  ),
+                ],
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  void _showManualOfferModal() {
+    final nameController = TextEditingController(text: 'Passenger');
+    final rateController = TextEditingController(text: '100');
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0E1422),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (bottomSheetContext) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 24,
+            right: 24,
+            top: 24,
+            bottom: MediaQuery.of(bottomSheetContext).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Manual Street Meter',
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Start live digital taxi meter with negotiated or standard rate.',
+                style: TextStyle(color: Colors.white60, fontSize: 13),
+              ),
+              const SizedBox(height: 18),
+              TextField(
+                controller: nameController,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'Passenger Name (Optional)',
+                  labelStyle: const TextStyle(color: Colors.white60),
+                  filled: true,
+                  fillColor: const Color(0xFF161F33),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  prefixIcon: const Icon(Icons.person, color: Colors.white60),
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: rateController,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'Agreed Rate per km (Rs.)',
+                  labelStyle: const TextStyle(color: Colors.white60),
+                  filled: true,
+                  fillColor: const Color(0xFF161F33),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  prefixIcon: const Icon(Icons.payments, color: Colors.white60),
+                ),
+              ),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF22C55E),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: const Icon(Icons.speed_rounded),
+                label: const Text('Start Meter', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                onPressed: () {
+                  final name = nameController.text.trim();
+                  final rate = double.tryParse(rateController.text.trim()) ?? 100.0;
+                  Navigator.pop(bottomSheetContext);
+                  _startOfflineTrip(
+                    customerName: name.isNotEmpty ? name : 'Passenger',
+                    agreedRate: rate > 0 ? rate : 100.0,
+                  );
+                },
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

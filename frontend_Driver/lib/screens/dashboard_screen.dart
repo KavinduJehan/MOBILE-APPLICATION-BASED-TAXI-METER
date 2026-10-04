@@ -9,6 +9,9 @@ import '../models/ride_request.dart';
 import '../models/income_summary.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/app_widgets.dart';
+import '../models/trip_record.dart';
+import '../services/offline_database.dart';
+import 'active_trip_screen.dart';
 import 'earnings_screen.dart';
 import 'incoming_requests_screen.dart';
 import 'qr_screen.dart';
@@ -319,6 +322,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const SizedBox(height: 12),
               ActionCard(
+                title: 'Start Taxi Meter (Street Hail)',
+                subtitle:
+                    'Start live digital taxi meter directly with real-time GPS tracking.',
+                icon: Icons.speed_rounded,
+                onTap: () => _showStartStreetMeterModal(context, auth),
+              ),
+              const SizedBox(height: 12),
+              ActionCard(
                 title: 'Pricing',
                 subtitle: auth.rateMode == 'DRIVER'
                     ? 'View and update your driver-set rate.'
@@ -491,6 +502,134 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  void _showStartStreetMeterModal(BuildContext context, AuthProvider auth) {
+    final defaultRate = auth.profile?.ratePerKm ?? 100.0;
+    final nameController = TextEditingController(text: 'Street Passenger');
+    final rateController = TextEditingController(text: defaultRate.toStringAsFixed(0));
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0E1422),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (bottomSheetContext) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 24,
+            right: 24,
+            top: 24,
+            bottom: MediaQuery.of(bottomSheetContext).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.speed_rounded, color: Color(0xFF22C55E), size: 24),
+                  SizedBox(width: 10),
+                  Text(
+                    'Start Digital Taxi Meter',
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Tracks real-world distance via GPS and calculates fare offline.',
+                style: TextStyle(color: Colors.white60, fontSize: 13),
+              ),
+              const SizedBox(height: 18),
+              TextField(
+                controller: nameController,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'Passenger Name (Optional)',
+                  labelStyle: const TextStyle(color: Colors.white60),
+                  filled: true,
+                  fillColor: const Color(0xFF161F33),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  prefixIcon: const Icon(Icons.person, color: Colors.white60),
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: rateController,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'Rate per km (Rs.)',
+                  labelStyle: const TextStyle(color: Colors.white60),
+                  filled: true,
+                  fillColor: const Color(0xFF161F33),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  prefixIcon: const Icon(Icons.payments, color: Colors.white60),
+                ),
+              ),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF22C55E),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: const Icon(Icons.play_arrow_rounded, size: 22),
+                label: const Text('Start Meter Now', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                onPressed: () async {
+                  final name = nameController.text.trim();
+                  final rate = double.tryParse(rateController.text.trim()) ?? defaultRate;
+                  Navigator.pop(bottomSheetContext);
+
+                  final timestamp = DateTime.now().millisecondsSinceEpoch;
+                  final localId = 'offline-$timestamp';
+                  final offlineReceipt = 'REC-OFFLINE-${timestamp.toRadixString(36).toUpperCase()}';
+
+                  final trip = TripRecord(
+                    id: localId,
+                    customerName: name.isNotEmpty ? name : 'Street Passenger',
+                    startAddress: 'Street Pickup',
+                    endAddress: 'Meter Destination',
+                    distanceKm: 0.0,
+                    ratePerKm: rate > 0 ? rate : 100.0,
+                    fare: 0.0,
+                    status: 'in_progress',
+                    date: DateTime.now(),
+                    receiptNumber: offlineReceipt,
+                  );
+
+                  await OfflineDatabase.instance.insertOfflineTrip(
+                    localId: localId,
+                    customerName: trip.customerName,
+                    startAddress: trip.startAddress,
+                    endAddress: trip.endAddress,
+                    distanceKm: trip.distanceKm,
+                    ratePerKm: trip.ratePerKm,
+                    fare: trip.fare,
+                    receiptNumber: offlineReceipt,
+                    status: 'in_progress',
+                    date: trip.date,
+                  );
+
+                  if (!context.mounted) return;
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ActiveTripScreen(
+                        trip: trip,
+                        receiptNumber: offlineReceipt,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

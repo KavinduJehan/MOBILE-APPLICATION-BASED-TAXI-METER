@@ -68,4 +68,32 @@ class TripRecord {
   }
 
   double get estimatedFare => distanceKm * ratePerKm;
+
+  TripRecord copyWith({
+    String? id,
+    String? customerName,
+    String? startAddress,
+    String? endAddress,
+    double? distanceKm,
+    double? ratePerKm,
+    double? fare,
+    String? status,
+    DateTime? date,
+    String? receiptNumber,
+    Map<String, dynamic>? surgeBreakdown,
+  }) {
+    return TripRecord(
+      id: id ?? this.id,
+      customerName: customerName ?? this.customerName,
+      startAddress: startAddress ?? this.startAddress,
+      endAddress: endAddress ?? this.endAddress,
+      distanceKm: distanceKm ?? this.distanceKm,
+      ratePerKm: ratePerKm ?? this.ratePerKm,
+      fare: fare ?? this.fare,
+      status: status ?? this.status,
+      date: date ?? this.date,
+      receiptNumber: receiptNumber ?? this.receiptNumber,
+      surgeBreakdown: surgeBreakdown ?? this.surgeBreakdown,
+    );
+  }
 }

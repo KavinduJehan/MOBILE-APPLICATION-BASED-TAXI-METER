@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import '../theme.dart';
+import 'passenger_meter_screen.dart';
 
 /// Screen displayed to the customer that renders a Trip Offer QR Code.
 /// The driver scans this QR using their Driver App to auto-fill trip details
@@ -179,17 +179,47 @@ class TripOfferScreen extends StatelessWidget {
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryBlue,
+                    backgroundColor: const Color(0xFF22C55E),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
                   ),
-                  icon: const Icon(Icons.check_circle_outline),
+                  icon: const Icon(Icons.speed_rounded),
+                  label: const Text(
+                    'Track Ride (Live Passenger Meter)',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: () {
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(
+                        builder: (_) => PassengerMeterScreen(
+                          driver: driver,
+                          customerName: customerName,
+                          agreedRatePerKm: agreedRatePerKm,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white70,
+                    side: const BorderSide(color: Colors.white24),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  icon: const Icon(Icons.check_circle_outline, size: 20),
                   label: const Text(
                     'Done / Return to Home',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                   ),
                   onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
                 ),

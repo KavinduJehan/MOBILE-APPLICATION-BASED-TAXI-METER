@@ -262,8 +262,20 @@ class ApiService {
     return TripRecord.fromJson(tripMap);
   }
 
-  Future<TripCompletionResult> endTrip(String tripId) async {
-    final response = await _request('PATCH', '/trips/$tripId/end');
+  Future<TripCompletionResult> endTrip(
+    String tripId, {
+    double? distanceKm,
+    double? totalFare,
+  }) async {
+    final Map<String, dynamic> body = {};
+    if (distanceKm != null && distanceKm > 0) body['distanceKm'] = distanceKm;
+    if (totalFare != null && totalFare > 0) body['totalFare'] = totalFare;
+
+    final response = await _request(
+      'PATCH',
+      '/trips/$tripId/end',
+      data: body.isNotEmpty ? body : null,
+    );
     final data = _asMap(response.data);
     final tripMap = _readMap(data, ['trip']) ?? data;
     return TripCompletionResult(

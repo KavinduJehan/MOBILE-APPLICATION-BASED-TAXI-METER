@@ -120,6 +120,31 @@ class OfflineDatabase {
     );
   }
 
+  /// Updates in-progress trip metrics (distance and fare) in local SQLite
+  Future<void> updateOfflineTripProgress({
+    required String localId,
+    required double distanceKm,
+    required double fare,
+    String? endAddress,
+    String status = 'in_progress',
+  }) async {
+    final db = await database;
+    final Map<String, dynamic> values = {
+      'distance_km': distanceKm,
+      'fare': fare,
+      'status': status,
+    };
+    if (endAddress != null && endAddress.isNotEmpty) {
+      values['end_address'] = endAddress;
+    }
+    await db.update(
+      'local_trips',
+      values,
+      where: 'local_id = ?',
+      whereArgs: [localId],
+    );
+  }
+
   /// Caches a server-retrieved trip to local SQLite
   Future<void> cacheServerTrip(TripRecord trip) async {
     final db = await database;
