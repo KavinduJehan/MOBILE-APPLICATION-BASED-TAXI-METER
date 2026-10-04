@@ -56,7 +56,10 @@ class _IncomingRequestsScreenState extends State<IncomingRequestsScreen> {
   @override
   Widget build(BuildContext context) {
     return AppShellScaffold(
-      appBar: AppBar(title: const Text('Incoming Requests')),
+      appBar: AppBar(
+        leading: tabBackButton(context),
+        title: const Text('Incoming Requests'),
+      ),
       child: RefreshIndicator(
         onRefresh: () => _load(),
         child: ListView(

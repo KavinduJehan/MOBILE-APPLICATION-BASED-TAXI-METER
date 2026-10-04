@@ -74,6 +74,9 @@ class TripProgressScreen extends StatefulWidget {
 class _TripProgressScreenState extends State<TripProgressScreen> {
   final _repository = const TripRepository();
   GoogleMapController? _mapController;
+  BitmapDescriptor _driverMarkerIcon = BitmapDescriptor.defaultMarkerWithHue(
+    BitmapDescriptor.hueAzure,
+  );
   LatLng? _driverPosition;
   List<LatLng> _routePoints = const [];
   bool _loadingRoute = false;
@@ -108,8 +111,17 @@ class _TripProgressScreenState extends State<TripProgressScreen> {
   void initState() {
     super.initState();
     _driverPosition = _resolveDriverInitial();
+    _loadDriverMarkerIcon();
     _initSocketAndTrip();
     _loadRoadRoute();
+  }
+
+  Future<void> _loadDriverMarkerIcon() async {
+    final icon = await BitmapDescriptor.asset(
+      const ImageConfiguration(size: Size(48, 48)),
+      'icons/tuktuk.png',
+    );
+    if (mounted) setState(() => _driverMarkerIcon = icon);
   }
 
   LatLng? _resolveDriverInitial() {
@@ -256,7 +268,7 @@ class _TripProgressScreenState extends State<TripProgressScreen> {
         Marker(
           markerId: const MarkerId('driver'),
           position: _driverPosition!,
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+          icon: _driverMarkerIcon,
           infoWindow: InfoWindow(title: '$driverName ($vehicleNumber)'),
           zIndexInt: 2,
         ),

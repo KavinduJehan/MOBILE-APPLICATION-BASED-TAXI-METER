@@ -72,15 +72,37 @@ class RideRequest {
         'ratePerKm',
         'driverRate',
       ]),
-      suggestedRatePerKm: json['suggestedRatePerKm'] is num
-          ? (json['suggestedRatePerKm'] as num).toDouble()
-          : (json['suggestedRate'] is num
-                ? (json['suggestedRate'] as num).toDouble()
-                : null),
+      // Push payloads carry every value as a string ('' when absent).
+      suggestedRatePerKm: _optionalDouble(json['suggestedRatePerKm']) ??
+          _optionalDouble(json['suggestedRate']),
       status: readString(json, ['status'], fallback: 'pending'),
       createdAt: readDateTime(json, ['createdAt', 'requestedAt']),
     );
   }
 
+  static double? _optionalDouble(Object? value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+
   double fareAt(double ratePerKm) => ratePerKm * estimatedDistanceKm;
+
+  /// Round-trips through [RideRequest.fromJson]; used as notification payload.
+  Map<String, dynamic> toJson() => {
+    '_id': id,
+    if (customerId != null) 'customer': customerId,
+    'customerName': customerName,
+    'pickupAddress': pickupAddress,
+    'destinationAddress': destinationAddress,
+    'pickupLat': pickupLatitude,
+    'pickupLng': pickupLongitude,
+    'destLat': destinationLatitude,
+    'destLng': destinationLongitude,
+    'estimatedDistanceKm': estimatedDistanceKm,
+    'driverRatePerKm': driverRatePerKm,
+    if (suggestedRatePerKm != null) 'suggestedRatePerKm': suggestedRatePerKm,
+    'status': status,
+    if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),
+  };
 }

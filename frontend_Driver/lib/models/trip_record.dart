@@ -25,24 +25,75 @@ class TripRecord {
   final String status;
   final DateTime? date;
   final String? receiptNumber;
+
   /// Non-null when the trip was priced under AUTO mode.
   final Map<String, dynamic>? surgeBreakdown;
 
   factory TripRecord.fromJson(Map<String, dynamic> json) {
     return TripRecord(
       id: readString(json, ['id', '_id', 'tripId']),
-      customerName: readString(json, ['customerName', 'passengerName'], fallback: 'Customer'),
-      startAddress: readString(json, ['startAddress', 'pickupAddress', 'pickup']),
-      endAddress: readString(json, ['endAddress', 'destinationAddress', 'destination']),
+      customerName: readString(json, [
+        'customerName',
+        'passengerName',
+      ], fallback: 'Customer'),
+      startAddress: readString(json, [
+        'startAddress',
+        'startLocation',
+        'pickupAddress',
+        'pickup',
+      ]),
+      endAddress: readString(json, [
+        'endAddress',
+        'endLocation',
+        'destinationAddress',
+        'destination',
+      ]),
       distanceKm: readDouble(json, ['distanceKm', 'distance']),
       ratePerKm: readDouble(json, ['ratePerKm', 'rate']),
       fare: readDouble(json, ['fare', 'totalFare', 'amount']),
       status: readString(json, ['status'], fallback: 'completed'),
-      date: readDateTime(json, ['date', 'createdAt', 'completedAt', 'endedAt']),
-      receiptNumber: readString(json, ['receiptNumber', 'receiptId'], fallback: ''),
+      date: readDateTime(json, [
+        'endTime',
+        'completedAt',
+        'endedAt',
+        'date',
+        'createdAt',
+      ]),
+      receiptNumber: readString(json, [
+        'receiptNumber',
+        'receiptId',
+      ], fallback: ''),
       surgeBreakdown: readMap(json, ['surgeBreakdown']),
     );
   }
 
   double get estimatedFare => distanceKm * ratePerKm;
+
+  TripRecord copyWith({
+    String? id,
+    String? customerName,
+    String? startAddress,
+    String? endAddress,
+    double? distanceKm,
+    double? ratePerKm,
+    double? fare,
+    String? status,
+    DateTime? date,
+    String? receiptNumber,
+    Map<String, dynamic>? surgeBreakdown,
+  }) {
+    return TripRecord(
+      id: id ?? this.id,
+      customerName: customerName ?? this.customerName,
+      startAddress: startAddress ?? this.startAddress,
+      endAddress: endAddress ?? this.endAddress,
+      distanceKm: distanceKm ?? this.distanceKm,
+      ratePerKm: ratePerKm ?? this.ratePerKm,
+      fare: fare ?? this.fare,
+      status: status ?? this.status,
+      date: date ?? this.date,
+      receiptNumber: receiptNumber ?? this.receiptNumber,
+      surgeBreakdown: surgeBreakdown ?? this.surgeBreakdown,
+    );
+  }
 }

@@ -169,6 +169,13 @@ const endTrip = async (req, res) => {
       });
     }
 
+    if (req.body?.distanceKm != null && Number(req.body.distanceKm) > 0) {
+      trip.distanceKm = Number(req.body.distanceKm);
+      trip.totalFare = Number(req.body.totalFare) > 0
+        ? Number(req.body.totalFare)
+        : parseFloat((trip.distanceKm * trip.ratePerKm).toFixed(2));
+    }
+
     trip.status = 'completed';
     trip.endTime = new Date();
     await trip.save();
@@ -275,14 +282,23 @@ const getIncome = async (req, res) => {
     );
     const totalTrips = trips.length;
 
-    // Group earnings by calendar date (YYYY-MM-DD)
+    // Group completed fares by Sri Lankan calendar date.
     const byDay = {};
+    const tripsByDay = {};
+    const dateFormatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Colombo', year: 'numeric', month: '2-digit', day: '2-digit',
+    });
+    const today = dateFormatter.format(new Date());
+    const todayTrips = [];
     for (const t of trips) {
-      const day = t.endTime
-        ? t.endTime.toISOString().slice(0, 10)
-        : t.createdAt.toISOString().slice(0, 10);
+      const day = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Colombo', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(t.endTime || t.createdAt);
       byDay[day] = parseFloat(((byDay[day] || 0) + t.totalFare).toFixed(2));
+      tripsByDay[day] = (tripsByDay[day] || 0) + 1;
+      if (day === today) todayTrips.push(t);
     }
+    todayTrips.sort((a, b) => (b.endTime || b.createdAt) - (a.endTime || a.createdAt));
 
     res.json({
       totalEarnings,
@@ -290,6 +306,8 @@ const getIncome = async (req, res) => {
       completedTrips: totalTrips,
       cancelledTrips,
       byDay,
+      tripsByDay,
+      todayTrips,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -326,21 +344,25 @@ const syncOfflineTrips = async (req, res) => {
       let surgeBreakdown = item.surgeBreakdown || null;
       const config = await SystemConfig.findOne().lean();
       const effectivePricingMode = config?.rateMode || driver.pricingMode || 'ADMIN';
-      if (effectivePricingMode === 'ADMIN') {
-        ratePerKm = config?.autoBaseRate || driver.ratePerKm || 100;
-        surgeBreakdown = null;
-      } else if (effectivePricingMode === 'AUTO') {
-        const priceResult = await computeAutoRate({
-          lat: driver.location?.coordinates?.[1] ?? null,
-          lng: driver.location?.coordinates?.[0] ?? null,
-        });
-        ratePerKm = priceResult.effectiveRate;
-        surgeBreakdown = priceResult.breakdown;
+      if (!ratePerKm || ratePerKm <= 0) {
+        if (effectivePricingMode === 'ADMIN') {
+          ratePerKm = config?.autoBaseRate || driver.ratePerKm || 100;
+          surgeBreakdown = null;
+        } else if (effectivePricingMode === 'AUTO') {
+          const priceResult = await computeAutoRate({
+            lat: driver.location?.coordinates?.[1] ?? null,
+            lng: driver.location?.coordinates?.[0] ?? null,
+          });
+          ratePerKm = priceResult.effectiveRate;
+          surgeBreakdown = priceResult.breakdown;
+        }
       }
       if (!Number.isFinite(ratePerKm) || ratePerKm <= 0) {
         return res.status(400).json({ message: 'A valid rate is required to sync offline trips' });
       }
-      const totalFare = parseFloat((distanceKm * ratePerKm).toFixed(2));
+      const totalFare = (Number(item.totalFare) > 0)
+        ? Number(item.totalFare)
+        : parseFloat((distanceKm * ratePerKm).toFixed(2));
       const startTime = item.startTime ? new Date(item.startTime) : (item.date ? new Date(item.date) : new Date());
       const endTime = item.endTime ? new Date(item.endTime) : new Date();
 

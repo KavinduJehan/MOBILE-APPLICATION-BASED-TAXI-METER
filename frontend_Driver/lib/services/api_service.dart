@@ -74,7 +74,7 @@ class ApiService {
     return _asMap(response.data);
   }
 
-  Future<String> register({
+  Future<AuthResult> register({
     required String name,
     required String phone,
     required String email,
@@ -99,7 +99,17 @@ class ApiService {
       },
     );
     final data = _asMap(response.data);
-    return _readString(data, ['message'], fallback: 'Account created.');
+    final token = _readString(data, ['token', 'jwt', 'accessToken']);
+    if (token.isEmpty) {
+      throw ApiException('Registration succeeded but no token was returned.');
+    }
+    final profileMap = _readMap(data, ['driver', 'user', 'profile']);
+    final message = _readString(data, ['message']);
+    return AuthResult(
+      token: token,
+      profile: profileMap == null ? null : DriverProfile.fromJson(profileMap),
+      message: message.isEmpty ? null : message,
+    );
   }
 
   Future<DriverProfile> getProfile() async {
@@ -252,14 +262,25 @@ class ApiService {
     return TripRecord.fromJson(tripMap);
   }
 
-  Future<TripCompletionResult> endTrip(String tripId) async {
-    final response = await _request('PATCH', '/trips/$tripId/end');
+  Future<TripCompletionResult> endTrip(
+    String tripId, {
+    double? distanceKm,
+    double? totalFare,
+  }) async {
+    final Map<String, dynamic> body = {};
+    if (distanceKm != null && distanceKm > 0) body['distanceKm'] = distanceKm;
+    if (totalFare != null && totalFare > 0) body['totalFare'] = totalFare;
+
+    final response = await _request(
+      'PATCH',
+      '/trips/$tripId/end',
+      data: body.isNotEmpty ? body : null,
+    );
     final data = _asMap(response.data);
     final tripMap = _readMap(data, ['trip']) ?? data;
     return TripCompletionResult(
       trip: TripRecord.fromJson(tripMap),
-      receiptNumber: _readString(data, [
-        'receipt',
+      receiptNumber: _readString(_readMap(data, ['receipt']) ?? data, [
         'receiptNumber',
         'receiptId',
       ], fallback: ''),

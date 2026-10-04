@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/trip_record.dart';
+import '../utils/trip_place_label.dart';
 import '../providers/auth_provider.dart';
 import '../services/offline_database.dart';
 import '../services/sync_service.dart';
@@ -107,6 +108,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
   Widget build(BuildContext context) {
     return AppShellScaffold(
       appBar: AppBar(
+        leading: tabBackButton(context),
         title: const Text('Trip History'),
         actions: [
           if (_pendingSyncCount > 0)
@@ -330,7 +332,7 @@ class _TripCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            Text('${trip.startAddress} → ${trip.endAddress}', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.white70)),
+            Text('${tripPlaceLabel(trip.startAddress)} → ${tripPlaceLabel(trip.endAddress)}', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.white70)),
             const SizedBox(height: 12),
             Row(
               children: [

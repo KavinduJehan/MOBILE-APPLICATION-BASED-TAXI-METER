@@ -1,17 +1,19 @@
 import '../utils/json_helpers.dart';
+import 'trip_record.dart';
 
 class IncomeByDay {
-  IncomeByDay({required this.label, required this.amount});
+  IncomeByDay({required this.label, required this.amount, this.trips});
 
   final String label;
   final double amount;
+  final int? trips;
+  DateTime? get date => DateTime.tryParse(label);
 
-  factory IncomeByDay.fromJson(Map<String, dynamic> json) {
-    return IncomeByDay(
-      label: readString(json, ['label', 'day', 'date']),
-      amount: readDouble(json, ['amount', 'earnings', 'value']),
-    );
-  }
+  factory IncomeByDay.fromJson(Map<String, dynamic> json) => IncomeByDay(
+    label: readString(json, ['label', 'day', 'date']),
+    amount: readDouble(json, ['amount', 'earnings', 'value']),
+    trips: json['trips'] is num ? (json['trips'] as num).toInt() : null,
+  );
 }
 
 class IncomeSummary {
@@ -21,6 +23,7 @@ class IncomeSummary {
     this.completedTrips = 0,
     this.cancelledTrips = 0,
     required this.byDay,
+    this.todayTrips,
   });
 
   final double totalEarnings;
@@ -28,18 +31,66 @@ class IncomeSummary {
   final int completedTrips;
   final int cancelledTrips;
   final List<IncomeByDay> byDay;
+  final List<TripRecord>? todayTrips;
 
   factory IncomeSummary.fromJson(Map<String, dynamic> json) {
-    final days = readMapList(json, ['byDay', 'days', 'series']).map(IncomeByDay.fromJson).toList();
+    final raw = json['byDay'];
+    final counts = json['tripsByDay'];
+    final days = raw is Map
+        ? raw.entries
+              .map(
+                (entry) => IncomeByDay(
+                  label: entry.key.toString(),
+                  amount: num.tryParse('${entry.value}')?.toDouble() ?? 0,
+                  trips: counts is Map && counts[entry.key] is num
+                      ? (counts[entry.key] as num).toInt()
+                      : null,
+                ),
+              )
+              .toList()
+        : readMapList(json, [
+            'byDay',
+            'days',
+            'series',
+          ]).map(IncomeByDay.fromJson).toList();
+    days.sort((a, b) => a.label.compareTo(b.label));
     final total = readDouble(json, ['totalTrips', 'trips', 'count']).round();
-    final completed = readDouble(json, ['completedTrips', 'completed']).round();
-    final cancelled = readDouble(json, ['cancelledTrips', 'canceledTrips', 'cancelled']).round();
     return IncomeSummary(
       totalEarnings: readDouble(json, ['totalEarnings', 'earnings', 'total']),
       totalTrips: total,
-      completedTrips: completed > 0 ? completed : total,
-      cancelledTrips: cancelled,
+      completedTrips: readDouble(json, [
+        'completedTrips',
+        'completed',
+      ], fallback: total.toDouble()).round(),
+      cancelledTrips: readDouble(json, [
+        'cancelledTrips',
+        'canceledTrips',
+        'cancelled',
+      ]).round(),
       byDay: days,
+      todayTrips: json['todayTrips'] is List
+          ? readMapList(json, ['todayTrips']).map(TripRecord.fromJson).toList()
+          : null,
     );
+  }
+
+  /// Rolling calendar days, including today and days without completed rides.
+  List<IncomeByDay> daysForPeriod(int length, DateTime now) {
+    final today = DateTime(now.year, now.month, now.day);
+    final amounts = <String, IncomeByDay>{
+      for (final day in byDay) day.label: day,
+    };
+    final hasCounts = byDay.every((day) => day.trips != null);
+    return List.generate(length, (index) {
+      final date = DateTime(
+        today.year,
+        today.month,
+        today.day - length + index + 1,
+      );
+      final key =
+          '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+      return amounts[key] ??
+          IncomeByDay(label: key, amount: 0, trips: hasCounts ? 0 : null);
+    });
   }
 }

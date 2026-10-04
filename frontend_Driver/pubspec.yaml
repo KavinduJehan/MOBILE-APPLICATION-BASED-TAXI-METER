@@ -51,6 +51,7 @@ dependencies:
 
   # QR code generation
   qr_flutter: ^4.1.0
+  flutter_local_notifications: ^22.3.1
 
 dev_dependencies:
   flutter_test:
