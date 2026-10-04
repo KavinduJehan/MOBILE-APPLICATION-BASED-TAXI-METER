@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api';
 
 export default function Login() {
-  const [mode, setMode] = useState('login'); // 'login' | 'forgot' | 'reset'
+  const [mode, setMode] = useState('login'); // 'login' | 'first-login-change' | 'forgot' | 'reset'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
@@ -29,9 +29,41 @@ export default function Login() {
         return;
       }
       localStorage.setItem('adminToken', token);
-      navigate('/drivers');
+      if (driver.requiresPasswordChange) {
+        setMode('first-login-change');
+        setPassword('');
+        setMessage('Set a new password to finish securing your admin account.');
+      } else {
+        navigate('/drivers');
+      }
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFirstLoginPasswordChange = async (e) => {
+    e.preventDefault();
+    setError('');
+    setMessage('');
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+    if (newPassword.length < 12) {
+      setError('Password must be at least 12 characters');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await api.put('/admin/change-password', { newPassword });
+      setNewPassword('');
+      setConfirmPassword('');
+      navigate('/drivers');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to change password');
     } finally {
       setLoading(false);
     }
@@ -96,6 +128,30 @@ export default function Login() {
       <div style={styles.card}>
         <h2 style={styles.title}>Taxi Meter — Admin</h2>
         
+        {mode === 'first-login-change' && (
+          <>
+            <p style={styles.subtitle}>Choose a new password before continuing. Use at least 12 characters.</p>
+            {message && <p style={styles.success}>{message}</p>}
+            <form onSubmit={handleFirstLoginPasswordChange}>
+              <div style={styles.field}>
+                <label style={styles.label}>New Password</label>
+                <input style={styles.input} type="password" value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)} required minLength={12} autoFocus />
+              </div>
+              <div style={styles.field}>
+                <label style={styles.label}>Confirm New Password</label>
+                <input style={styles.input} type="password" value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)} required minLength={12} />
+              </div>
+              {error && <p style={styles.error}>{error}</p>}
+              <button style={{ ...styles.button, ...(loading ? styles.buttonDisabled : {}) }}
+                type="submit" disabled={loading}>
+                {loading ? 'Changing Password...' : 'Set New Password'}
+              </button>
+            </form>
+          </>
+        )}
+
         {mode === 'login' && (
           <>
             <p style={styles.subtitle}>Sign in with your regulator account to continue.</p>

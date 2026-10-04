@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const Driver = require('../models/Driver');
 
 const protect = (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -23,4 +24,22 @@ const requireRole = (...roles) => (req, res, next) => {
   next();
 };
 
-module.exports = { protect, requireRole };
+const requirePasswordChangeComplete = async (req, res, next) => {
+  try {
+    const admin = await Driver.findById(req.user.id).select('role requiresPasswordChange');
+    if (!admin || admin.role !== 'regulator') {
+      return res.status(401).json({ message: 'Admin account not found' });
+    }
+    if (admin.requiresPasswordChange) {
+      return res.status(403).json({
+        code: 'PASSWORD_CHANGE_REQUIRED',
+        message: 'Change your password before using admin features',
+      });
+    }
+    next();
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+module.exports = { protect, requireRole, requirePasswordChangeComplete };
