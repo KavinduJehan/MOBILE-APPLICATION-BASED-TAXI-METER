@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../models/trip_record.dart';
 import '../providers/auth_provider.dart';
 import '../services/offline_database.dart';
+import '../services/sync_service.dart';
 import '../widgets/app_widgets.dart';
 import 'trip_summary_screen.dart';
 
@@ -670,6 +671,9 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                   status: 'completed',
                   date: completedTrip.date,
                 );
+
+                // Auto-sync offline trips in background if internet is active
+                unawaited(SyncService.instance.syncPendingTrips(auth.api).then((_) {}, onError: (_) {}));
 
                 // If online and not an offline-generated id, attempt cloud completion
                 if (!trip.id.startsWith('offline-')) {
