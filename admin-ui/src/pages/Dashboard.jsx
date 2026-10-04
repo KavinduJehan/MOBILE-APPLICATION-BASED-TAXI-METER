@@ -12,6 +12,12 @@ export default function Dashboard() {
   const [hoveredHour, setHoveredHour] = useState(null);
   const [selectedWeekDate, setSelectedWeekDate] = useState(new Date());
   const [hoveredDay, setHoveredDay] = useState(null);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordMessage, setPasswordMessage] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [savingPassword, setSavingPassword] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -82,6 +88,40 @@ export default function Dashboard() {
   const handleLogout = () => {
     localStorage.removeItem('adminToken');
     navigate('/login');
+  };
+
+  const handleChangePassword = async (event) => {
+    event.preventDefault();
+    setPasswordMessage('');
+    setPasswordError('');
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Passwords do not match.');
+      return;
+    }
+    if (newPassword.length < 12) {
+      setPasswordError('Password must be at least 12 characters.');
+      return;
+    }
+
+    setSavingPassword(true);
+    try {
+      await api.put('/admin/change-password', { newPassword });
+      setPasswordMessage('Password changed successfully.');
+      setNewPassword('');
+      setConfirmPassword('');
+      setShowChangePassword(false);
+    } catch (err) {
+      const serverMessage = err.response?.data?.message;
+      if (serverMessage) {
+        setPasswordError(serverMessage);
+      } else if (err.response) {
+        setPasswordError(`Password change failed (HTTP ${err.response.status}).`);
+      } else {
+        setPasswordError('Could not reach the API. Check your connection and try again.');
+      }
+    } finally {
+      setSavingPassword(false);
+    }
   };
 
   return (
@@ -262,6 +302,52 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
+
+            <section style={styles.accountPanel} aria-labelledby="account-security-title">
+              <div style={styles.panelHeader}>
+                <h3 id="account-security-title" style={styles.panelTitle}>Account security</h3>
+                <span style={styles.panelPill}>Admin account</span>
+              </div>
+              {passwordMessage && <p style={styles.passwordSuccess} role="status">{passwordMessage}</p>}
+              {!showChangePassword ? (
+                <button style={styles.actionBtn} onClick={() => {
+                  setPasswordMessage('');
+                  setPasswordError('');
+                  setShowChangePassword(true);
+                }}>
+                  Change Password
+                </button>
+              ) : (
+                <form style={styles.passwordForm} onSubmit={handleChangePassword}>
+                  <label style={styles.passwordField}>
+                    New Password
+                    <input style={styles.passwordInput} type="password" value={newPassword}
+                      onChange={(event) => setNewPassword(event.target.value)} required minLength={12} autoComplete="new-password" />
+                  </label>
+                  <label style={styles.passwordField}>
+                    Confirm New Password
+                    <input style={styles.passwordInput} type="password" value={confirmPassword}
+                      onChange={(event) => setConfirmPassword(event.target.value)} required minLength={12} autoComplete="new-password" />
+                  </label>
+                  {passwordError && <p style={styles.passwordError} role="alert">{passwordError}</p>}
+                  <div style={styles.actions}>
+                    <button style={styles.actionBtn} type="submit" disabled={savingPassword}>
+                      {savingPassword ? 'Saving...' : 'Save New Password'}
+                    </button>
+                    <button style={styles.cancelBtn} type="button" disabled={savingPassword}
+                      onClick={() => {
+                        setShowChangePassword(false);
+                        setNewPassword('');
+                        setConfirmPassword('');
+                        setPasswordError('');
+                      }}>
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+              <p style={styles.passwordHint}>Use at least 12 characters.</p>
+            </section>
           </>
         )}
       </div>
@@ -342,6 +428,14 @@ const styles = {
     border: '1px solid rgba(108, 124, 255, 0.12)',
     animation: 'fadeUp 0.55s ease-out',
   },
+  accountPanel: {
+    background: '#fff',
+    borderRadius: '16px',
+    padding: '1rem 1.1rem',
+    boxShadow: '0 10px 24px rgba(23, 34, 71, 0.08)',
+    border: '1px solid rgba(108, 124, 255, 0.12)',
+    marginTop: '1rem',
+  },
   panelHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' },
   panelTitle: { margin: 0, fontSize: '1rem', color: '#1a1a2e' },
   panelPill: { fontSize: '0.76rem', padding: '0.26rem 0.6rem', borderRadius: '999px', background: '#eef2ff', color: '#5b6cff' },
@@ -365,6 +459,13 @@ const styles = {
   dropdownBtn: { marginTop: '0.4rem', alignSelf: 'flex-start', background: '#fff', border: '1px solid #ced7ff', color: '#3c57ff', cursor: 'pointer', fontWeight: 700, padding: '0.5rem 0.85rem', borderRadius: '12px', textAlign: 'left', boxShadow: '0 6px 14px rgba(60, 87, 255, 0.12)' },
   actions: { display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.4rem' },
   actionBtn: { background: 'linear-gradient(135deg, #1a1a2e, #27314d)', color: '#fff', border: 'none', padding: '0.7rem 0.95rem', borderRadius: '10px', cursor: 'pointer', transition: 'transform 0.2s ease, box-shadow 0.2s ease' },
+  cancelBtn: { background: '#fff', color: '#27314d', border: '1px solid #cbd2e3', padding: '0.7rem 0.95rem', borderRadius: '10px', cursor: 'pointer' },
+  passwordForm: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.8rem', alignItems: 'end' },
+  passwordField: { display: 'grid', gap: '0.35rem', color: '#5b6078', fontSize: '0.9rem' },
+  passwordInput: { width: '100%', boxSizing: 'border-box', padding: '0.65rem 0.75rem', border: '1px solid #cbd2e3', borderRadius: '8px', fontSize: '1rem' },
+  passwordHint: { color: '#8990a6', fontSize: '0.82rem', marginBottom: 0 },
+  passwordError: { color: '#c0392b', margin: 0, gridColumn: '1 / -1' },
+  passwordSuccess: { color: '#15803d', margin: '0 0 0.7rem' },
   info: { color: '#888', marginTop: '1rem' },
   error: { color: '#c0392b', marginTop: '1rem' },
   weekSelectorContainer: { display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.8rem', padding: '0.8rem', background: '#f8fafb', borderRadius: '12px', justifyContent: 'center' },

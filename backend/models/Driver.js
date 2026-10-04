@@ -12,6 +12,7 @@ const driverSchema = new mongoose.Schema(
     licenseNumber: { type: String, required: true, unique: true },
     vehicleNumber: { type: String, required: true },
     role: { type: String, enum: ['driver', 'regulator'], default: 'driver' },
+    requiresPasswordChange: { type: Boolean, default: false },
     isVerified: { type: Boolean, default: false },
     qrToken: { type: String, unique: true, sparse: true }, // opaque lookup token embedded in QR
     qrCode: { type: String },                 // Base64 or URL to QR image
@@ -47,6 +48,8 @@ driverSchema.index(
 
 driverSchema.pre('save', async function (next) {
   if (!this.password || !this.isModified('password')) return next();
+  // Provisioning code may hash credentials before save and mark them as trusted hashes.
+  if (this.$locals.passwordIsHashed) return next();
   this.password = await bcrypt.hash(this.password, 12);
   next();
 });

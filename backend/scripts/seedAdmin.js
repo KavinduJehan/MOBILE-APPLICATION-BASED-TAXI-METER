@@ -11,6 +11,7 @@
 
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 const Driver = require('../models/Driver');
 
 const {
@@ -47,7 +48,19 @@ if (!MONGO_URI) {
   });
   if (existing) {
     if (existing.email === ADMIN_EMAIL.toLowerCase()) {
-      console.log(`Admin account already exists for ${ADMIN_EMAIL}. No changes made.`);
+      // Migrate admins created before the first-login flag existed.
+      const storedAdmin = await Driver.collection.findOne(
+        { _id: existing._id },
+        { projection: { requiresPasswordChange: 1 } }
+      );
+      if (existing.role === 'regulator' && storedAdmin.requiresPasswordChange === undefined) {
+        await Driver.collection.updateOne(
+          { _id: existing._id },
+          { $set: { requiresPasswordChange: true } }
+        );
+        console.log('Existing admin will be required to change the password at next login.');
+      }
+      console.log(`Admin account already exists for ${ADMIN_EMAIL}. Password left unchanged.`);
     } else {
       console.error(
         `ERROR: ADMIN_PHONE ${ADMIN_PHONE} is already used by another account. ` +
@@ -58,16 +71,19 @@ if (!MONGO_URI) {
     process.exit(existing.email === ADMIN_EMAIL.toLowerCase() ? 0 : 1);
   }
 
-  await Driver.create({
+  const seededAdmin = new Driver({
     name: ADMIN_NAME,
     email: ADMIN_EMAIL,
     phone: ADMIN_PHONE,
-    password: ADMIN_PASSWORD,
+    password: await bcrypt.hash(ADMIN_PASSWORD, 12),
     licenseNumber: `ADMIN-${Date.now()}`,
     vehicleNumber: 'ADMIN',
     role: 'regulator',
     isVerified: true,
+    requiresPasswordChange: true,
   });
+  seededAdmin.$locals.passwordIsHashed = true;
+  await seededAdmin.save();
 
   console.log(`Regulator account created: ${ADMIN_EMAIL}`);
   await mongoose.disconnect();

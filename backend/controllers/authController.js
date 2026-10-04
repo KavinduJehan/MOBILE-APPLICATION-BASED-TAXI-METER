@@ -41,7 +41,8 @@ const register = async (req, res) => {
 };
 
 const login = async (req, res) => {
-  const { email, password } = req.body;
+  const email = String(req.body.email || '').trim().toLowerCase();
+  const { password } = req.body;
   if (!email || !password) return res.status(400).json({ message: 'Email and password required' });
 
   try {
@@ -50,7 +51,16 @@ const login = async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
     const token = signToken({ id: driver._id, role: driver.role });
-    res.json({ token, driver: { id: driver._id, name: driver.name, email, role: driver.role } });
+    res.json({
+      token,
+      driver: {
+        id: driver._id,
+        name: driver.name,
+        email: driver.email,
+        role: driver.role,
+        requiresPasswordChange: driver.role === 'regulator' && driver.requiresPasswordChange,
+      },
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
