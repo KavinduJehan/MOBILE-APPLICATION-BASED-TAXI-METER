@@ -3,6 +3,7 @@ const router = express.Router();
 const { protect } = require('../middleware/auth');
 const {
   createTrip,
+  markArrived,
   startTrip,
   endTrip,
   cancelTrip,
@@ -14,6 +15,7 @@ const {
 
 router.post('/', protect, createTrip);
 router.post('/sync', protect, syncOfflineTrips);
+router.patch('/:id/arrive', protect, markArrived);
 router.patch('/:id/start', protect, startTrip);
 router.patch('/:id/end', protect, endTrip);
 router.patch('/:id/cancel', protect, cancelTrip);

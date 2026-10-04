@@ -25,6 +25,22 @@ const canAccessTrip = (trip, req) => {
 const populateTrip = (query) =>
   query.populate('driver', 'name vehicleNumber vehicleType phone area ratePerKm');
 
+// Trip details for the people on the trip: also carries the driver's live
+// position so the customer can follow the driver without the socket.
+const populateLiveTrip = (query) =>
+  query.populate('driver', 'name vehicleNumber vehicleType phone area ratePerKm location');
+
+// Tells both sides (and anyone following the trip) about a trip event.
+const emitToTrip = (req, trip, event, payload) => {
+  const io = req.app?.get('io');
+  if (!io) return;
+  const customerId = trip.customer?._id || trip.customer;
+  const driverId = trip.driver?._id || trip.driver;
+  if (customerId) io.to(customerId.toString()).emit(event, payload);
+  if (driverId) io.to(driverId.toString()).emit(event, payload);
+  io.to(trip._id.toString()).emit(event, payload);
+};
+
 const createReceiptForTrip = async (trip) => {
   const durationMinutes = trip.endTime && trip.startTime
     ? Math.max(0, Math.round((trip.endTime - trip.startTime) / 60000))
@@ -132,6 +148,34 @@ const createTrip = async (req, res) => {
   }
 };
 
+// PATCH /api/trips/:id/arrive
+// The driver has reached the pickup point and is waiting for the customer.
+const markArrived = async (req, res) => {
+  try {
+    const trip = await Trip.findById(req.params.id);
+    if (!trip) return res.status(404).json({ message: 'Trip not found' });
+    if (trip.driver?.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+    if (trip.status === 'completed' || trip.status === 'cancelled') {
+      return res.status(409).json({ message: 'Trip is no longer active' });
+    }
+
+    if (!trip.arrivedAt) {
+      trip.arrivedAt = new Date();
+      await trip.save();
+      emitToTrip(req, trip, 'driver_arrived', {
+        tripId: trip._id,
+        arrivedAt: trip.arrivedAt,
+      });
+    }
+
+    res.json({ trip: await populateTrip(Trip.findById(trip._id)) });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 const startTrip = async (req, res) => {
   try {
     const trip = await Trip.findById(req.params.id);
@@ -148,7 +192,14 @@ const startTrip = async (req, res) => {
 
     trip.status = 'ongoing';
     trip.startTime = trip.startTime || new Date();
+    trip.pickedUpAt = trip.pickedUpAt || new Date();
+    trip.arrivedAt = trip.arrivedAt || trip.pickedUpAt;
     await trip.save();
+
+    emitToTrip(req, trip, 'trip_started', {
+      tripId: trip._id,
+      pickedUpAt: trip.pickedUpAt,
+    });
 
     res.json({ trip: await populateTrip(Trip.findById(trip._id)) });
   } catch (err) {
@@ -181,13 +232,12 @@ const endTrip = async (req, res) => {
     const receipt = await createReceiptForTrip(trip);
     const populatedTrip = await populateTrip(Trip.findById(trip._id));
 
-    const io = req.app?.get('io');
-    if (io) {
-      const payload = { tripId: trip._id, trip: populatedTrip, receipt };
-      if (trip.customer) io.to(trip.customer.toString()).emit('trip_ended', payload);
-      if (trip.driver) io.to(trip.driver.toString()).emit('trip_ended', payload);
-      io.to(trip._id.toString()).emit('trip_ended', payload);
-    }
+    emitToTrip(req, trip, 'trip_ended', {
+      tripId: trip._id,
+      trip: populatedTrip,
+      receipt,
+      endedBy: isCustomer(req) ? 'customer' : 'driver',
+    });
 
     res.json({ trip: populatedTrip, receipt });
   } catch (err) {
@@ -223,6 +273,11 @@ const cancelTrip = async (req, res) => {
       { $set: { isActive: false } }
     );
 
+    emitToTrip(req, trip, 'trip_cancelled', {
+      tripId: trip._id,
+      cancelledBy: isCustomer(req) ? 'customer' : 'driver',
+    });
+
     return res.json({ trip: await populateTrip(Trip.findById(trip._id)) });
   } catch (err) {
     return res.status(500).json({ message: err.message });
@@ -231,7 +286,7 @@ const cancelTrip = async (req, res) => {
 
 const getTripDetails = async (req, res) => {
   try {
-    const trip = await populateTrip(Trip.findById(req.params.id));
+    const trip = await populateLiveTrip(Trip.findById(req.params.id));
     if (!trip) return res.status(404).json({ message: 'Trip not found' });
     if (!canAccessTrip(trip, req)) return res.status(403).json({ message: 'Forbidden' });
     res.json(trip);
@@ -412,6 +467,7 @@ const syncOfflineTrips = async (req, res) => {
 
 module.exports = {
   createTrip,
+  markArrived,
   startTrip,
   endTrip,
   cancelTrip,
