@@ -7,6 +7,10 @@ typedef OnRequestResponseCallback = void Function(Map<String, dynamic> data);
 typedef OnDriverLocationCallback = void Function(Map<String, dynamic> data);
 typedef OnTripEndedCallback = void Function(Map<String, dynamic> data);
 
+/// [event] is 'driver_arrived', 'trip_started' or 'trip_cancelled'.
+typedef OnTripEventCallback =
+    void Function(String event, Map<String, dynamic> data);
+
 class CustomerSocketService {
   CustomerSocketService._();
   static final CustomerSocketService instance = CustomerSocketService._();
@@ -17,6 +21,7 @@ class CustomerSocketService {
   OnRequestResponseCallback? _onResponse;
   OnDriverLocationCallback? _onDriverLocation;
   OnTripEndedCallback? _onTripEnded;
+  OnTripEventCallback? _onTripEvent;
 
   bool get isConnected => _socket?.connected ?? false;
 
@@ -68,6 +73,19 @@ class CustomerSocketService {
       }
     });
 
+    for (final event in const [
+      'driver_arrived',
+      'trip_started',
+      'trip_cancelled',
+    ]) {
+      _socket!.on(event, (data) {
+        debugPrint('[CustomerSocket] Received $event: $data');
+        if (_onTripEvent != null && data is Map) {
+          _onTripEvent!(event, Map<String, dynamic>.from(data));
+        }
+      });
+    }
+
     _socket!.onDisconnect((_) {
       debugPrint('[CustomerSocket] Disconnected');
     });
@@ -92,10 +110,12 @@ class CustomerSocketService {
     required String tripId,
     OnDriverLocationCallback? onLocation,
     OnTripEndedCallback? onTripEnded,
+    OnTripEventCallback? onTripEvent,
   }) {
     _tripId = tripId;
     _onDriverLocation = onLocation;
     _onTripEnded = onTripEnded;
+    _onTripEvent = onTripEvent;
 
     _ensureSocket();
     if (_socket!.connected) {
@@ -107,6 +127,7 @@ class CustomerSocketService {
   void stopListeningTrip() {
     _onDriverLocation = null;
     _onTripEnded = null;
+    _onTripEvent = null;
   }
 
   void disconnect() {

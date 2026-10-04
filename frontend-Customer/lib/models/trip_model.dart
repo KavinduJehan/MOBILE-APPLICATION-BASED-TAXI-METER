@@ -39,6 +39,13 @@ class TripModel {
   final double totalFare;
   final String status;
   final DateTime? startTime;
+
+  /// When the driver reached the pickup point.
+  final DateTime? arrivedAt;
+
+  /// When the driver started the ride with the customer on board; null while
+  /// the driver is still on the way to the pickup point.
+  final DateTime? pickedUpAt;
   final DateTime? endTime;
   final DateTime? createdAt;
 
@@ -54,6 +61,8 @@ class TripModel {
     required this.totalFare,
     required this.status,
     required this.startTime,
+    this.arrivedAt,
+    this.pickedUpAt,
     required this.endTime,
     required this.createdAt,
   });
@@ -80,6 +89,8 @@ class TripModel {
       totalFare: _readDouble(json['totalFare'] ?? json['fare']),
       status: (json['status'] ?? 'pending').toString(),
       startTime: _readDate(json['startTime']),
+      arrivedAt: _readDate(json['arrivedAt']),
+      pickedUpAt: _readDate(json['pickedUpAt']),
       endTime: _readDate(json['endTime']),
       createdAt: _readDate(json['createdAt']),
     );
