@@ -5,12 +5,15 @@ import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 
 import '../models/ride_request.dart';
+import '../models/trip_record.dart';
 import '../providers/auth_provider.dart';
+import '../services/counter_offer_tracker.dart';
 import '../services/ride_alert_service.dart';
 import '../services/socket_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_widgets.dart';
 import 'dashboard_screen.dart';
+import 'driver_navigation_screen.dart';
 import 'earnings_screen.dart';
 import 'incoming_requests_screen.dart';
 import 'request_detail_screen.dart';
@@ -151,8 +154,77 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     _knownRequestIds = requests.map((r) => r.id).toSet();
     // Update the badge count live
     if (mounted) setState(() => _pendingRequestCount = requests.length);
+    unawaited(_checkCounterOffers());
     if (firstCheck || freshRequests.isEmpty || !mounted) return;
     _announceRequest(freshRequests.first);
+  }
+
+  /// Picks up the customer's answer to counter-offers the driver sent and then
+  /// walked away from (the request screen watches the one it is showing).
+  Future<void> _checkCounterOffers() async {
+    final tracker = CounterOfferTracker.instance;
+    final waiting = tracker.waitingElsewhere;
+    if (waiting.isEmpty) return;
+    final api = context.read<AuthProvider>().api;
+    final messenger = ScaffoldMessenger.of(context);
+    for (final request in waiting) {
+      late final Map<String, dynamic> data;
+      try {
+        data = await api.getRequestStatus(request.id);
+      } catch (_) {
+        continue;
+      }
+      if (!mounted) return;
+      final status = data['status']?.toString() ?? 'pending';
+      if (status == 'pending') continue;
+      tracker.remove(request.id);
+      final trip = data['trip'];
+      if (status == 'accepted' && trip is Map) {
+        await _showOfferAccepted(
+          request,
+          TripRecord.fromJson(Map<String, dynamic>.from(trip)),
+        );
+      } else {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('${request.customerName} declined your fare offer.'),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _showOfferAccepted(RideRequest request, TripRecord trip) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppTheme.surfaceAlt,
+        surfaceTintColor: Colors.transparent,
+        title: const Text(
+          'Offer accepted',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          '${request.customerName} agreed to Rs. ${trip.ratePerKm.toStringAsFixed(2)} / km '
+          '(fare Rs. ${trip.fare.toStringAsFixed(2)}). The trip is ready to start.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Start navigation'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => DriverNavigationScreen(trip: trip, request: request),
+      ),
+    );
   }
 
   /// Sets up the ringing alert used while the app is in the background, and
@@ -293,6 +365,40 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 ],
               ),
             ),
+            if (request.suggestedRatePerKm != null) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0x22FBBF24),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0x66FBBF24)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.handshake_outlined,
+                      size: 18,
+                      color: Color(0xFFFBBF24),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Customer offers Rs. ${request.suggestedRatePerKm!.toStringAsFixed(2)} / km',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
         actions: [
