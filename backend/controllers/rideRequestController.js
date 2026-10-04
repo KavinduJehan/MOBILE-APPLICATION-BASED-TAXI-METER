@@ -4,7 +4,7 @@ const Driver = require('../models/Driver');
 const Trip = require('../models/Trip');
 const Receipt = require('../models/Receipt');
 const SystemConfig = require('../models/SystemConfig');
-const { computeAutoRate } = require('../services/pricingEngine');
+const { resolveEffectiveRate } = require('../services/effectiveRate');
 
 const activeRideMessage =
   'You already have an active ride. Complete or cancel it before booking another ride.';
@@ -53,19 +53,25 @@ const createRideRequest = async (req, res) => {
     if (!driver.isVerified) return res.status(403).json({ message: 'Driver is not verified' });
 
     const config = await SystemConfig.findOne().lean();
-    const effectivePricingMode = driver.pricingMode || config?.rateMode || 'ADMIN';
+
+    // The quoted rate — the same value the customer was shown for this driver.
+    const quote = await resolveEffectiveRate(driver, config, {
+      lat: Number(pickupLat),
+      lng: Number(pickupLng),
+    });
+    const currentRate = quote.rate;
+    if (!Number.isFinite(currentRate) || currentRate <= 0) {
+      return res.status(400).json({ message: 'The driver does not have a valid rate configured' });
+    }
 
     // suggestedRatePerKm is a negotiation (customer proposes lower rate).
-    // If it's >= driver's rate or <= 0, ignore it — no negotiation needed.
-    const autoPrice = effectivePricingMode === 'AUTO'
-      ? await computeAutoRate({ lat: Number(pickupLat), lng: Number(pickupLng) })
-      : null;
-    const currentRate = effectivePricingMode === 'ADMIN'
-      ? (config?.autoBaseRate || driver.ratePerKm || 100)
-      : (autoPrice?.effectiveRate ?? driver.ratePerKm);
+    // If it's >= the quoted rate or <= 0, ignore it — no negotiation needed.
+    // The admin's negotiationEnabled switch turns negotiation off system-wide.
+    const negotiationAllowed = config?.negotiationEnabled !== false;
     let effectiveSuggestion = null;
-    if (effectivePricingMode === 'DRIVER' && suggestedRatePerKm != null && suggestedRatePerKm > 0 && suggestedRatePerKm < currentRate) {
-      effectiveSuggestion = suggestedRatePerKm;
+    const suggestion = Number(suggestedRatePerKm);
+    if (negotiationAllowed && suggestedRatePerKm != null && Number.isFinite(suggestion) && suggestion > 0 && suggestion < currentRate) {
+      effectiveSuggestion = suggestion;
     }
 
     const rideRequest = await RideRequest.create({
@@ -80,7 +86,9 @@ const createRideRequest = async (req, res) => {
       destAddress: destAddress || '',
       estimatedDistanceKm,
       driverRatePerKm: currentRate,
+      surgeBreakdown: quote.breakdown,
       suggestedRatePerKm: effectiveSuggestion,
+      negotiationStatus: effectiveSuggestion != null ? 'customer_offered' : 'none',
     });
 
     const io = req.app?.get('io');
@@ -128,13 +136,81 @@ const getRequestStatus = async (req, res) => {
   }
 };
 
-// PATCH /api/ride-requests/:id/respond
-// Driver accepts or rejects a request — requires auth
-const respondToRequest = async (req, res) => {
-  const { action } = req.body; // 'accept' or 'reject'
+// Creates the trip for an accepted request at the agreed rate, marks the
+// request accepted and tells the customer. Shared by the driver accepting and
+// the customer agreeing to the driver's counter-offer.
+const finalizeAcceptance = async ({ rideRequest, agreedRate, surgeBreakdown, io }) => {
+  const totalFare = parseFloat(
+    (rideRequest.estimatedDistanceKm * agreedRate).toFixed(2)
+  );
 
-  if (!['accept', 'reject'].includes(action)) {
-    return res.status(400).json({ message: 'action must be "accept" or "reject"' });
+  const trip = await Trip.create({
+    driver: rideRequest.driver,
+    customer: rideRequest.customer || null,
+    customerName: rideRequest.customerName,
+    startLocation: rideRequest.pickupAddress || `${rideRequest.pickupLat},${rideRequest.pickupLng}`,
+    endLocation: rideRequest.destAddress || `${rideRequest.destLat},${rideRequest.destLng}`,
+    pickupLat: rideRequest.pickupLat,
+    pickupLng: rideRequest.pickupLng,
+    destLat: rideRequest.destLat,
+    destLng: rideRequest.destLng,
+    distanceKm: rideRequest.estimatedDistanceKm,
+    ratePerKm: agreedRate,
+    totalFare,
+    surgeBreakdown,
+    startTime: new Date(),
+    status: 'ongoing',
+  });
+
+  rideRequest.status = 'accepted';
+  rideRequest.agreedRatePerKm = agreedRate;
+  if (rideRequest.negotiationStatus !== 'none') rideRequest.negotiationStatus = 'agreed';
+  rideRequest.trip = trip._id;
+  await rideRequest.save();
+
+  if (io) {
+    const acceptedPayload = {
+      requestId: rideRequest._id,
+      status: 'accepted',
+      trip,
+      agreedRatePerKm: agreedRate,
+      pickupAddress: rideRequest.pickupAddress,
+      destAddress: rideRequest.destAddress,
+      pickupLat: rideRequest.pickupLat,
+      pickupLng: rideRequest.pickupLng,
+      destLat: rideRequest.destLat,
+      destLng: rideRequest.destLng,
+    };
+    if (rideRequest.customer) {
+      io.to(rideRequest.customer.toString()).emit('request_response', acceptedPayload);
+    }
+    io.to(rideRequest._id.toString()).emit('request_response', acceptedPayload);
+  }
+
+  return trip;
+};
+
+// Tells the customer the request was turned down (by the driver, or because
+// the negotiation ended without agreement).
+const emitRejected = (io, rideRequest) => {
+  if (!io) return;
+  const payload = { requestId: rideRequest._id, status: 'rejected' };
+  if (rideRequest.customer) {
+    io.to(rideRequest.customer.toString()).emit('request_response', payload);
+  }
+  io.to(rideRequest._id.toString()).emit('request_response', payload);
+};
+
+// PATCH /api/ride-requests/:id/respond
+// Driver accepts, rejects, or counters the customer's offer — requires auth
+//   accept  – take the ride (at the customer's suggested rate if they made one)
+//   reject  – decline the ride
+//   counter – answer the customer's suggested rate with counterRatePerKm
+const respondToRequest = async (req, res) => {
+  const { action } = req.body;
+
+  if (!['accept', 'reject', 'counter'].includes(action)) {
+    return res.status(400).json({ message: 'action must be "accept", "reject" or "counter"' });
   }
 
   try {
@@ -154,92 +230,150 @@ const respondToRequest = async (req, res) => {
     if (action === 'reject') {
       rideRequest.status = 'rejected';
       rideRequest.isActive = false;
+      if (rideRequest.negotiationStatus !== 'none') rideRequest.negotiationStatus = 'declined';
+      await rideRequest.save();
+
+      emitRejected(io, rideRequest);
+      return res.json(rideRequest);
+    }
+
+    if (action === 'counter') {
+      if (rideRequest.negotiationStatus !== 'customer_offered' || rideRequest.suggestedRatePerKm == null) {
+        return res.status(409).json({
+          message: rideRequest.negotiationStatus === 'driver_countered'
+            ? 'You already sent an offer. Waiting for the customer to answer.'
+            : 'The customer has not asked to negotiate this fare.',
+        });
+      }
+      const counter = Number(req.body.counterRatePerKm);
+      // The counter must sit above the customer's offer and never above the
+      // rate the customer was originally quoted.
+      if (!Number.isFinite(counter) ||
+          counter <= rideRequest.suggestedRatePerKm ||
+          counter > rideRequest.driverRatePerKm) {
+        return res.status(400).json({
+          message: `counterRatePerKm must be more than ${rideRequest.suggestedRatePerKm} and at most ${rideRequest.driverRatePerKm}`,
+        });
+      }
+
+      rideRequest.counterRatePerKm = parseFloat(counter.toFixed(2));
+      rideRequest.negotiationStatus = 'driver_countered';
       await rideRequest.save();
 
       if (io) {
-        if (rideRequest.customer) {
-          io.to(rideRequest.customer.toString()).emit('request_response', {
-            requestId: rideRequest._id,
-            status: 'rejected',
-          });
-        }
-        io.to(rideRequest._id.toString()).emit('request_response', {
+        const payload = {
           requestId: rideRequest._id,
-          status: 'rejected',
-        });
+          status: 'countered',
+          counterRatePerKm: rideRequest.counterRatePerKm,
+          suggestedRatePerKm: rideRequest.suggestedRatePerKm,
+          driverRatePerKm: rideRequest.driverRatePerKm,
+          estimatedDistanceKm: rideRequest.estimatedDistanceKm,
+        };
+        if (rideRequest.customer) {
+          io.to(rideRequest.customer.toString()).emit('request_response', payload);
+        }
+        io.to(rideRequest._id.toString()).emit('request_response', payload);
       }
       return res.json(rideRequest);
     }
 
-    // Accept — use suggested rate if provided, otherwise driver's rate
-    const driver = await Driver.findById(req.user.id);
-    if (!driver) return res.status(404).json({ message: 'Driver not found' });
-    const config = await SystemConfig.findOne().lean();
-    const effectivePricingMode = config?.rateMode || driver.pricingMode || 'ADMIN';
-
-    let surgeBreakdown = null;
-    let agreedRate = driver.ratePerKm;
-    if (effectivePricingMode === 'AUTO') {
-      // Use the ride request's pickup coords for accurate geofence pricing
-      const priceResult = await computeAutoRate({
-        lat:  rideRequest.pickupLat != null ? Number(rideRequest.pickupLat) : null,
-        lng:  rideRequest.pickupLng != null ? Number(rideRequest.pickupLng) : null,
+    if (rideRequest.negotiationStatus === 'driver_countered') {
+      return res.status(409).json({
+        message: 'You sent the customer an offer. Wait for their answer, or reject the request.',
       });
-      agreedRate = priceResult.effectiveRate;
-      surgeBreakdown = priceResult.breakdown;
-    } else if (effectivePricingMode === 'ADMIN') {
-      agreedRate = config?.autoBaseRate || driver.ratePerKm || 100;
-    } else if (effectivePricingMode === 'DRIVER' && rideRequest.suggestedRatePerKm != null) {
+    }
+
+    // Accept — charge the rate the customer was quoted when they sent the
+    // request, so the fare matches what both sides saw.
+    let agreedRate = rideRequest.driverRatePerKm;
+    let surgeBreakdown = rideRequest.surgeBreakdown ?? null;
+    if (!Number.isFinite(agreedRate) || agreedRate <= 0) {
+      // Requests created before quotes were stored: price it now.
+      const driver = await Driver.findById(req.user.id);
+      if (!driver) return res.status(404).json({ message: 'Driver not found' });
+      const config = await SystemConfig.findOne().lean();
+      const live = await resolveEffectiveRate(driver, config, {
+        lat: Number(rideRequest.pickupLat),
+        lng: Number(rideRequest.pickupLng),
+      });
+      agreedRate = live.rate;
+      surgeBreakdown = live.breakdown;
+    }
+    // Accepting a request that carries the customer's offer means agreeing to it.
+    if (rideRequest.suggestedRatePerKm != null) {
       agreedRate = rideRequest.suggestedRatePerKm;
+      surgeBreakdown = null;
     }
     if (!Number.isFinite(agreedRate) || agreedRate <= 0) {
       return res.status(400).json({ message: 'The driver does not have a valid rate configured' });
     }
 
-    const totalFare = parseFloat(
-      (rideRequest.estimatedDistanceKm * agreedRate).toFixed(2)
-    );
+    const trip = await finalizeAcceptance({ rideRequest, agreedRate, surgeBreakdown, io });
 
-    // Auto-create the trip
-    const trip = await Trip.create({
-      driver: req.user.id,
-      customer: rideRequest.customer || null,
-      customerName: rideRequest.customerName,
-      startLocation: rideRequest.pickupAddress || `${rideRequest.pickupLat},${rideRequest.pickupLng}`,
-      endLocation: rideRequest.destAddress || `${rideRequest.destLat},${rideRequest.destLng}`,
-      pickupLat: rideRequest.pickupLat,
-      pickupLng: rideRequest.pickupLng,
-      destLat: rideRequest.destLat,
-      destLng: rideRequest.destLng,
-      distanceKm: rideRequest.estimatedDistanceKm,
-      ratePerKm: agreedRate,
-      totalFare,
-      surgeBreakdown,
-      startTime: new Date(),
-      status: 'ongoing',
+    res.json({ rideRequest, trip });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// PATCH /api/ride-requests/:id/counter-response
+// Customer answers the driver's counter-offer — requires customer auth
+//   accept – agree to the counter rate; the trip starts at that rate
+//   reject – decline it; the request ends
+const respondToCounterOffer = async (req, res) => {
+  const { action } = req.body;
+
+  if (!['accept', 'reject'].includes(action)) {
+    return res.status(400).json({ message: 'action must be "accept" or "reject"' });
+  }
+
+  try {
+    const rideRequest = await RideRequest.findById(req.params.id);
+    if (!rideRequest) return res.status(404).json({ message: 'Ride request not found' });
+
+    if (!rideRequest.customer || rideRequest.customer.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+    if (rideRequest.status !== 'pending') {
+      return res.status(409).json({ message: `Request is already ${rideRequest.status}` });
+    }
+    if (rideRequest.negotiationStatus !== 'driver_countered' || rideRequest.counterRatePerKm == null) {
+      return res.status(409).json({ message: 'There is no driver offer to answer.' });
+    }
+
+    const io = req.app?.get('io');
+    const driverRoom = rideRequest.driver.toString();
+
+    if (action === 'reject') {
+      rideRequest.status = 'rejected';
+      rideRequest.isActive = false;
+      rideRequest.negotiationStatus = 'declined';
+      await rideRequest.save();
+
+      if (io) {
+        io.to(driverRoom).emit('negotiation_result', {
+          requestId: rideRequest._id,
+          status: 'declined',
+        });
+      }
+      return res.json({ rideRequest });
+    }
+
+    const trip = await finalizeAcceptance({
+      rideRequest,
+      agreedRate: rideRequest.counterRatePerKm,
+      surgeBreakdown: null,
+      io,
     });
 
-    rideRequest.status = 'accepted';
-    rideRequest.agreedRatePerKm = agreedRate;
-    rideRequest.trip = trip._id;
-    await rideRequest.save();
     if (io) {
-      const acceptedPayload = {
+      io.to(driverRoom).emit('negotiation_result', {
         requestId: rideRequest._id,
         status: 'accepted',
+        agreedRatePerKm: rideRequest.agreedRatePerKm,
+        rideRequest,
         trip,
-        agreedRatePerKm: agreedRate,
-        pickupAddress: rideRequest.pickupAddress,
-        destAddress: rideRequest.destAddress,
-        pickupLat: rideRequest.pickupLat,
-        pickupLng: rideRequest.pickupLng,
-        destLat: rideRequest.destLat,
-        destLng: rideRequest.destLng,
-      };
-      if (rideRequest.customer) {
-        io.to(rideRequest.customer.toString()).emit('request_response', acceptedPayload);
-      }
-      io.to(rideRequest._id.toString()).emit('request_response', acceptedPayload);
+      });
     }
 
     res.json({ rideRequest, trip });
@@ -253,4 +387,5 @@ module.exports = {
   getIncomingRequests,
   getRequestStatus,
   respondToRequest,
+  respondToCounterOffer,
 };
