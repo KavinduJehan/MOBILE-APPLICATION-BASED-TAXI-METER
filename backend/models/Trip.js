@@ -30,9 +30,14 @@ const tripSchema = new mongoose.Schema(
       default: 'pending',
     },
     syncedToCloud: { type: Boolean, default: false },
+    offlineLocalId: { type: String },
   },
   { timestamps: true }
 );
+
+tripSchema.index({ driver: 1, offlineLocalId: 1 }, {
+  unique: true, partialFilterExpression: { offlineLocalId: { $type: 'string' } },
+});
 
 tripSchema.index(
   { customer: 1 },
