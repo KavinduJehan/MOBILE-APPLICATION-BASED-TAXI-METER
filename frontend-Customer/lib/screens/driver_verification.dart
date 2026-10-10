@@ -4,7 +4,7 @@ import '../providers/auth_provider.dart';
 import 'rate_comparison.dart';
 import 'negotiate_screen.dart';
 import 'ride_request_screen.dart';
-import 'trip_offer_screen.dart';
+import 'offline_trip_offer_screen.dart';
 
 class DriverVerificationScreen extends StatefulWidget {
   /// Full driver document returned by GET /api/drivers/qr/:qrToken or decoded from QR
@@ -117,12 +117,16 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
                 onPressed: () {
                   final enteredName = nameController.text.trim();
                   final enteredRate = double.tryParse(rateController.text.trim()) ?? _effectiveRate;
+                  if (!enteredRate.isFinite || enteredRate <= 0) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a positive agreed rate.')));
+                    return;
+                  }
 
                   Navigator.pop(sheetContext);
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => TripOfferScreen(
+                      builder: (_) => OfflineTripOfferScreen(
                         driver: widget.driver,
                         customerName: enteredName.isNotEmpty ? enteredName : 'Passenger',
                         customerPhone: auth.customer?.phone,

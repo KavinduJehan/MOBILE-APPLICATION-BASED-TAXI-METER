@@ -6,6 +6,7 @@ import '../providers/trip_provider.dart';
 import '../theme.dart';
 import 'main_navigation.dart';
 import 'receipt.dart';
+import 'offline_trips_screen.dart';
 
 enum _TripFilter { completed, pending, ongoing, canceled }
 
@@ -52,6 +53,8 @@ class _TripsTabState extends State<TripsTab> {
         child: Column(
           children: [
             const _Header(),
+            TextButton.icon(icon: const Icon(Icons.offline_bolt), label: const Text('Offline Trips & Maps'),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerOfflineTripsScreen()))),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
               child: _FilterBar(

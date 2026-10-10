@@ -9,9 +9,10 @@ import '../theme.dart';
 import 'driver_verification.dart';
 
 class QRScan extends StatefulWidget {
-  const QRScan({super.key, this.activeListenable});
+  const QRScan({super.key, this.activeListenable, this.offlineOnly = false});
 
   final ValueListenable<bool>? activeListenable;
+  final bool offlineOnly;
 
   @override
   State<QRScan> createState() => _QRScanState();
@@ -52,9 +53,11 @@ class _QRScanState extends State<QRScan> {
       bool offlineMode = false;
 
       try {
+        if (widget.offlineOnly) throw StateError('Use the local QR profile for this offline trip.');
         // Try to fetch fresh driver data from the server
         final resp = await ApiService.getDriverByQR(qrToken);
         driver = resp.data as Map<String, dynamic>;
+        driver['token'] = qrToken;
       } catch (_) {
         // No internet — use data embedded in the QR payload directly
         offlineMode = true;
@@ -158,4 +161,3 @@ class _QRScanState extends State<QRScan> {
     );
   }
 }
-
