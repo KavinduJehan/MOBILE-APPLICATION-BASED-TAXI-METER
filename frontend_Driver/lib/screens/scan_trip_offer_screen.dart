@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import '../models/trip_record.dart';
-import '../services/offline_database.dart';
-import 'active_trip_screen.dart';
+import 'package:offline_trip/offline_trip.dart';
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
+import 'offline_trip_screen.dart';
 
 /// Screen where the driver scans a customer's Trip Offer QR code.
 /// Allows direct street hailing and offline ride negotiation with zero internet needed.
@@ -18,6 +19,7 @@ class _ScanTripOfferScreenState extends State<ScanTripOfferScreen> {
   final MobileScannerController _controller = MobileScannerController();
   bool _processing = false;
   String? _error;
+  Map<String, dynamic>? _offer;
 
   @override
   void dispose() {
@@ -42,6 +44,36 @@ class _ScanTripOfferScreenState extends State<ScanTripOfferScreen> {
         throw 'Invalid QR code. Please scan a Passenger Trip Offer QR.';
       }
 
+      final profile = context.read<AuthProvider>().profile;
+      if (profile == null || profile.id.isEmpty || profile.qrToken.isEmpty) {
+        throw 'Connect once to refresh your driver profile before using offline trips.';
+      }
+      if (data['version'] != 1 || data['driverToken'] != profile.qrToken) {
+        throw 'This offer is not addressed to your driver QR. Ask the passenger to scan your current QR.';
+      }
+      final time = DateTime.tryParse(data['timestamp']?.toString() ?? '');
+      if (time == null ||
+          DateTime.now().difference(time).abs() > const Duration(minutes: 30)) {
+        throw 'This offer has expired. Ask the passenger to generate a new one.';
+      }
+      final id = data['localId']?.toString() ?? '';
+      if (!RegExp(r'^offline-[a-f0-9]{32}$').hasMatch(id)) {
+        throw 'Invalid trip offer ID.';
+      }
+      if (data['destination'] != null &&
+          (OfflineDestination.fromJson(data['destination']) == null ||
+              !['car', 'tuk'].contains(data['navigationProfile']))) {
+        throw 'Invalid offline destination or vehicle profile.';
+      }
+      final trips = await TripStore.all(profile.id);
+      if (trips.any((trip) => trip.id == id)) {
+        throw 'This offer has already been accepted. Open it in Offline Trips.';
+      }
+      if (trips.any((trip) => !trip.completed)) {
+        throw 'Finish your current offline trip first.';
+      }
+      _offer = data;
+
       await _controller.stop();
       if (!mounted) return;
 
@@ -49,7 +81,7 @@ class _ScanTripOfferScreenState extends State<ScanTripOfferScreen> {
       final customerPhone = data['customerPhone'] as String?;
       final agreedRate = (data['agreedRatePerKm'] as num?)?.toDouble() ?? 0.0;
 
-      if (agreedRate <= 0) {
+      if (!agreedRate.isFinite || agreedRate <= 0) {
         throw 'Trip offer does not contain a valid rate.';
       }
 
@@ -59,6 +91,7 @@ class _ScanTripOfferScreenState extends State<ScanTripOfferScreen> {
         agreedRate: agreedRate,
       );
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e is String ? e : 'Failed to parse Trip Offer QR.';
         _processing = false;
@@ -106,7 +139,11 @@ class _ScanTripOfferScreenState extends State<ScanTripOfferScreen> {
                       color: const Color(0xFF22C55E).withValues(alpha: 0.15),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.check_circle_rounded, color: Color(0xFF22C55E), size: 28),
+                    child: const Icon(
+                      Icons.check_circle_rounded,
+                      color: Color(0xFF22C55E),
+                      size: 28,
+                    ),
                   ),
                   const SizedBox(width: 14),
                   const Expanded(
@@ -139,11 +176,28 @@ class _ScanTripOfferScreenState extends State<ScanTripOfferScreen> {
                 decoration: BoxDecoration(
                   color: const Color(0xFF161F33),
                   borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.08),
+                  ),
                 ),
                 child: Column(
                   children: [
                     _infoRow('Passenger', customerName, icon: Icons.person),
+                    if (_offer?['destination'] is Map) ...[
+                      const Divider(color: Colors.white10, height: 18),
+                      _infoRow(
+                        'Destination',
+                        (_offer!['destination'] as Map)['name'].toString(),
+                        icon: Icons.location_on,
+                      ),
+                      _infoRow(
+                        'Navigation',
+                        _offer!['navigationProfile'] == 'car'
+                            ? 'Car'
+                            : 'Three-wheeler',
+                        icon: Icons.navigation,
+                      ),
+                    ],
                     if (customerPhone != null && customerPhone.isNotEmpty) ...[
                       const Divider(color: Colors.white10, height: 18),
                       _infoRow('Contact', customerPhone, icon: Icons.phone),
@@ -165,7 +219,9 @@ class _ScanTripOfferScreenState extends State<ScanTripOfferScreen> {
                 style: FilledButton.styleFrom(
                   backgroundColor: const Color(0xFF22C55E),
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                 ),
                 onPressed: () async {
                   Navigator.pop(bottomSheetContext);
@@ -186,7 +242,10 @@ class _ScanTripOfferScreenState extends State<ScanTripOfferScreen> {
                   setState(() => _processing = false);
                   _controller.start();
                 },
-                child: const Text('Decline / Cancel', style: TextStyle(color: Colors.white60)),
+                child: const Text(
+                  'Decline / Cancel',
+                  style: TextStyle(color: Colors.white60),
+                ),
               ),
             ],
           ),
@@ -199,58 +258,71 @@ class _ScanTripOfferScreenState extends State<ScanTripOfferScreen> {
     required String customerName,
     required double agreedRate,
   }) async {
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final localId = 'offline-$timestamp';
-    final offlineReceipt = 'REC-OFFLINE-${timestamp.toRadixString(36).toUpperCase()}';
-
-    final trip = TripRecord(
-      id: localId,
-      customerName: customerName,
-      startAddress: 'Street Pickup',
-      endAddress: 'Meter Destination',
-      distanceKm: 0.0,
-      ratePerKm: agreedRate,
-      fare: 0.0,
-      status: 'in_progress',
-      date: DateTime.now(),
-      receiptNumber: offlineReceipt,
-    );
-
-    // Save initial record to local SQLite
-    await OfflineDatabase.instance.insertOfflineTrip(
-      localId: localId,
-      customerName: trip.customerName,
-      startAddress: trip.startAddress,
-      endAddress: trip.endAddress,
-      distanceKm: trip.distanceKm,
-      ratePerKm: trip.ratePerKm,
-      fare: trip.fare,
-      receiptNumber: offlineReceipt,
-      status: 'in_progress',
-      date: trip.date,
-    );
-
-    if (!mounted) return;
-
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ActiveTripScreen(
-          trip: trip,
-          receiptNumber: offlineReceipt,
+    try {
+      final profile = context.read<AuthProvider>().profile!;
+      final offer = _offer!;
+      final trip = TripSession({
+        'version': 1,
+        'localId': offer['localId'],
+        'driverId': profile.id,
+        'driverToken': profile.qrToken,
+        'driverName': profile.name,
+        'vehicleNumber': profile.vehicleNumber,
+        'customerName': customerName,
+        'customerId': offer['customerId'],
+        'customerIdentity': offer['customerIdentity'],
+        'ratePerKm': agreedRate,
+        'distanceKm': 0.0,
+        'status': 'ongoing',
+        'startTime': DateTime.now().toIso8601String(),
+        'offerTimestamp': offer['timestamp'],
+        if (offer['destination'] != null) 'destination': offer['destination'],
+        'navigationProfile': offer['navigationProfile'] == 'car'
+            ? 'car'
+            : 'tuk',
+      });
+      await TripStore.save(profile.id, trip);
+      if (!mounted) return;
+      await showTripQr(
+        context,
+        'Passenger trip confirmation',
+        trip.qr('TRIP_ACCEPTED'),
+      );
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              DriverOfflineTripScreen(trip: trip, owner: profile.id),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Could not start trip: $e';
+          _processing = false;
+        });
+      }
+      await _controller.start();
+    }
   }
 
-  Widget _infoRow(String label, String value, {IconData? icon, bool highlight = false}) {
+  Widget _infoRow(
+    String label,
+    String value, {
+    IconData? icon,
+    bool highlight = false,
+  }) {
     return Row(
       children: [
         if (icon != null) ...[
           Icon(icon, size: 18, color: Colors.white60),
           const SizedBox(width: 8),
         ],
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+        Text(
+          label,
+          style: const TextStyle(color: Colors.white70, fontSize: 14),
+        ),
         const Spacer(),
         Text(
           value,
@@ -275,10 +347,7 @@ class _ScanTripOfferScreenState extends State<ScanTripOfferScreen> {
       ),
       body: Stack(
         children: [
-          MobileScanner(
-            controller: _controller,
-            onDetect: _onDetect,
-          ),
+          MobileScanner(controller: _controller, onDetect: _onDetect),
 
           // Scanner Framing reticle
           Center(
@@ -306,7 +375,11 @@ class _ScanTripOfferScreenState extends State<ScanTripOfferScreen> {
               ),
               child: const Row(
                 children: [
-                  Icon(Icons.offline_bolt_rounded, color: Colors.amber, size: 22),
+                  Icon(
+                    Icons.offline_bolt_rounded,
+                    color: Colors.amber,
+                    size: 22,
+                  ),
                   SizedBox(width: 10),
                   Expanded(
                     child: Text(
