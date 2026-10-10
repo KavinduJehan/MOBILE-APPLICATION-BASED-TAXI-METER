@@ -316,6 +316,11 @@ class ApiService {
     return _asMap(response.data);
   }
 
+  Future<Map<String, dynamic>> syncOfflineHandshakeTrips(List<Map<String, dynamic>> trips) async {
+    final response = await _request('POST', '/trips/offline-sync', data: {'trips': trips});
+    return _asMap(response.data);
+  }
+
   Future<Response<dynamic>> _request(
     String method,
     String path, {

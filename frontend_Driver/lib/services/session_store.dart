@@ -22,6 +22,8 @@ class SessionStore {
   static Future<void> saveToken(String token) => _storage.write(key: _tokenKey, value: token);
 
   static Future<void> saveProfile(DriverProfile profile) => _storage.write(key: _profileKey, value: jsonEncode({
+        'id': profile.id,
+        'qrToken': profile.qrToken,
         'name': profile.name,
         'phone': profile.phone,
         'email': profile.email,

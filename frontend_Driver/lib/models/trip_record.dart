@@ -13,9 +13,11 @@ class TripRecord {
     required this.date,
     this.receiptNumber,
     this.surgeBreakdown,
+    this.offlineLocalId,
   });
 
   final String id;
+  final String? offlineLocalId;
   final String customerName;
   final String startAddress;
   final String endAddress;
@@ -32,6 +34,7 @@ class TripRecord {
   factory TripRecord.fromJson(Map<String, dynamic> json) {
     return TripRecord(
       id: readString(json, ['id', '_id', 'tripId']),
+      offlineLocalId: json['offlineLocalId'] as String?,
       customerName: readString(json, [
         'customerName',
         'passengerName',
