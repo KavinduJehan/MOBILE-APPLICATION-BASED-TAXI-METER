@@ -1,0 +1,20 @@
+{
+  "region": "Sri Lanka",
+  "sourceUrl": "https://download.geofabrik.de/asia/sri-lanka-latest.osm.pbf",
+  "sourceTimestamp": "2026-10-08T20:21:06Z",
+  "sourceSha256": "57e3befa724a28a004abb48a60f660d466e65bb39c92b6e16fe00af8b38a75d6",
+  "assetSha256": "6e8fe5af3bf5ba0686ff3a476d4fccf89fc64a617e64f7fac6eb8d5514979f28",
+  "builtAtUtc": "2026-10-09T11:17:39.449174+00:00",
+  "nodes": 3558379,
+  "directedEdges": 7271755,
+  "roadWays": 305301,
+  "places": 6087,
+  "turnRestrictions": 165,
+  "complexRestrictionsConservativelyBlocked": 24,
+  "assetBytes": 50009450,
+  "license": "ODbL-1.0",
+  "copyright": "\u00a9 OpenStreetMap contributors",
+  "copyrightUrl": "https://www.openstreetmap.org/copyright",
+  "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+  "profile": "Public motor roads. Private/destination-only, conditional-access and non-motor roads excluded."
+}
