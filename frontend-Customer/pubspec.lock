@@ -178,7 +178,7 @@ packages:
     source: hosted
     version: "7.0.1"
   file_selector:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: file_selector
       sha256: bd15e43e9268db636b53eeaca9f56324d1622af30e5c34d6e267649758c84d9a
@@ -311,7 +311,7 @@ packages:
     source: hosted
     version: "6.0.0"
   flutter_map:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: flutter_map
       sha256: "9bbe5472f66ae648d2ca2efbce97fcaa04e71261fabd3e062f26728222d7f767"
@@ -649,7 +649,7 @@ packages:
     source: hosted
     version: "1.0.0"
   latlong2:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: latlong2
       sha256: "84b776b100a84a684a0aaa3fa4dc2c9b1931c658de533701ee4e09bfa991f8dc"
@@ -768,13 +768,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "9.5.0"
-  offline_trip:
-    dependency: "direct main"
-    description:
-      path: "../packages/offline_trip"
-      relative: true
-    source: path
-    version: "1.0.0"
   package_config:
     dependency: transitive
     description:
@@ -808,7 +801,7 @@ packages:
     source: hosted
     version: "1.9.1"
   path_provider:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: path_provider
       sha256: a7f4874f987173da295a61c181b8ee71dab59b332a486b391babf26a1b884825
@@ -1037,7 +1030,7 @@ packages:
     source: hosted
     version: "1.10.2"
   sqflite:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: sqflite
       sha256: "564cfed0746fe53140c23b70b308e045c3b31f17778f2f326ccb7d804ea0250a"
@@ -1061,7 +1054,7 @@ packages:
     source: hosted
     version: "2.5.8"
   sqflite_common_ffi:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: sqflite_common_ffi
       sha256: cd0c7f7de39a08f2d54ef144d9058c46eca8461879aaa648025643455c1e5a20
