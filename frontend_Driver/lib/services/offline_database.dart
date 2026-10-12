@@ -35,7 +35,7 @@ class OfflineDatabase {
 
     return await openDatabase(
       dbPath,
-      version: 3,
+      version: 4,
       onCreate: (db, version) async {
         // Table for storing trips (both offline-created and cached)
         await db.execute('''
@@ -77,19 +77,29 @@ class OfflineDatabase {
         ''');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 2) {
-          await db.execute(
-            "ALTER TABLE cached_profile ADD COLUMN pricing_mode TEXT DEFAULT 'ADMIN'",
-          );
-        }
-        if (oldVersion < 3) {
-          await db.execute('ALTER TABLE local_trips ADD COLUMN owner_id TEXT');
-          await db.execute(
-            'ALTER TABLE local_trips ADD COLUMN offline_payload TEXT',
-          );
-        }
+        await repairSchema(db);
       },
+      onOpen: repairSchema,
     );
+  }
+
+  /// Repair legacy installations even when their recorded schema version is
+  /// newer than their actual columns. Existing rows and account ownership stay intact.
+  static Future<void> repairSchema(Database db) async {
+    for (final table in {
+      'local_trips': {'owner_id': 'TEXT', 'offline_payload': 'TEXT'},
+      'cached_profile': {'pricing_mode': "TEXT DEFAULT 'ADMIN'"},
+    }.entries) {
+      final info = await db.rawQuery('PRAGMA table_info(${table.key})');
+      final columns = info.map((row) => row['name']).toSet();
+      for (final column in table.value.entries) {
+        if (!columns.contains(column.key)) {
+          await db.execute(
+            'ALTER TABLE ${table.key} ADD COLUMN ${column.key} ${column.value}',
+          );
+        }
+      }
+    }
   }
 
   /// Inserts a newly completed offline trip
@@ -209,7 +219,7 @@ class OfflineDatabase {
         id: (row['server_id'] as String?) ?? (row['local_id'] as String),
         customerName: (row['customer_name'] as String?) ?? 'Customer',
         startAddress: (row['start_address'] as String?) ?? '',
-        endAddress: (row['end_address'] as String?) ?? '',
+        endAddress: _endAddressForRow(row),
         distanceKm: (row['distance_km'] as num?)?.toDouble() ?? 0.0,
         ratePerKm: (row['rate_per_km'] as num?)?.toDouble() ?? 0.0,
         fare: (row['fare'] as num?)?.toDouble() ?? 0.0,
@@ -249,7 +259,7 @@ class OfflineDatabase {
         'localId': row['local_id'],
         'customerName': row['customer_name'],
         'startAddress': row['start_address'],
-        'endAddress': row['end_address'],
+        'endAddress': _endAddressForRow(row),
         'distanceKm': row['distance_km'],
         'ratePerKm': row['rate_per_km'],
         'totalFare': row['fare'],
@@ -259,6 +269,46 @@ class OfflineDatabase {
         'surgeBreakdown': surge,
       };
     }).toList();
+  }
+
+  static const _noDestination = 'Destination not set';
+
+  /// The destination the passenger picked in their offer, if any. Older rows
+  /// stored the placeholder "Meter Destination", which must never win.
+  static String? _offlineDestinationName(Map<String, dynamic> trip) {
+    final explicit = trip['endAddress']?.toString().trim();
+    if (explicit != null &&
+        explicit.isNotEmpty &&
+        explicit != 'Meter Destination' &&
+        explicit != _noDestination) {
+      return explicit;
+    }
+    final destination = trip['destination'];
+    final name = destination is Map
+        ? destination['name']?.toString().trim()
+        : null;
+    return name == null || name.isEmpty ? null : name;
+  }
+
+  /// End address for a stored row, repairing placeholder values from the saved
+  /// offline payload so existing trips show the passenger's destination too.
+  static String _endAddressForRow(Map<String, Object?> row) {
+    final stored = (row['end_address'] as String?) ?? '';
+    final isPlaceholder =
+        stored.isEmpty ||
+        stored == 'Meter Destination' ||
+        stored == _noDestination;
+    if (!isPlaceholder) return stored;
+    final raw = row['offline_payload'] as String?;
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final name = _offlineDestinationName(
+          Map<String, dynamic>.from(jsonDecode(raw) as Map),
+        );
+        if (name != null) return name;
+      } catch (_) {}
+    }
+    return stored.isEmpty ? '' : _noDestination;
   }
 
   /// Offline section only. Account-scoped final snapshot, safe to enqueue again.
@@ -279,7 +329,7 @@ class OfflineDatabase {
       'offline_payload': jsonEncode(trip),
       'customer_name': trip['customerName'],
       'start_address': trip['startAddress'] ?? 'Street Pickup',
-      'end_address': trip['endAddress'] ?? 'Meter Destination',
+      'end_address': _offlineDestinationName(trip) ?? _noDestination,
       'distance_km': trip['distanceKm'],
       'rate_per_km': trip['ratePerKm'],
       'fare': trip['totalFare'],

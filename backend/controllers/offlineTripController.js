@@ -11,6 +11,15 @@ const getOfflineIdentity = async (req, res) => {
 };
 
 // Separate protocol for the offline section; existing online endpoints are unchanged.
+// Prefer the destination the passenger chose; never store the old meter placeholder.
+const offlineDestinationName = (item) => {
+  const placeholders = ['', 'Meter Destination', 'Destination not set'];
+  const explicit = typeof item.endAddress === 'string' ? item.endAddress.trim() : '';
+  if (!placeholders.includes(explicit)) return explicit.slice(0, 200);
+  const named = item.destination && typeof item.destination.name === 'string' ? item.destination.name.trim() : '';
+  return named ? named.slice(0, 200) : 'Destination not set';
+};
+
 const syncOfflineHandshakeTrips = async (req, res) => {
   if (req.user.role !== 'driver') return res.status(403).json({ message: 'Driver account required' });
   const items = req.body.trips;
@@ -38,7 +47,7 @@ const syncOfflineHandshakeTrips = async (req, res) => {
         trip = await Trip.findOneAndUpdate(filter, { $setOnInsert: {
           ...filter, customer: value.customer,
           customerName: item.customerName || 'Offline Passenger',
-          startLocation: item.startAddress || 'Street Pickup', endLocation: item.endAddress || 'Meter Destination',
+          startLocation: item.startAddress || 'Street Pickup', endLocation: offlineDestinationName(item),
           distanceKm: value.distanceKm, ratePerKm: value.ratePerKm, totalFare: value.totalFare,
           startTime: value.startTime, pickedUpAt: value.startTime, endTime: value.endTime,
           status: 'completed', syncedToCloud: true,

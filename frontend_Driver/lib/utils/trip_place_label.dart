@@ -1,6 +1,8 @@
 String tripPlaceLabel(String address) {
   final clean = address.trim().replaceAll(RegExp(r'\s+'), ' ');
   if (clean.isEmpty) return 'Address unavailable';
+  // Older offline trips were saved with this placeholder instead of a place.
+  if (clean == 'Meter Destination') return 'Destination not set';
   // Keep coordinate-only locations intact when no place name was saved.
   if (RegExp(r'^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$').hasMatch(clean)) {
     return clean;

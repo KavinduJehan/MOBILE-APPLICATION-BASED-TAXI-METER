@@ -5,7 +5,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/widgets.dart';
 import 'offline_database.dart';
 import 'session_store.dart';
-import 'package:offline_trip/offline_trip.dart';
+import 'package:ridex_driver/offline/offline_trip.dart';
 
 class SyncResult {
   SyncResult({required this.syncedCount, required this.success, this.error});
