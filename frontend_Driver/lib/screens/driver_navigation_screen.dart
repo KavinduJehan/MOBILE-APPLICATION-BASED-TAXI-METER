@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 
 import '../models/ride_request.dart';
 import '../models/trip_record.dart';
+import '../providers/active_trip_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import '../services/socket_service.dart';
@@ -89,6 +90,12 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
   @override
   void initState() {
     super.initState();
+    // Resuming an interrupted trip: continue from the stage already reached.
+    if (widget.trip.pickedUpAt != null) {
+      _navigationState = _NavigationState.inProgress;
+    } else if (widget.trip.arrivedAt != null) {
+      _navigationState = _NavigationState.atPickup;
+    }
     _startLocationTracking();
     _watchTripClosedByCustomer();
   }
@@ -123,6 +130,7 @@ class _DriverNavigationScreenState extends State<DriverNavigationScreen> {
 
   Future<void> _stopTripTracking() async {
     _tripClosed = true;
+    context.read<ActiveTripProvider>().markOnlineEnded(widget.trip.id);
     _tripStatusPoll?.cancel();
     DriverSocketService.instance.stopListeningForTripClosed();
     context.read<AuthProvider>().stopLocationUpdates();
