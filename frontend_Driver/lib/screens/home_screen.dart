@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../models/ride_request.dart';
 import '../models/trip_record.dart';
+import '../providers/active_trip_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/counter_offer_tracker.dart';
 import '../services/ride_alert_service.dart';
@@ -445,6 +446,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               DashboardScreen(
                 isActive: _index == 0,
                 onViewEarnings: () => setState(() => _index = 3),
+                onOpenRequests: () => setState(() {
+                  _pendingRequestCount = 0;
+                  _index = 1;
+                }),
               ),
               _pages[1],
               _pages[2],
@@ -459,6 +464,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           onSelected: (i) {
             if (i == 1) setState(() => _pendingRequestCount = 0);
             setState(() => _index = i);
+            // Make sure the active-trip guard is current on every tab.
+            final auth = context.read<AuthProvider>();
+            context.read<ActiveTripProvider>().refresh(
+              auth.api,
+              auth.profile?.id ?? '',
+            );
           },
         ),
       ),

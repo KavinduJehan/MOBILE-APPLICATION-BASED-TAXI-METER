@@ -4,23 +4,46 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:ridex_driver/offline/offline_trip.dart';
 
-import '../models/ride_request.dart';
 import '../models/income_summary.dart';
+import '../models/ride_request.dart';
+import '../models/trip_record.dart';
+import '../providers/active_trip_provider.dart';
 import '../providers/auth_provider.dart';
+import '../theme/app_theme.dart';
+import '../utils/trip_place_label.dart';
 import '../widgets/app_widgets.dart';
+import 'active_trip_screen.dart';
+import 'driver_navigation_screen.dart';
 import 'earnings_screen.dart';
 import 'incoming_requests_screen.dart';
+import 'offline_trip_screen.dart';
+import 'offline_trips_screen.dart';
 import 'qr_screen.dart';
 import 'rate_screen.dart';
-import 'offline_trips_screen.dart';
-import 'settings_screen.dart';
-import 'trip_history_screen.dart';
+
+// Status colours. Bright blue is kept for primary actions and selected states,
+// so availability uses green / amber / violet / red instead.
+const _available = Color(0xFF22C55E);
+const _busyOnline = Color(0xFFF59E0B);
+const _busyOffline = Color(0xFFA78BFA);
+const _unavailable = Color(0xFFEF4444);
+const _muted = Color(0xFF9CA3AF);
+const _cardRadius = 18.0;
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key, this.isActive = true, this.onViewEarnings});
+  const DashboardScreen({
+    super.key,
+    this.isActive = true,
+    this.onViewEarnings,
+    this.onOpenRequests,
+  });
   final bool isActive;
   final VoidCallback? onViewEarnings;
+
+  /// Switches to the Requests tab. Falls back to pushing the screen.
+  final VoidCallback? onOpenRequests;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -30,6 +53,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   IncomeSummary? _income;
   bool _incomeLoading = false;
   bool _incomeFailed = false;
+  Timer? _activityTimer;
+
+  /// Pending requests, reported by the map's polling.
+  final ValueNotifier<int> _requestCount = ValueNotifier(0);
+
+  /// Null while GPS is fine, otherwise the reason it is not.
+  final ValueNotifier<String?> _gpsIssue = ValueNotifier(null);
 
   Future<void> _loadIncome() async {
     if (_incomeLoading || !mounted) return;
@@ -47,316 +77,150 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  Future<void> _refreshActivity() async {
+    if (!mounted) return;
+    final auth = context.read<AuthProvider>();
+    await context.read<ActiveTripProvider>().refresh(
+      auth.api,
+      auth.profile?.id ?? '',
+    );
+  }
+
   @override
   void didUpdateWidget(covariant DashboardScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.isActive && !oldWidget.isActive) _loadIncome();
+    if (widget.isActive && !oldWidget.isActive) {
+      _loadIncome();
+      _refreshActivity();
+    }
   }
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        context.read<AuthProvider>().loadProfile(force: true);
-        if (widget.isActive) _loadIncome();
-      }
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final auth = context.read<AuthProvider>();
+      await auth.loadProfile(force: true);
+      if (!mounted) return;
+      _refreshActivity();
+      if (widget.isActive) _loadIncome();
     });
+    // Keep the active-trip state fresh while Home is on screen.
+    _activityTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (widget.isActive) _refreshActivity();
+    });
+  }
+
+  @override
+  void dispose() {
+    _activityTimer?.cancel();
+    _requestCount.dispose();
+    _gpsIssue.dispose();
+    super.dispose();
+  }
+
+  Future<void> _push(Widget page) async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
+    if (!mounted) return;
+    _refreshActivity();
+    _loadIncome();
+  }
+
+  void _openRequests() {
+    final open = widget.onOpenRequests;
+    if (open != null) {
+      open();
+    } else {
+      _push(const IncomingRequestsScreen());
+    }
+  }
+
+  void _resume(ActiveTripProvider active, AuthProvider auth) {
+    final online = active.onlineTrip;
+    final offline = active.offlineTrip;
+    if (online != null) {
+      _push(
+        online.canResumeNavigation
+            ? DriverNavigationScreen(
+                trip: online,
+                request: online.toResumeRequest(),
+              )
+            : ActiveTripScreen(trip: online),
+      );
+    } else if (offline != null) {
+      _push(
+        DriverOfflineTripScreen(trip: offline, owner: auth.profile?.id ?? ''),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    final active = context.watch<ActiveTripProvider>();
     final profile = auth.profile;
+    final busy = active.hasActive;
     return AppShellScaffold(
       child: RefreshIndicator(
         onRefresh: () async {
-          await Future.wait([auth.loadProfile(force: true), _loadIncome()]);
+          await Future.wait([
+            auth.loadProfile(force: true),
+            _loadIncome(),
+            _refreshActivity(),
+          ]);
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Hello, ${profile?.name.split(' ').first ?? 'Driver'}!',
-                          style: Theme.of(context).textTheme.headlineSmall
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Manage your rides from one secure dashboard.',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: Colors.white60),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const DriverLogo(size: 58),
-                ],
-              ),
-              const SizedBox(height: 20),
-              _todayEarningsCard(),
-              const SizedBox(height: 20),
-              if (profile != null) ...[
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF6C7CFF).withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(
-                        color: const Color(0xFF6C7CFF).withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Text(
-                      'Pricing mode: ${auth.rateMode == 'DRIVER'
-                          ? 'Driver-Set'
-                          : auth.rateMode == 'AUTO'
-                          ? 'Auto Surge'
-                          : 'Admin-Controlled'}',
-                      style: const TextStyle(
-                        color: Color(0xFFAEB8FF),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 18),
-              ],
-              if (profile != null && !profile.isVerified)
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF3E2F00),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: const Color(0xFFFFC107).withValues(alpha: 0.25),
-                    ),
-                  ),
-                  child: const Text(
-                    'Your account is pending admin approval. You cannot receive ride requests yet.',
-                    style: TextStyle(
-                      color: Color(0xFFFFE08A),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              if (profile != null && !profile.isVerified)
-                const SizedBox(height: 18),
-              const _DriverHomeMap(),
-              const SizedBox(height: 24),
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      const Color(0xFF0E1422),
-                      const Color(0xFF14253D).withValues(alpha: 0.95),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(28),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.05),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Live status',
-                      style: Theme.of(
-                        context,
-                      ).textTheme.labelLarge?.copyWith(color: Colors.white70),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      profile?.isVerified == true
-                          ? 'Verified and ready for requests'
-                          : 'Pending verification',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: auth.rateMode == 'AUTO'
-                            ? Colors.amber.withValues(alpha: 0.15)
-                            : (auth.rateMode == 'ADMIN'
-                                  ? Colors.blueAccent.withValues(alpha: 0.15)
-                                  : Colors.green.withValues(alpha: 0.15)),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: auth.rateMode == 'AUTO'
-                              ? Colors.amber
-                              : (auth.rateMode == 'ADMIN'
-                                    ? Colors.blueAccent
-                                    : Colors.green),
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            auth.rateMode == 'AUTO'
-                                ? Icons.bolt_rounded
-                                : (auth.rateMode == 'ADMIN'
-                                      ? Icons.lock_rounded
-                                      : Icons.person_rounded),
-                            size: 16,
-                            color: auth.rateMode == 'AUTO'
-                                ? Colors.amber
-                                : (auth.rateMode == 'ADMIN'
-                                      ? Colors.blueAccent
-                                      : Colors.green),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            auth.rateMode == 'AUTO'
-                                ? 'Active Mode: Auto Surge ⚡'
-                                : (auth.rateMode == 'ADMIN'
-                                      ? 'Active Mode: Admin Controlled 🔒'
-                                      : 'Active Mode: Driver Set 🧑‍✈️'),
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: auth.rateMode == 'AUTO'
-                                  ? Colors.amber
-                                  : (auth.rateMode == 'ADMIN'
-                                        ? Colors.blueAccent
-                                        : Colors.green),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: [
-                        StatCard(
-                          label: auth.rateMode == 'AUTO'
-                              ? 'Pricing Mode'
-                              : (auth.rateMode == 'ADMIN'
-                                    ? 'Admin Rate'
-                                    : 'Rate per km'),
-                          value: auth.rateMode == 'AUTO'
-                              ? 'Auto Surge'
-                              : 'Rs. ${profile?.ratePerKm.toStringAsFixed(2) ?? '0.00'}',
-                          icon: auth.rateMode == 'AUTO'
-                              ? Icons.bolt_rounded
-                              : (auth.rateMode == 'ADMIN'
-                                    ? Icons.lock_clock_rounded
-                                    : Icons.payments_rounded),
-                        ),
-                        StatCard(
-                          label: 'GPS Range',
-                          value: '10 km',
-                          icon: Icons.radar_rounded,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              const SectionTitle(
-                title: 'Quick Actions',
-                subtitle: 'Jump straight to the tasks you use every day.',
-              ),
+              _header(profile?.name, profile?.vehicleNumber),
               const SizedBox(height: 14),
-              ActionCard(
-                title: 'Incoming Requests',
-                subtitle: 'Review pending ride requests and respond.',
-                icon: Icons.receipt_long_rounded,
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const IncomingRequestsScreen(),
-                  ),
+              ValueListenableBuilder<int>(
+                valueListenable: _requestCount,
+                builder: (context, requests, _) =>
+                    ValueListenableBuilder<String?>(
+                      valueListenable: _gpsIssue,
+                      builder: (context, gps, _) =>
+                          _availabilityCard(auth, active, requests, gps),
+                    ),
+              ),
+              if (profile != null && !profile.isVerified) ...[
+                const SizedBox(height: 10),
+                const OfflineNotice(
+                  'Your account is pending admin approval. You cannot receive ride requests yet.',
+                  tone: OfflineTone.warning,
                 ),
-              ),
+              ],
+              if (busy) ...[
+                const SizedBox(height: 12),
+                _activeTripCard(active, auth),
+              ],
               const SizedBox(height: 12),
-              ActionCard(
-                title: 'My QR Code',
-                subtitle: 'Show riders your verification QR.',
-                icon: Icons.qr_code_rounded,
-                onTap: () => Navigator.of(
-                  context,
-                ).push(MaterialPageRoute(builder: (_) => const QrScreen())),
-              ),
+              _todayEarningsCard(),
               const SizedBox(height: 12),
-              ActionCard(
-                title: 'Offline Trips & Maps',
-                subtitle:
-                    'Start or resume offline trips and prepare your offline map.',
-                icon: Icons.qr_code_scanner_rounded,
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const DriverOfflineTripsScreen(),
-                  ),
-                ),
+              _DriverHomeMap(
+                height: busy ? 170 : 220,
+                showRequests: !busy,
+                onRequests: (count) {
+                  if (_requestCount.value != count) _requestCount.value = count;
+                },
+                onGpsIssue: (issue) {
+                  if (_gpsIssue.value != issue) _gpsIssue.value = issue;
+                },
+                onOpenRequests: _openRequests,
               ),
-              const SizedBox(height: 12),
-              ActionCard(
-                title: 'Pricing',
-                subtitle: auth.rateMode == 'DRIVER'
-                    ? 'View and update your driver-set rate.'
-                    : 'View your current rate and pricing mode.',
-                icon: Icons.price_change_rounded,
-                onTap: () => Navigator.of(
-                  context,
-                ).push(MaterialPageRoute(builder: (_) => const RateScreen())),
-              ),
-              const SizedBox(height: 12),
-              ActionCard(
-                title: 'Trip History',
-                subtitle: 'Check completed rides and receipts.',
-                icon: Icons.route_rounded,
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const TripHistoryScreen()),
-                ),
-              ),
-              const SizedBox(height: 12),
-              ActionCard(
-                title: 'Earnings',
-                subtitle: 'Track daily income and completed trips.',
-                icon: Icons.bar_chart_rounded,
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const EarningsScreen()),
-                ),
-              ),
-              const SizedBox(height: 12),
-              ActionCard(
-                title: 'Settings',
-                subtitle: 'Review profile and sign out.',
-                icon: Icons.settings_rounded,
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
-                ),
-              ),
+              const SizedBox(height: 18),
+              if (!active.loaded)
+                const _QuickActionsSkeleton()
+              else if (busy)
+                const _PausedNote()
+              else
+                _quickActions(auth),
               if (auth.busy) ...[
-                const SizedBox(height: 18),
+                const SizedBox(height: 14),
                 const LinearProgressIndicator(minHeight: 3),
               ],
             ],
@@ -366,6 +230,447 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // ── Header ───────────────────────────────────────────────────────────────
+
+  Widget _header(String? name, String? vehicle) {
+    final first = name?.trim().split(' ').first;
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Hello, ${first == null || first.isEmpty ? 'Driver' : first}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.4,
+                ),
+              ),
+              if (vehicle != null && vehicle.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    vehicle,
+                    style: const TextStyle(color: _muted, fontSize: 13),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        Container(
+          padding: const EdgeInsets.fromLTRB(6, 6, 12, 6),
+          decoration: BoxDecoration(
+            color: AppTheme.surface,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [Color(0xFF3C7BFF), Color(0xFF1C4FD6)],
+                  ),
+                ),
+                child: const Icon(
+                  Icons.navigation_rounded,
+                  size: 16,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'RideX',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Availability ─────────────────────────────────────────────────────────
+
+  Widget _availabilityCard(
+    AuthProvider auth,
+    ActiveTripProvider active,
+    int requests,
+    String? gpsIssue,
+  ) {
+    final profile = auth.profile;
+    final locationIssue = gpsIssue ?? auth.locationError;
+    final Color color;
+    final IconData icon;
+    final String title;
+    final String subtitle;
+    if (active.onlineTrip != null) {
+      color = _busyOnline;
+      icon = Icons.directions_car_rounded;
+      title = 'Busy • online trip';
+      subtitle = 'New requests are paused until this ride ends.';
+    } else if (active.offlineTrip != null) {
+      color = _busyOffline;
+      icon = Icons.offline_bolt_rounded;
+      title = 'Busy • offline trip';
+      subtitle = 'New trips are paused until this one is finished.';
+    } else if (profile == null || !active.loaded) {
+      color = _muted;
+      icon = Icons.sync_rounded;
+      title = 'Checking status…';
+      subtitle = 'Just a moment.';
+    } else if (!profile.isVerified) {
+      color = _unavailable;
+      icon = Icons.hourglass_top_rounded;
+      title = 'Unavailable';
+      subtitle = 'Waiting for admin approval.';
+    } else if (locationIssue != null) {
+      color = _unavailable;
+      icon = Icons.location_off_rounded;
+      title = 'Unavailable';
+      subtitle = locationIssue;
+    } else {
+      color = _available;
+      icon = Icons.check_circle_rounded;
+      title = 'Available';
+      subtitle = requests > 0
+          ? '$requests ${requests == 1 ? 'request' : 'requests'} waiting'
+          : 'Ready for ride requests';
+    }
+    final rate = switch (auth.rateMode) {
+      'AUTO' => 'Auto surge',
+      'ADMIN' =>
+        'Admin • Rs. ${profile?.ratePerKm.toStringAsFixed(0) ?? '0'}/km',
+      _ => 'Rs. ${profile?.ratePerKm.toStringAsFixed(0) ?? '0'}/km',
+    };
+    return Semantics(
+      container: true,
+      label: 'Driver status: $title. $subtitle',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(_cardRadius),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.18),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            InkWell(
+              onTap: () => _push(const RateScreen()),
+              borderRadius: BorderRadius.circular(20),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: Container(
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        rate,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const Text(
+                        'Pricing',
+                        style: TextStyle(color: _muted, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Active trip ──────────────────────────────────────────────────────────
+
+  Widget _activeTripCard(ActiveTripProvider active, AuthProvider auth) {
+    final online = active.onlineTrip;
+    final offline = active.offlineTrip;
+    final isOnline = online != null;
+    final color = isOnline ? _busyOnline : _busyOffline;
+    String stage;
+    String passenger;
+    String route;
+    final stats = <(IconData, String)>[];
+    if (online != null) {
+      stage = _onlineStage(online);
+      passenger = online.customerName;
+      route =
+          '${tripPlaceLabel(online.startAddress)} → ${tripPlaceLabel(online.endAddress)}';
+      stats.add((
+        Icons.payments_outlined,
+        'Rs. ${online.ratePerKm.toStringAsFixed(0)}/km',
+      ));
+      final started = online.startedAt?.toLocal();
+      if (started != null) {
+        stats.add((
+          Icons.schedule_rounded,
+          'Since ${TimeOfDay.fromDateTime(started).format(context)}',
+        ));
+      }
+    } else {
+      final trip = offline!;
+      final destination = trip.data['destination'];
+      stage = 'Offline trip in progress';
+      passenger = trip.data['customerName']?.toString() ?? 'Passenger';
+      route = destination is Map
+          ? 'To ${destination['name']}'
+          : 'No destination set';
+      stats
+        ..add((Icons.route_rounded, '${trip.distanceKm.toStringAsFixed(2)} km'))
+        ..add((Icons.payments_outlined, 'Rs. ${trip.fare.toStringAsFixed(2)}'));
+    }
+    final primary = Theme.of(context).colorScheme.primary;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(_cardRadius),
+        border: Border.all(color: color.withValues(alpha: 0.5), width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              OfflineStatusPill(
+                stage,
+                tone: OfflineTone.warning,
+                icon: isOnline
+                    ? Icons.directions_car_rounded
+                    : Icons.offline_bolt_rounded,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            passenger,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            route,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white70, height: 1.3),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 16,
+            runSpacing: 6,
+            children: [
+              for (final (icon, text) in stats)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, size: 16, color: _muted),
+                    const SizedBox(width: 6),
+                    Text(
+                      text,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            onPressed: () => _resume(active, auth),
+            style: FilledButton.styleFrom(
+              backgroundColor: primary,
+              minimumSize: const Size.fromHeight(52),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            icon: Icon(
+              online != null && online.canResumeNavigation
+                  ? Icons.navigation_rounded
+                  : Icons.play_arrow_rounded,
+            ),
+            label: Text(
+              online != null
+                  ? (online.canResumeNavigation
+                        ? 'Resume navigation'
+                        : 'Open active trip')
+                  : 'Resume trip',
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _onlineStage(TripRecord trip) => trip.pickedUpAt != null
+      ? 'Trip in progress'
+      : trip.arrivedAt != null
+      ? 'Waiting at pickup'
+      : 'Heading to pickup';
+
+  // ── Quick actions ────────────────────────────────────────────────────────
+
+  Widget _quickActions(AuthProvider auth) {
+    final profile = auth.profile;
+    final rate = auth.rateMode == 'AUTO'
+        ? 'Auto surge'
+        : 'Rs. ${profile?.ratePerKm.toStringAsFixed(0) ?? '0'} / km';
+    final primary = Theme.of(context).colorScheme.primary;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'QUICK ACTIONS',
+          style: TextStyle(
+            color: _muted,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Material(
+          color: primary.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(_cardRadius),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(_cardRadius),
+            onTap: () => _push(const DriverOfflineTripsScreen()),
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 72),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(_cardRadius),
+                border: Border.all(color: primary.withValues(alpha: 0.5)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      color: primary,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.qr_code_scanner_rounded,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Offline trips',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Show your QR, scan an offer, run a trip',
+                          style: TextStyle(color: Colors.white70, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: Colors.white54,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: _ActionTile(
+                icon: Icons.qr_code_2_rounded,
+                label: 'My QR',
+                caption: 'Show to riders',
+                onTap: () => _push(const QrScreen()),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _ActionTile(
+                icon: Icons.price_change_rounded,
+                label: 'Pricing',
+                caption: rate,
+                onTap: () => _push(const RateScreen()),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // ── Earnings ─────────────────────────────────────────────────────────────
+
   Widget _todayEarningsCard() {
     final now = DateTime.now().toUtc().add(
       const Duration(hours: 5, minutes: 30),
@@ -373,120 +678,95 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final today = _income?.daysForPeriod(1, now).single;
     return Material(
       color: Colors.transparent,
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(_cardRadius),
       child: InkWell(
-        borderRadius: BorderRadius.circular(24),
-        onTap:
-            widget.onViewEarnings ??
-            () async {
-              await Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const EarningsScreen()));
-              if (mounted) _loadIncome();
-            },
+        borderRadius: BorderRadius.circular(_cardRadius),
+        onTap: widget.onViewEarnings ?? () => _push(const EarningsScreen()),
         child: Container(
-          padding: const EdgeInsets.all(22),
+          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               colors: [Color(0xFF173967), Color(0xFF101826)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(_cardRadius),
             border: Border.all(
               color: const Color(0xFF69A8FF).withValues(alpha: 0.2),
             ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              Row(
-                children: [
-                  const Icon(
-                    Icons.account_balance_wallet_outlined,
-                    color: Color(0xFF69A8FF),
-                    size: 22,
-                  ),
-                  const SizedBox(width: 10),
-                  const Expanded(
-                    child: Text(
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
                       "Today's earnings",
                       style: TextStyle(
                         color: Colors.white70,
                         fontWeight: FontWeight.w600,
+                        fontSize: 13,
                       ),
                     ),
-                  ),
-                  if (_incomeLoading)
-                    const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  else
-                    const Icon(
-                      Icons.chevron_right_rounded,
-                      color: Colors.white54,
+                    const SizedBox(height: 4),
+                    Text(
+                      today == null
+                          ? (_incomeLoading ? 'Loading…' : 'Unavailable')
+                          : 'Rs. ${today.amount.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.6,
+                      ),
                     ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              Text(
-                today == null
-                    ? (_incomeLoading ? 'Loading...' : 'Unavailable')
-                    : 'Rs. ${today.amount.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.8,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 18,
-                runSpacing: 8,
-                children: [
-                  if (today?.trips != null)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.check_circle_outline_rounded,
-                          size: 16,
-                          color: Color(0xFF34D399),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          '${today!.trips} completed ${today.trips == 1 ? 'trip' : 'trips'}',
+                    if (_incomeFailed)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          _income == null
+                              ? 'Pull down to retry.'
+                              : 'Showing last loaded earnings.',
                           style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 12,
+                            color: Colors.orangeAccent,
+                            fontSize: 11,
                           ),
                         ),
-                      ],
-                    ),
-                  const Text(
-                    'View earnings',
-                    style: TextStyle(
-                      color: Color(0xFF69A8FF),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+                      ),
+                  ],
+                ),
               ),
-              if (_incomeFailed) ...[
-                const SizedBox(height: 10),
-                Text(
-                  _income == null
-                      ? 'Pull down to retry.'
-                      : 'Showing last loaded earnings. Pull down to refresh.',
-                  style: const TextStyle(
-                    color: Colors.orangeAccent,
-                    fontSize: 11,
+              if (today?.trips != null)
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '${today!.trips}',
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      Text(
+                        today.trips == 1 ? 'trip' : 'trips',
+                        style: const TextStyle(color: _muted, fontSize: 12),
+                      ),
+                    ],
                   ),
                 ),
-              ],
+              if (_incomeLoading)
+                const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              else
+                const Icon(Icons.chevron_right_rounded, color: Colors.white54),
             ],
           ),
         ),
@@ -495,14 +775,113 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
+class _ActionTile extends StatelessWidget {
+  const _ActionTile({
+    required this.icon,
+    required this.label,
+    required this.caption,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String label;
+  final String caption;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => Material(
+    color: AppTheme.surface,
+    borderRadius: BorderRadius.circular(_cardRadius),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(_cardRadius),
+      onTap: onTap,
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 72),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(_cardRadius),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: AppTheme.accent, size: 22),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                    ),
+                  ),
+                  Text(
+                    caption,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: _muted, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _PausedNote extends StatelessWidget {
+  const _PausedNote();
+  @override
+  Widget build(BuildContext context) => const OfflineNotice(
+    'Quick actions are hidden while a trip is active. Finish it to take another.',
+  );
+}
+
+class _QuickActionsSkeleton extends StatelessWidget {
+  const _QuickActionsSkeleton();
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 72,
+    decoration: BoxDecoration(
+      color: Colors.white.withValues(alpha: 0.04),
+      borderRadius: BorderRadius.circular(_cardRadius),
+    ),
+  );
+}
+
+// ── Map ──────────────────────────────────────────────────────────────────────
+
 class _DriverHomeMap extends StatefulWidget {
-  const _DriverHomeMap();
+  const _DriverHomeMap({
+    required this.height,
+    required this.showRequests,
+    required this.onRequests,
+    required this.onGpsIssue,
+    required this.onOpenRequests,
+  });
+  final double height;
+  final bool showRequests;
+  final ValueChanged<int> onRequests;
+  final ValueChanged<String?> onGpsIssue;
+  final VoidCallback onOpenRequests;
 
   @override
   State<_DriverHomeMap> createState() => _DriverHomeMapState();
 }
 
-class _DriverHomeMapState extends State<_DriverHomeMap> {
+class _DriverHomeMapState extends State<_DriverHomeMap>
+    with WidgetsBindingObserver {
   GoogleMapController? _mapController;
   StreamSubscription<Position>? _positionSubscription;
   Timer? _requestTimer;
@@ -514,6 +893,7 @@ class _DriverHomeMapState extends State<_DriverHomeMap> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadLocation();
     _loadRequests();
     _requestTimer = Timer.periodic(
@@ -524,18 +904,33 @@ class _DriverHomeMapState extends State<_DriverHomeMap> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _positionSubscription?.cancel();
     _requestTimer?.cancel();
     _mapController?.dispose();
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Back from the settings screen: try again if GPS was the problem.
+    if (state == AppLifecycleState.resumed && _driverPosition == null) {
+      _loadLocation();
+    }
+  }
+
+  void _setIssue(String? message) {
+    _locationMessage = message;
+    widget.onGpsIssue(message);
+  }
+
   Future<void> _loadLocation() async {
+    if (mounted) setState(() => _loadingLocation = true);
     if (!await Geolocator.isLocationServiceEnabled()) {
       if (mounted) {
         setState(() {
           _loadingLocation = false;
-          _locationMessage = 'Turn on location services to view your map.';
+          _setIssue('Location services are off.');
         });
       }
       return;
@@ -550,8 +945,7 @@ class _DriverHomeMapState extends State<_DriverHomeMap> {
       if (mounted) {
         setState(() {
           _loadingLocation = false;
-          _locationMessage =
-              'Location permission is required to view your map.';
+          _setIssue('Location permission is needed.');
         });
       }
       return;
@@ -568,8 +962,9 @@ class _DriverHomeMapState extends State<_DriverHomeMap> {
       setState(() {
         _driverPosition = LatLng(position.latitude, position.longitude);
         _loadingLocation = false;
-        _locationMessage = null;
+        _setIssue(null);
       });
+      await _positionSubscription?.cancel();
       _positionSubscription =
           Geolocator.getPositionStream(
             locationSettings: const LocationSettings(
@@ -586,9 +981,28 @@ class _DriverHomeMapState extends State<_DriverHomeMap> {
       if (mounted) {
         setState(() {
           _loadingLocation = false;
-          _locationMessage = 'Unable to determine your current location.';
+          _setIssue('Unable to find your location.');
         });
       }
+    }
+  }
+
+  /// Opens the right system screen for whatever is blocking GPS.
+  Future<void> _fixLocation() async {
+    try {
+      final permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.deniedForever) {
+        await Geolocator.openAppSettings();
+      } else if (permission == LocationPermission.denied) {
+        await Geolocator.requestPermission();
+        await _loadLocation();
+      } else if (!await Geolocator.isLocationServiceEnabled()) {
+        await Geolocator.openLocationSettings();
+      } else {
+        await _loadLocation();
+      }
+    } catch (_) {
+      await _loadLocation();
     }
   }
 
@@ -600,6 +1014,7 @@ class _DriverHomeMapState extends State<_DriverHomeMap> {
           .getIncomingRequests();
       if (!mounted) return;
       setState(() => _requests = requests);
+      widget.onRequests(requests.length);
     } catch (_) {
       // The map remains usable when request polling is temporarily unavailable.
     }
@@ -617,25 +1032,89 @@ class _DriverHomeMapState extends State<_DriverHomeMap> {
         (request.pickupLatitude != 0 || request.pickupLongitude != 0);
   }
 
+  Widget _chip({
+    required IconData icon,
+    required String label,
+    required Color color,
+    VoidCallback? onTap,
+  }) => Material(
+    color: const Color(0xE60E1422),
+    borderRadius: BorderRadius.circular(20),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: onTap,
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 36),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 12.5,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final position = _driverPosition;
     if (position == null) {
       return Container(
-        height: 250,
+        height: widget.height,
         decoration: BoxDecoration(
-          color: const Color(0xFF0E1422),
-          borderRadius: BorderRadius.circular(24),
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(_cardRadius),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
         ),
         child: Center(
           child: _loadingLocation
-              ? const CircularProgressIndicator()
+              ? const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(strokeWidth: 3),
+                    SizedBox(height: 12),
+                    Text(
+                      'Finding your location…',
+                      style: TextStyle(color: _muted),
+                    ),
+                  ],
+                )
               : Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(
-                    _locationMessage ?? 'Map location unavailable.',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white70),
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.location_off_rounded,
+                        size: 30,
+                        color: _unavailable,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _locationMessage ?? 'Map location unavailable.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.white70),
+                      ),
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        onPressed: _fixLocation,
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, 44),
+                        ),
+                        icon: const Icon(Icons.gps_fixed_rounded, size: 18),
+                        label: const Text('Turn on location'),
+                      ),
+                    ],
                   ),
                 ),
         ),
@@ -667,11 +1146,12 @@ class _DriverHomeMapState extends State<_DriverHomeMap> {
             ),
           ),
     };
+    final count = _requests.length;
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(_cardRadius),
       child: SizedBox(
-        height: 300,
+        height: widget.height,
         child: Stack(
           children: [
             GoogleMap(
@@ -683,38 +1163,46 @@ class _DriverHomeMapState extends State<_DriverHomeMap> {
               markers: markers,
             ),
             Positioned(
-              top: 12,
-              right: 12,
-              child: FloatingActionButton.small(
-                heroTag: 'driver-home-recenter',
-                onPressed: _recenter,
-                tooltip: 'Recenter map',
-                child: const Icon(Icons.my_location),
+              top: 10,
+              left: 10,
+              child: _chip(
+                icon: Icons.gps_fixed_rounded,
+                label: 'GPS active',
+                color: _available,
               ),
             ),
             Positioned(
-              left: 12,
-              bottom: 12,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: const Color(0xDD0E1422),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
+              top: 10,
+              right: 10,
+              child: Material(
+                color: const Color(0xE60E1422),
+                shape: const CircleBorder(),
+                child: IconButton(
+                  onPressed: _recenter,
+                  tooltip: 'Recenter map',
+                  constraints: const BoxConstraints(
+                    minWidth: 48,
+                    minHeight: 48,
                   ),
-                  child: Text(
-                    '${_requests.where(_hasCoordinates).length} request${_requests.where(_hasCoordinates).length == 1 ? '' : 's'} nearby',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  icon: const Icon(Icons.my_location_rounded),
                 ),
               ),
             ),
+            if (widget.showRequests)
+              Positioned(
+                left: 10,
+                bottom: 10,
+                child: _chip(
+                  icon: count > 0
+                      ? Icons.notifications_active_rounded
+                      : Icons.notifications_none_rounded,
+                  label: count == 0
+                      ? 'No requests'
+                      : '$count ${count == 1 ? 'request' : 'requests'}',
+                  color: count > 0 ? _busyOnline : _muted,
+                  onTap: widget.onOpenRequests,
+                ),
+              ),
           ],
         ),
       ),
