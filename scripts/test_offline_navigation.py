@@ -1,13 +1,24 @@
 """Checks road policies independently of the large OSM conversion."""
 import unittest
-from build_offline_navigation import policy
+from build_offline_navigation import policy, landmark_kind, land_areas
 
 
 class PolicyTests(unittest.TestCase):
-    def test_three_wheeler_excludes_expressways(self):
+    def test_only_car_profile_is_generated(self):
         self.assertEqual(policy({"highway": "motorway"})[2] & 2, 0)
         self.assertEqual(policy({"highway": "trunk", "motorroad": "yes"})[2] & 2, 0)
-        self.assertEqual(policy({"highway": "residential"})[2] & 3, 3)
+        self.assertEqual(policy({"highway": "residential"})[2] & 3, 1)
+
+    def test_station_and_amenity_classification(self):
+        self.assertEqual(landmark_kind({"railway":"station"}),"railway_station")
+        self.assertEqual(landmark_kind({"amenity":"bus_station"}),"bus_station")
+        self.assertEqual(landmark_kind({"amenity":"fuel"}),"fuel")
+        self.assertIsNone(landmark_kind({"railway":"abandoned"}))
+
+    def test_coastline_parts_form_land_without_closing_incomplete_lines(self):
+        areas=land_areas([[[0,0],[0,10000],[10000,10000]],[[10000,10000],[10000,0],[0,0]],[[20000,20000],[30000,30000]]])
+        self.assertEqual(len(areas),1)
+        self.assertEqual(areas[0][0],areas[0][-1])
 
     def test_access_and_conditional_roads_excluded(self):
         for tags in [{"access": "private"}, {"motor_vehicle": "no"},

@@ -14,6 +14,7 @@ import math
 from pathlib import Path
 import struct
 import sys
+import shutil
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,8 +43,6 @@ def policy(tags):
         return None
     index = CLASSES.index(base)
     flags = 1  # car
-    if base != "motorway" and tags.get("motorroad") != "yes" and tags.get("motorcycle", "yes") not in BLOCKED:
-        flags |= 2  # three-wheeler profile avoids expressways
     if tags.get("junction") == "roundabout":
         flags |= 4
     direction = tags.get("oneway:motorcar", tags.get("oneway:motor_vehicle", tags.get("oneway")))
@@ -73,6 +72,22 @@ def meters(a, b):
     return 12742000 * math.asin(min(1, math.sqrt(value)))
 
 
+def landmark_kind(tags):
+    if tags.get("railway") in {"station", "halt"}:
+        return "railway_station"
+    if tags.get("amenity") in {"bus_station", "fuel", "hospital", "clinic", "pharmacy", "police", "bank", "atm", "school", "university", "place_of_worship", "restaurant", "cafe", "parking", "ferry_terminal"}:
+        return tags["amenity"]
+    if tags.get("public_transport") == "station":
+        return "bus_station" if tags.get("bus") == "yes" else "railway_station"
+    if tags.get("aeroway") in {"aerodrome", "terminal"}:
+        return "airport"
+    if tags.get("tourism") in {"attraction", "museum", "hotel", "viewpoint"}:
+        return tags["tourism"]
+    if tags.get("shop") in {"supermarket", "mall", "convenience"}:
+        return tags["shop"]
+    return None
+
+
 def simplify(points, tolerance=900):
     """Douglas-Peucker in E6 degrees (~100 m), for the overview map only."""
     keep = {0, len(points) - 1}
@@ -93,6 +108,26 @@ def simplify(points, tolerance=900):
             keep.add(index)
             pending.extend([(first, index), (index, last)])
     return [points[i] for i in sorted(keep)]
+
+
+def land_areas(coastlines):
+    remaining = {i: points for i, points in enumerate(coastlines) if len(points) > 1}
+    endpoints = defaultdict(list)
+    for index, points in remaining.items():
+        endpoints[tuple(points[0])].append(index)
+    areas = []
+    while remaining:
+        index = next(iter(remaining))
+        chain = list(remaining.pop(index))
+        while chain[-1] != chain[0]:
+            candidates = endpoints.get(tuple(chain[-1]), [])
+            following = next((i for i in candidates if i in remaining), None)
+            if following is None:
+                break
+            chain.extend(remaining.pop(following)[1:])
+        if len(chain) >= 4 and chain[-1] == chain[0]:
+            areas.append(simplify(chain, 150))
+    return areas
 
 
 def download(path):
@@ -124,6 +159,9 @@ def build(source, output):
             self.restrictions = []
             self.places = []
             self.coasts = []
+            self.landmarks = []
+            self.surfaces = []
+            self.railways = []
             self.skipped = Counter()
 
         def node(self, node):
@@ -135,11 +173,36 @@ def build(source, output):
             if tags.get("place") in {"city", "town", "village", "suburb", "hamlet"} and tags.get("name"):
                 self.places.append([tags.get("name:en", tags["name"]), round(node.location.lat * 1e6),
                                     round(node.location.lon * 1e6), tags["place"], tags.get("name", "")])
+            self.landmark(tags, node.location.lat, node.location.lon)
+
+        def landmark(self, tags, lat, lon):
+            kind = landmark_kind(tags)
+            if kind is None:
+                return
+            name = tags.get("name:en", tags.get("name", tags.get("brand", tags.get("operator", ""))))
+            if not name:
+                name = kind.replace("_", " ").title()
+            aliases = " | ".join(tags.get(k, "") for k in ("name", "name:si", "name:ta", "alt_name", "name:en"))
+            self.landmarks.append([name, round(lat * 1e6), round(lon * 1e6), kind, aliases])
 
         def way(self, way):
             tags = dict(way.tags)
             if tags.get("natural") == "coastline":
                 self.coasts.append([[round(n.lat * 1e6), round(n.lon * 1e6)] for n in way.nodes if n.location.valid()])
+            geometry = None
+            kind = landmark_kind(tags)
+            surface = "water" if tags.get("natural") == "water" or tags.get("waterway") == "riverbank" else \
+                "park" if tags.get("leisure") in {"park", "garden"} else "building" if tags.get("building") and tags.get("building") != "no" and \
+                (kind or tags.get("name") or tags.get("building") in {"commercial", "retail", "hospital", "train_station", "civic", "school", "university"}) else None
+            if kind or surface or tags.get("railway") in {"rail", "light_rail"}:
+                geometry = [(round(n.lat * 1e6), round(n.lon * 1e6)) for n in way.nodes if n.location.valid()]
+            if kind and geometry:
+                self.landmark(tags, sum(p[0] for p in geometry) / len(geometry) / 1e6,
+                              sum(p[1] for p in geometry) / len(geometry) / 1e6)
+            if surface and geometry and len(geometry) >= 4 and way.is_closed():
+                self.surfaces.append([surface, simplify(geometry, 10 if surface == "building" else 80)])
+            if tags.get("railway") in {"rail", "light_rail"} and geometry:
+                self.railways.append(simplify(geometry, 30))
             rules = policy(tags)
             if rules is None:
                 if tags.get("highway"):
@@ -169,7 +232,8 @@ def build(source, output):
     print("Reading motor roads, places and turn restrictions…", flush=True)
     handler.apply_file(str(source), locations=True, idx="sparse_mem_array", filters=[
         osmium.filter.KeyFilter("highway", "natural", "type", "place", "barrier",
-                               "access", "vehicle", "motor_vehicle", "motorcar")])
+                               "access", "vehicle", "motor_vehicle", "motorcar", "railway", "amenity",
+                               "public_transport", "tourism", "shop", "aeroway", "building", "leisure", "waterway")])
     print(f"Collected {len(handler.coords):,} road nodes and {len(handler.ways):,} road ways; building graph...", flush=True)
     # Sorting by grid cell makes spatial queries contiguous without an expensive runtime index.
     ids = sorted(handler.coords, key=lambda nid: (handler.coords[nid][0] // 20000, handler.coords[nid][1] // 20000, nid))
@@ -234,7 +298,9 @@ def build(source, output):
         data_timestamp = reader.header().get("osmosis_replication_timestamp")
     metadata = {"version": 1, "region": "Sri Lanka", "cellE6": 20000, "cells": cells,
                 "roads": roads, "places": handler.places, "coastlines": handler.coasts,
-                "overviewRoads": overview,
+                "overviewRoads": overview, "landmarks": handler.landmarks,
+                "surfaces": handler.surfaces, "railways": handler.railways,
+                "landAreas": land_areas(handler.coasts),
                 "restrictions": restrictions, "excludedComplexTurns": excluded_complex,
                 "sourceTimestamp": data_timestamp, "maxSpeedKph": 80,
                 "attribution": "© OpenStreetMap contributors", "license": "ODbL-1.0"}
@@ -252,7 +318,8 @@ def build(source, output):
                 "sourceTimestamp": data_timestamp, "sourceSha256": hashlib.file_digest(source.open("rb"), "sha256").hexdigest(),
                 "assetSha256": hashlib.file_digest(output.open("rb"), "sha256").hexdigest(),
                 "builtAtUtc": datetime.now(timezone.utc).isoformat(), "nodes": n, "directedEdges": e,
-                "roadWays": len(roads), "places": len(handler.places), "turnRestrictions": len(restrictions),
+                "roadWays": len(roads), "places": len(handler.places), "landmarks": len(handler.landmarks),
+                "surfaceAreas": len(handler.surfaces), "turnRestrictions": len(restrictions),
                 "complexRestrictionsConservativelyBlocked": len(excluded_complex), "assetBytes": output.stat().st_size,
                 "license": "ODbL-1.0", "copyright": "© OpenStreetMap contributors",
                 "copyrightUrl": "https://www.openstreetmap.org/copyright",
@@ -265,9 +332,15 @@ def build(source, output):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", type=Path, default=ROOT / ".map-build/sri-lanka-latest.osm.pbf")
-    parser.add_argument("--output", type=Path, default=ROOT / "packages/offline_trip/assets/sri_lanka.nav.gz")
+    parser.add_argument("--output", type=Path, default=ROOT / "frontend_Driver/assets/offline/sri_lanka.nav.gz")
     parser.add_argument("--download", action="store_true")
     args = parser.parse_args()
     if args.download:
         download(args.source)
     build(args.source, args.output)
+    # The default build updates the data bundled independently by both apps.
+    if args.output.resolve() == (ROOT / "frontend_Driver/assets/offline/sri_lanka.nav.gz").resolve():
+        customer_assets = ROOT / "frontend-Customer/assets/offline"
+        customer_assets.mkdir(parents=True, exist_ok=True)
+        for filename in ("sri_lanka.nav.gz", "manifest.json", "NOTICE.txt"):
+            shutil.copy2(args.output.with_name(filename), customer_assets / filename)
