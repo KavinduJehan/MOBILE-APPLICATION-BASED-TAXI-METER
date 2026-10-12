@@ -175,7 +175,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                 } catch (error) {
                   // Offline fallback: Save trip locally to SQLite & generate offline receipt
                   final offlineReceipt = 'REC-OFFLINE-${DateTime.now().millisecondsSinceEpoch.toRadixString(36).toUpperCase()}';
-                  final localId = 'offline-${DateTime.now().millisecondsSinceEpoch}';
+                  final localId = trip.id;
                   final offlineTrip = TripRecord(
                     id: localId,
                     customerName: trip.customerName.isNotEmpty ? trip.customerName : 'Passenger',
@@ -190,18 +190,27 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                     surgeBreakdown: trip.surgeBreakdown,
                   );
 
-                  await OfflineDatabase.instance.insertOfflineTrip(
-                    localId: localId,
-                    customerName: offlineTrip.customerName,
-                    startAddress: offlineTrip.startAddress,
-                    endAddress: offlineTrip.endAddress,
-                    distanceKm: offlineTrip.distanceKm,
-                    ratePerKm: offlineTrip.ratePerKm,
-                    fare: offlineTrip.fare,
-                    receiptNumber: offlineReceipt,
-                    surgeBreakdown: offlineTrip.surgeBreakdown,
-                    date: offlineTrip.date,
-                  );
+                  try {
+                    await OfflineDatabase.instance.completeOfflineTrip(
+                      localId: localId,
+                      fare: offlineTrip.fare,
+                      receiptNumber: offlineReceipt,
+                      date: offlineTrip.date,
+                    );
+                  } on StateError {
+                    await OfflineDatabase.instance.insertOfflineTrip(
+                      localId: localId,
+                      customerName: offlineTrip.customerName,
+                      startAddress: offlineTrip.startAddress,
+                      endAddress: offlineTrip.endAddress,
+                      distanceKm: offlineTrip.distanceKm,
+                      ratePerKm: offlineTrip.ratePerKm,
+                      fare: offlineTrip.fare,
+                      receiptNumber: offlineReceipt,
+                      surgeBreakdown: offlineTrip.surgeBreakdown,
+                      date: offlineTrip.date,
+                    );
+                  }
 
                   if (!context.mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
