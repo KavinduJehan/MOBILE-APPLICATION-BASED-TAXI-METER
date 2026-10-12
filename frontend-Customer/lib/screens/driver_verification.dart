@@ -4,6 +4,7 @@ import '../providers/auth_provider.dart';
 import 'rate_comparison.dart';
 import 'negotiate_screen.dart';
 import 'ride_request_screen.dart';
+import 'package:customer_app/offline/offline_trip.dart' show OfflineUi, OfflinePanel, OfflineNotice, OfflineTone;
 import 'offline_trip_offer_screen.dart';
 
 class DriverVerificationScreen extends StatefulWidget {
@@ -11,10 +12,14 @@ class DriverVerificationScreen extends StatefulWidget {
   final Map<String, dynamic> driver;
   final bool offlineMode;
 
+  /// Whether the phone can actually reach the server (checked by the caller).
+  final bool hasInternet;
+
   const DriverVerificationScreen({
     super.key,
     required this.driver,
     this.offlineMode = false,
+    this.hasInternet = false,
   });
 
   @override
@@ -151,203 +156,286 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
     final vehicleNumber = driver['vehicleNumber'] as String? ?? '—';
     final licenseNumber = driver['licenseNumber'] as String? ?? '—';
     final area = driver['area'] as String?;
-    final displayArea = area ?? '—';
     final rate = _effectiveRate;
     final isVerified = driver['isVerified'] as bool? ?? false;
     final isOffline = widget.offlineMode;
+    final primary = Theme.of(context).colorScheme.primary;
+
+    final badgeColor = isOffline
+        ? OfflineUi.warning
+        : (isVerified ? OfflineUi.success : OfflineUi.danger);
+    final badgeIcon = isOffline
+        ? Icons.handshake_rounded
+        : (isVerified ? Icons.verified_rounded : Icons.error_outline_rounded);
+    final badgeText = isOffline
+        ? 'Direct QR Handshake'
+        : (isVerified ? 'Verified Driver' : 'Unverified');
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(isOffline ? 'Driver Details (Offline)' : 'Driver Details'),
+        title: Text(
+          isOffline && !widget.hasInternet
+              ? 'Driver Details (Offline)'
+              : 'Driver Details',
+        ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Card(
-          elevation: 3,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (isOffline) ...[
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    margin: const EdgeInsets.only(bottom: 16),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.amber.withValues(alpha: 0.5)),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.cloud_off, color: Colors.amber, size: 22),
-                        SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'No internet connection. Driver details loaded from QR payload. Generate a Trip Offer QR to start offline.',
-                            style: TextStyle(
-                              color: Color(0xFFB45309),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (isOffline) ...[
+                widget.hasInternet
+                    ? const OfflineNotice(
+                        'Offline trip mode. Driver details were read from their QR. Generate a Trip Offer QR to start.',
+                        icon: Icons.offline_bolt_rounded,
+                      )
+                    : const OfflineNotice(
+                        'No internet connection. Driver details loaded from QR payload. Generate a Trip Offer QR to start offline.',
+                        tone: OfflineTone.warning,
+                        icon: Icons.cloud_off_rounded,
+                      ),
+                const SizedBox(height: 14),
+              ],
+              OfflinePanel(
+                padding: const EdgeInsets.fromLTRB(18, 24, 18, 12),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 84,
+                      height: 84,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [primary, OfflineUi.accent],
                         ),
-                      ],
-                    ),
-                  ),
-                ],
-
-                const CircleAvatar(
-                  radius: 35,
-                  child: Icon(Icons.person, size: 40),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  name,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isOffline
-                        ? const Color(0xFFFEF3C7)
-                        : (isVerified ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2)),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    isOffline
-                        ? 'Direct QR Handshake'
-                        : (isVerified ? 'Verified Driver' : 'Unverified'),
-                    style: TextStyle(
-                      color: isOffline
-                          ? Colors.orange.shade900
-                          : (isVerified ? Colors.green : Colors.red),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                const Divider(height: 30),
-
-                _infoRow(Icons.directions_car, 'Vehicle No', vehicleNumber),
-                _infoRow(Icons.badge, 'License No', licenseNumber),
-                _infoRow(Icons.location_on, 'Area', displayArea),
-                _infoRow(
-                  Icons.payments,
-                  'Rate per km',
-                  'Rs. ${rate.toStringAsFixed(0)} / km',
-                ),
-
-                const SizedBox(height: 20),
-
-                if (!isOffline) ...[
-                  ElevatedButton(
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => RateComparison(area: area, driverRate: rate),
+                        boxShadow: [
+                          BoxShadow(
+                            color: primary.withValues(alpha: 0.4),
+                            blurRadius: 18,
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.person_rounded,
+                        size: 48,
+                        color: Colors.white,
                       ),
                     ),
-                    child: const Text('Compare Rate'),
-                  ),
-                  const SizedBox(height: 10),
-
-                  ElevatedButton(
-                    onPressed: isVerified
-                        ? () async {
-                            final suggestedRate = await Navigator.push<double>(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => NegotiateScreen(driver: driver),
-                              ),
-                            );
-                            if (!context.mounted) return;
-                            if (suggestedRate != null) {
-                              setState(() => _customRate = suggestedRate);
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => RideRequestScreen(
-                                    driver: driver,
-                                    suggestedRatePerKm: suggestedRate,
-                                  ),
-                                ),
-                              );
-                            }
-                          }
-                        : null,
-                    child: const Text('Negotiate Rate (Online)'),
-                  ),
-                  const SizedBox(height: 10),
-
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      shadowColor: Colors.transparent,
-                      elevation: 0,
+                    const SizedBox(height: 14),
+                    Text(
+                      name,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                    onPressed: isVerified
-                        ? () => Navigator.push(
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: badgeColor.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: badgeColor.withValues(alpha: 0.5),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(badgeIcon, size: 16, color: badgeColor),
+                          const SizedBox(width: 6),
+                          Text(
+                            badgeText,
+                            style: TextStyle(
+                              color: badgeColor,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    _infoRow(
+                      Icons.directions_car_rounded,
+                      'Vehicle No',
+                      vehicleNumber,
+                      const Color(0xFF60A5FA),
+                    ),
+                    _infoRow(
+                      Icons.badge_rounded,
+                      'License No',
+                      licenseNumber,
+                      const Color(0xFFA78BFA),
+                    ),
+                    _infoRow(
+                      Icons.payments_rounded,
+                      'Rate per km',
+                      'Rs. ${rate.toStringAsFixed(0)} / km',
+                      OfflineUi.success,
+                      highlight: true,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              if (!isOffline) ...[
+                _action(
+                  icon: Icons.compare_arrows_rounded,
+                  label: 'Compare Rate',
+                  tonal: true,
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => RateComparison(area: area, driverRate: rate),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _action(
+                  icon: Icons.handshake_outlined,
+                  label: 'Negotiate Rate (Online)',
+                  tonal: true,
+                  onPressed: isVerified
+                      ? () async {
+                          final suggestedRate = await Navigator.push<double>(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => RideRequestScreen(
-                                driver: driver,
-                                suggestedRatePerKm: _customRate,
-                              ),
+                              builder: (_) => NegotiateScreen(driver: driver),
                             ),
-                          )
-                        : null,
-                    child: const Text('Start Online Ride'),
-                  ),
-                  const SizedBox(height: 10),
-                ],
-
-                // Offer QR Button (Available both offline and online for direct street hailing)
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isOffline ? Colors.green.shade700 : const Color(0xFF2563EB),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  icon: const Icon(Icons.qr_code_2),
-                  label: Text(
-                    isOffline
-                        ? 'Generate Trip Offer QR (Offline)'
-                        : 'Generate Trip Offer QR (Direct Tuk Handoff)',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  onPressed: () => _showOfferQrModal(context, isOffline: isOffline),
+                          );
+                          if (!context.mounted) return;
+                          if (suggestedRate != null) {
+                            setState(() => _customRate = suggestedRate);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => RideRequestScreen(
+                                  driver: driver,
+                                  suggestedRatePerKm: suggestedRate,
+                                ),
+                              ),
+                            );
+                          }
+                        }
+                      : null,
                 ),
+                const SizedBox(height: 10),
+                _action(
+                  icon: Icons.local_taxi_rounded,
+                  label: 'Start Online Ride',
+                  color: OfflineUi.success,
+                  onPressed: isVerified
+                      ? () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => RideRequestScreen(
+                              driver: driver,
+                              suggestedRatePerKm: _customRate,
+                            ),
+                          ),
+                        )
+                      : null,
+                ),
+                const SizedBox(height: 10),
               ],
-            ),
+              // Available offline and online for direct street hailing.
+              _action(
+                icon: Icons.qr_code_2_rounded,
+                label: isOffline
+                    ? 'Generate Trip Offer QR (Offline)'
+                    : 'Generate Trip Offer QR (Direct Tuk Handoff)',
+                color: isOffline ? OfflineUi.success : primary,
+                onPressed: () => _showOfferQrModal(context, isOffline: isOffline),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _infoRow(IconData icon, String label, String value) {
+  Widget _action({
+    required IconData icon,
+    required String label,
+    required VoidCallback? onPressed,
+    Color? color,
+    bool tonal = false,
+  }) {
+    final style = (tonal ? FilledButton.styleFrom() : FilledButton.styleFrom(backgroundColor: color))
+        .copyWith(
+          minimumSize: const WidgetStatePropertyAll(Size.fromHeight(54)),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          ),
+        );
+    final child = Text(
+      label,
+      textAlign: TextAlign.center,
+      style: const TextStyle(fontWeight: FontWeight.w700),
+    );
+    return tonal
+        ? FilledButton.tonalIcon(
+            onPressed: onPressed,
+            style: style,
+            icon: Icon(icon),
+            label: child,
+          )
+        : FilledButton.icon(
+            onPressed: onPressed,
+            style: style,
+            icon: Icon(icon),
+            label: child,
+          );
+  }
+
+  Widget _infoRow(
+    IconData icon,
+    String label,
+    String value,
+    Color color, {
+    bool highlight = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 7),
       child: Row(
         children: [
-          Icon(icon, size: 22, color: Colors.black87),
-          const SizedBox(width: 10),
-          Expanded(child: Text(label)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, size: 22, color: color),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(color: OfflineUi.muted, fontSize: 14),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: highlight ? 17 : 15,
+                color: highlight ? const Color(0xFF4ADE80) : Colors.white,
+              ),
+            ),
+          ),
         ],
       ),
     );
