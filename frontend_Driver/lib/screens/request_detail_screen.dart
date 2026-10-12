@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../models/ride_request.dart';
 import '../models/trip_record.dart';
+import '../providers/active_trip_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/counter_offer_tracker.dart';
 import '../services/ride_alert_service.dart';
@@ -234,6 +235,12 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
 
   Future<void> _accept(AuthProvider auth) async {
     final messenger = ScaffoldMessenger.of(context);
+    final active = context.read<ActiveTripProvider>();
+    final block = active.blockReason;
+    if (block != null) {
+      messenger.showSnackBar(SnackBar(content: Text(block)));
+      return;
+    }
     setState(() => _accepting = true);
     try {
       final response = await auth.api.respondToRequest(
@@ -242,6 +249,7 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
       );
       final trip = TripRecord.fromJson(_readTrip(response));
       if (!mounted) return;
+      active.markOnlineStarted(trip);
       _openNavigation(trip, receiptNumber: _readReceipt(response));
     } catch (error) {
       if (!mounted) return;
@@ -755,6 +763,7 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
   }
 
   Widget _buildActionBar(AuthProvider auth) {
+    final block = context.watch<ActiveTripProvider>().blockReason;
     final busy = _accepting || _rejecting || _countering;
     final offer = _request.suggestedRatePerKm;
     final waiting = _request.awaitingCustomer;
@@ -790,7 +799,7 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
     Widget acceptButton(String label) => SizedBox(
       height: 54,
       child: FilledButton.icon(
-        onPressed: busy ? null : () => _accept(auth),
+        onPressed: busy || block != null ? null : () => _accept(auth),
         style: FilledButton.styleFrom(
           backgroundColor: AppTheme.primary,
           foregroundColor: Colors.white,
@@ -875,7 +884,35 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
         color: AppTheme.surface,
         border: Border(top: BorderSide(color: Colors.white12)),
       ),
-      child: content,
+      child: block == null
+          ? content
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.info_outline_rounded,
+                      size: 18,
+                      color: Color(0xFFFBBF24),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        block,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                content,
+              ],
+            ),
     );
   }
 
