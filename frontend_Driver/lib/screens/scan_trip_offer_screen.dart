@@ -1,9 +1,14 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:ridex_driver/offline/offline_trip.dart';
+import 'package:provider/provider.dart';
+import '../providers/active_trip_provider.dart';
+import '../providers/auth_provider.dart';
 import '../models/trip_record.dart';
 import '../services/offline_database.dart';
 import 'active_trip_screen.dart';
+import 'offline_trip_screen.dart';
 
 /// Screen where the driver scans a customer's Trip Offer QR code.
 /// Allows direct street hailing and offline ride negotiation with zero internet needed.
@@ -18,6 +23,7 @@ class _ScanTripOfferScreenState extends State<ScanTripOfferScreen> {
   final MobileScannerController _controller = MobileScannerController();
   bool _processing = false;
   String? _error;
+  Map<String, dynamic>? _offer;
 
   @override
   void dispose() {
@@ -42,6 +48,40 @@ class _ScanTripOfferScreenState extends State<ScanTripOfferScreen> {
         throw 'Invalid QR code. Please scan a Passenger Trip Offer QR.';
       }
 
+      final onlineTrip = context.read<ActiveTripProvider>().onlineTrip;
+      if (onlineTrip != null) {
+        throw 'Finish your current ride before starting an offline trip.';
+      }
+      final profile = context.read<AuthProvider>().profile;
+      if (profile == null || profile.id.isEmpty || profile.qrToken.isEmpty) {
+        throw 'Connect once to refresh your driver profile before using offline trips.';
+      }
+      if (data['version'] != 1 || data['driverToken'] != profile.qrToken) {
+        throw 'This offer is not addressed to your driver QR. Ask the passenger to scan your current QR.';
+      }
+      final time = DateTime.tryParse(data['timestamp']?.toString() ?? '');
+      if (time == null ||
+          DateTime.now().difference(time).abs() > const Duration(minutes: 30)) {
+        throw 'This offer has expired. Ask the passenger to generate a new one.';
+      }
+      final id = data['localId']?.toString() ?? '';
+      if (!RegExp(r'^offline-[a-f0-9]{32}$').hasMatch(id)) {
+        throw 'Invalid trip offer ID.';
+      }
+      if (data['destination'] != null &&
+          (OfflineDestination.fromJson(data['destination']) == null ||
+              !['car', 'tuk'].contains(data['navigationProfile']))) {
+        throw 'Invalid offline destination or vehicle profile.';
+      }
+      final trips = await TripStore.all(profile.id);
+      if (trips.any((trip) => trip.id == id)) {
+        throw 'This offer has already been accepted. Open it in Offline Trips.';
+      }
+      if (trips.any((trip) => !trip.completed)) {
+        throw 'Finish your current offline trip first.';
+      }
+      _offer = data;
+
       await _controller.stop();
       if (!mounted) return;
 
@@ -49,7 +89,7 @@ class _ScanTripOfferScreenState extends State<ScanTripOfferScreen> {
       final customerPhone = data['customerPhone'] as String?;
       final agreedRate = (data['agreedRatePerKm'] as num?)?.toDouble() ?? 0.0;
 
-      if (agreedRate <= 0) {
+      if (!agreedRate.isFinite || agreedRate <= 0) {
         throw 'Trip offer does not contain a valid rate.';
       }
 
@@ -59,6 +99,7 @@ class _ScanTripOfferScreenState extends State<ScanTripOfferScreen> {
         agreedRate: agreedRate,
       );
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e is String ? e : 'Failed to parse Trip Offer QR.';
         _processing = false;
@@ -76,119 +117,112 @@ class _ScanTripOfferScreenState extends State<ScanTripOfferScreen> {
       context: context,
       isDismissible: false,
       enableDrag: false,
-      backgroundColor: const Color(0xFF0E1422),
+      backgroundColor: OfflineUi.panel,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (bottomSheetContext) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 48,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 44,
+                    height: 5,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF22C55E).withValues(alpha: 0.15),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.check_circle_rounded, color: Color(0xFF22C55E), size: 28),
-                  ),
-                  const SizedBox(width: 14),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Trip Offer Received',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 19,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          'Offline handshake detected',
-                          style: TextStyle(color: Colors.white60, fontSize: 13),
-                        ),
-                      ],
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(3),
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 20),
-
-              // Offer details
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF161F33),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                 ),
-                child: Column(
-                  children: [
-                    _infoRow('Passenger', customerName, icon: Icons.person),
-                    if (customerPhone != null && customerPhone.isNotEmpty) ...[
-                      const Divider(color: Colors.white10, height: 18),
-                      _infoRow('Contact', customerPhone, icon: Icons.phone),
+                const SizedBox(height: 18),
+                const OfflineHeader(
+                  icon: Icons.handshake_rounded,
+                  title: 'Trip offer received',
+                  subtitle:
+                      'Check the details, then accept to start the meter.',
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: OfflineUi.stroke),
+                  ),
+                  child: Column(
+                    children: [
+                      OfflineInfoRow(
+                        icon: Icons.person_outline_rounded,
+                        label: 'Passenger',
+                        value: customerName,
+                      ),
+                      if (_offer?['destination'] is Map)
+                        OfflineInfoRow(
+                          icon: Icons.location_on_outlined,
+                          label: 'Destination',
+                          value: (_offer!['destination'] as Map)['name']
+                              .toString(),
+                        ),
+                      if (customerPhone != null && customerPhone.isNotEmpty)
+                        OfflineInfoRow(
+                          icon: Icons.phone_outlined,
+                          label: 'Contact',
+                          value: customerPhone,
+                        ),
+                      OfflineInfoRow(
+                        icon: Icons.payments_outlined,
+                        label: 'Agreed rate',
+                        value: 'Rs. ${agreedRate.toStringAsFixed(0)} / km',
+                        highlight: true,
+                      ),
                     ],
-                    const Divider(color: Colors.white10, height: 18),
-                    _infoRow(
-                      'Agreed Rate',
-                      'Rs. ${agreedRate.toStringAsFixed(0)} / km',
-                      icon: Icons.payments,
-                      highlight: true,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: OfflineUi.success,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size.fromHeight(54),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
                     ),
-                  ],
+                  ),
+                  icon: const Icon(Icons.check_rounded),
+                  onPressed: () async {
+                    Navigator.pop(bottomSheetContext);
+                    await _startOfflineTrip(
+                      customerName: customerName,
+                      agreedRate: agreedRate,
+                    );
+                  },
+                  label: const Text(
+                    'Accept & start trip',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 24),
-
-              // Action buttons
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF22C55E),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                const SizedBox(height: 6),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(bottomSheetContext);
+                    setState(() => _processing = false);
+                    _controller.start();
+                  },
+                  child: const Text(
+                    'Not now — scan again',
+                    style: TextStyle(color: OfflineUi.muted),
+                  ),
                 ),
-                onPressed: () async {
-                  Navigator.pop(bottomSheetContext);
-                  await _startOfflineTrip(
-                    customerName: customerName,
-                    agreedRate: agreedRate,
-                  );
-                },
-                child: const Text(
-                  'Accept & Start Trip',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(bottomSheetContext);
-                  setState(() => _processing = false);
-                  _controller.start();
-                },
-                child: const Text('Decline / Cancel', style: TextStyle(color: Colors.white60)),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -199,174 +233,165 @@ class _ScanTripOfferScreenState extends State<ScanTripOfferScreen> {
     required String customerName,
     required double agreedRate,
   }) async {
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final localId = 'offline-$timestamp';
-    final offlineReceipt = 'REC-OFFLINE-${timestamp.toRadixString(36).toUpperCase()}';
-
-    final trip = TripRecord(
-      id: localId,
-      customerName: customerName,
-      startAddress: 'Street Pickup',
-      endAddress: 'Meter Destination',
-      distanceKm: 0.0,
-      ratePerKm: agreedRate,
-      fare: 0.0,
-      status: 'in_progress',
-      date: DateTime.now(),
-      receiptNumber: offlineReceipt,
-    );
-
-    // Save initial record to local SQLite
-    await OfflineDatabase.instance.insertOfflineTrip(
-      localId: localId,
-      customerName: trip.customerName,
-      startAddress: trip.startAddress,
-      endAddress: trip.endAddress,
-      distanceKm: trip.distanceKm,
-      ratePerKm: trip.ratePerKm,
-      fare: trip.fare,
-      receiptNumber: offlineReceipt,
-      status: 'in_progress',
-      date: trip.date,
-    );
-
-    if (!mounted) return;
-
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ActiveTripScreen(
-          trip: trip,
-          receiptNumber: offlineReceipt,
+    try {
+      final profile = context.read<AuthProvider>().profile!;
+      final offer = _offer!;
+      final trip = TripSession({
+        'version': 1,
+        'localId': offer['localId'],
+        'driverId': profile.id,
+        'driverToken': profile.qrToken,
+        'driverName': profile.name,
+        'vehicleNumber': profile.vehicleNumber,
+        'customerName': customerName,
+        'customerId': offer['customerId'],
+        'customerIdentity': offer['customerIdentity'],
+        'ratePerKm': agreedRate,
+        'distanceKm': 0.0,
+        'status': 'ongoing',
+        'startTime': DateTime.now().toUtc().toIso8601String(),
+        'offerTimestamp': offer['timestamp'],
+        if (offer['destination'] != null) 'destination': offer['destination'],
+        // Retain a legacy wire value so a saved offer can still be confirmed.
+        // Navigation itself always uses car access in the shared package.
+        'navigationProfile': offer['navigationProfile'] ?? 'car',
+      });
+      await TripStore.save(profile.id, trip);
+      if (!mounted) return;
+      await showTripQr(
+        context,
+        'Passenger trip confirmation',
+        trip.qr('TRIP_ACCEPTED'),
+        hint: 'Ask the passenger to scan this to start their trip.',
+      );
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              DriverOfflineTripScreen(trip: trip, owner: profile.id),
         ),
-      ),
-    );
-  }
-
-  Widget _infoRow(String label, String value, {IconData? icon, bool highlight = false}) {
-    return Row(
-      children: [
-        if (icon != null) ...[
-          Icon(icon, size: 18, color: Colors.white60),
-          const SizedBox(width: 8),
-        ],
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 14)),
-        const Spacer(),
-        Text(
-          value,
-          style: TextStyle(
-            color: highlight ? const Color(0xFF4ADE80) : Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: highlight ? 16 : 14,
-          ),
-        ),
-      ],
-    );
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Could not start trip: $e';
+          _processing = false;
+        });
+      }
+      await _controller.start();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('Scan Passenger Offer QR'),
+        title: const Text('Scan passenger offer'),
         backgroundColor: Colors.transparent,
         elevation: 0,
-      ),
-      body: Stack(
-        children: [
-          MobileScanner(
-            controller: _controller,
-            onDetect: _onDetect,
-          ),
-
-          // Scanner Framing reticle
-          Center(
-            child: Container(
-              width: 260,
-              height: 260,
-              decoration: BoxDecoration(
-                border: Border.all(color: const Color(0xFF22C55E), width: 3),
-                borderRadius: BorderRadius.circular(20),
+        actions: [
+          ValueListenableBuilder<MobileScannerState>(
+            valueListenable: _controller,
+            builder: (context, state, _) => IconButton(
+              tooltip: 'Torch',
+              onPressed: _controller.toggleTorch,
+              icon: Icon(
+                state.torchState == TorchState.on
+                    ? Icons.flash_on_rounded
+                    : Icons.flash_off_rounded,
               ),
-            ),
-          ),
-
-          // Top Info Card
-          Positioned(
-            top: 20,
-            left: 24,
-            right: 24,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.black87,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.white12),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.offline_bolt_rounded, color: Colors.amber, size: 22),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Offline Capable: Scan the QR generated on the passenger\'s phone to lock agreed fare.',
-                      style: TextStyle(color: Colors.white70, fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // Bottom Prompt
-          Positioned(
-            bottom: 40,
-            left: 0,
-            right: 0,
-            child: Column(
-              children: [
-                if (_processing && _error == null)
-                  const CircularProgressIndicator(color: Color(0xFF22C55E)),
-                if (_error != null) ...[
-                  Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 24),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade900.withValues(alpha: 0.8),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      _error!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white, fontSize: 13),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                if (!_processing) ...[
-                  const Text(
-                    'Align passenger QR inside the frame',
-                    style: TextStyle(color: Colors.white70, fontSize: 14),
-                  ),
-                  const SizedBox(height: 12),
-                  TextButton.icon(
-                    style: TextButton.styleFrom(
-                      backgroundColor: Colors.white12,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                    ),
-                    icon: const Icon(Icons.edit_note_rounded, size: 18),
-                    label: const Text('Enter Agreed Rate Manually', style: TextStyle(fontSize: 13)),
-                    onPressed: _showManualOfferModal,
-                  ),
-                ],
-              ],
             ),
           ),
         ],
       ),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          MobileScanner(controller: _controller, onDetect: _onDetect),
+          OfflineScannerOverlay(
+            hint: 'Align the passenger’s QR inside the frame',
+            busy: _processing && _error == null,
+            hasError: _error != null,
+          ),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 64, 16, 24),
+              child: Column(
+                children: [
+                  const OfflineNotice(
+                    'No internet needed. Scan the offer QR on the passenger’s phone to lock in the agreed fare.',
+                    icon: Icons.offline_bolt_rounded,
+                  ),
+                  const Spacer(),
+                  if (!_processing)
+                    FilledButton.icon(
+                      onPressed: _showManualOfferModal,
+                      icon: const Icon(Icons.edit_note_rounded),
+                      label: const Text('Enter Agreed Rate Manually'),
+                    ),
+                  if (_error != null)
+                    OfflineNotice(
+                      _error!,
+                      tone: OfflineTone.danger,
+                      action: 'Dismiss',
+                      onAction: () => setState(() => _error = null),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _startManualTrip({
+    required String customerName,
+    required double agreedRate,
+  }) async {
+    final active = context.read<ActiveTripProvider>();
+    final profile = context.read<AuthProvider>().profile;
+    if (profile == null ||
+        active.onlineTrip != null ||
+        active.offlineTrip != null) {
+      setState(
+        () => _error = 'Finish your current ride before starting a meter.',
+      );
+      return;
+    }
+    final id = 'offline-${DateTime.now().microsecondsSinceEpoch}';
+    final trip = TripRecord(
+      id: id,
+      customerName: customerName,
+      startAddress: 'Street Pickup',
+      endAddress: 'Destination not set',
+      distanceKm: 0,
+      ratePerKm: agreedRate,
+      fare: 0,
+      status: 'in_progress',
+      date: DateTime.now(),
+    );
+    await OfflineDatabase.instance.insertOfflineTrip(
+      owner: profile.id,
+      localId: id,
+      customerName: customerName,
+      startAddress: trip.startAddress,
+      endAddress: trip.endAddress,
+      distanceKm: 0,
+      ratePerKm: agreedRate,
+      fare: 0,
+      receiptNumber:
+          'REC-OFFLINE-${DateTime.now().millisecondsSinceEpoch.toRadixString(36).toUpperCase()}',
+      status: 'in_progress',
+      date: trip.date,
+    );
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => ActiveTripScreen(trip: trip)),
     );
   }
 
@@ -395,7 +420,11 @@ class _ScanTripOfferScreenState extends State<ScanTripOfferScreen> {
             children: [
               const Text(
                 'Manual Street Meter',
-                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 6),
               const Text(
@@ -411,7 +440,9 @@ class _ScanTripOfferScreenState extends State<ScanTripOfferScreen> {
                   labelStyle: const TextStyle(color: Colors.white60),
                   filled: true,
                   fillColor: const Color(0xFF161F33),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   prefixIcon: const Icon(Icons.person, color: Colors.white60),
                 ),
               ),
@@ -425,7 +456,9 @@ class _ScanTripOfferScreenState extends State<ScanTripOfferScreen> {
                   labelStyle: const TextStyle(color: Colors.white60),
                   filled: true,
                   fillColor: const Color(0xFF161F33),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   prefixIcon: const Icon(Icons.payments, color: Colors.white60),
                 ),
               ),
@@ -434,15 +467,21 @@ class _ScanTripOfferScreenState extends State<ScanTripOfferScreen> {
                 style: FilledButton.styleFrom(
                   backgroundColor: const Color(0xFF22C55E),
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 icon: const Icon(Icons.speed_rounded),
-                label: const Text('Start Meter', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                label: const Text(
+                  'Start Meter',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
                 onPressed: () {
                   final name = nameController.text.trim();
-                  final rate = double.tryParse(rateController.text.trim()) ?? 100.0;
+                  final rate =
+                      double.tryParse(rateController.text.trim()) ?? 100.0;
                   Navigator.pop(bottomSheetContext);
-                  _startOfflineTrip(
+                  _startManualTrip(
                     customerName: name.isNotEmpty ? name : 'Passenger',
                     agreedRate: rate > 0 ? rate : 100.0,
                   );

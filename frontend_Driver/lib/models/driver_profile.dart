@@ -3,6 +3,7 @@ import '../utils/json_helpers.dart';
 class DriverProfile {
   DriverProfile({
     this.id = '',
+    this.qrToken = '',
     required this.name,
     required this.phone,
     required this.email,
@@ -16,6 +17,7 @@ class DriverProfile {
   });
 
   final String id;
+  final String qrToken;
   final String name;
   final String phone;
   final String email;
@@ -30,6 +32,7 @@ class DriverProfile {
   factory DriverProfile.fromJson(Map<String, dynamic> json) {
     return DriverProfile(
       id: readString(json, ['id', '_id', 'driverId']),
+      qrToken: readString(json, ['qrToken', 'token']),
       name: readString(json, ['name', 'fullName', 'driverName']),
       phone: readString(json, ['phone', 'phoneNumber', 'mobile']),
       email: readString(json, ['email']),
@@ -45,6 +48,7 @@ class DriverProfile {
 
   DriverProfile copyWith({
     String? id,
+    String? qrToken,
     String? name,
     String? phone,
     String? email,
@@ -58,6 +62,7 @@ class DriverProfile {
   }) {
     return DriverProfile(
       id: id ?? this.id,
+      qrToken: qrToken ?? this.qrToken,
       name: name ?? this.name,
       phone: phone ?? this.phone,
       email: email ?? this.email,

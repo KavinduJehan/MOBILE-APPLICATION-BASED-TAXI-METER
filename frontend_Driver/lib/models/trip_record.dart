@@ -1,4 +1,5 @@
 import '../utils/json_helpers.dart';
+import 'ride_request.dart';
 
 class TripRecord {
   TripRecord({
@@ -13,9 +14,18 @@ class TripRecord {
     required this.date,
     this.receiptNumber,
     this.surgeBreakdown,
+    this.offlineLocalId,
+    this.pickupLatitude,
+    this.pickupLongitude,
+    this.destinationLatitude,
+    this.destinationLongitude,
+    this.startedAt,
+    this.arrivedAt,
+    this.pickedUpAt,
   });
 
   final String id;
+  final String? offlineLocalId;
   final String customerName;
   final String startAddress;
   final String endAddress;
@@ -26,12 +36,23 @@ class TripRecord {
   final DateTime? date;
   final String? receiptNumber;
 
+  /// Coordinates and progress timestamps, present for online trips. They let an
+  /// interrupted trip be resumed from where the driver left off.
+  final double? pickupLatitude;
+  final double? pickupLongitude;
+  final double? destinationLatitude;
+  final double? destinationLongitude;
+  final DateTime? startedAt;
+  final DateTime? arrivedAt;
+  final DateTime? pickedUpAt;
+
   /// Non-null when the trip was priced under AUTO mode.
   final Map<String, dynamic>? surgeBreakdown;
 
   factory TripRecord.fromJson(Map<String, dynamic> json) {
     return TripRecord(
       id: readString(json, ['id', '_id', 'tripId']),
+      offlineLocalId: json['offlineLocalId'] as String?,
       customerName: readString(json, [
         'customerName',
         'passengerName',
@@ -64,11 +85,43 @@ class TripRecord {
         'receiptId',
       ], fallback: ''),
       surgeBreakdown: readMap(json, ['surgeBreakdown']),
+      pickupLatitude: (json['pickupLat'] as num?)?.toDouble(),
+      pickupLongitude: (json['pickupLng'] as num?)?.toDouble(),
+      destinationLatitude: (json['destLat'] as num?)?.toDouble(),
+      destinationLongitude: (json['destLng'] as num?)?.toDouble(),
+      startedAt: readDateTime(json, ['startTime']),
+      arrivedAt: readDateTime(json, ['arrivedAt']),
+      pickedUpAt: readDateTime(json, ['pickedUpAt']),
     );
   }
 
   double get estimatedFare => distanceKm * ratePerKm;
 
+  /// An online trip the driver has accepted and not yet finished.
+  bool get isOngoing => offlineLocalId == null && status == 'ongoing';
+
+  bool get canResumeNavigation =>
+      pickupLatitude != null &&
+      pickupLongitude != null &&
+      destinationLatitude != null &&
+      destinationLongitude != null;
+
+  /// Rebuilds the request the navigation screen needs from the saved trip.
+  RideRequest toResumeRequest() => RideRequest(
+    id: id,
+    customerName: customerName,
+    pickupAddress: startAddress,
+    destinationAddress: endAddress,
+    pickupLatitude: pickupLatitude ?? 0,
+    pickupLongitude: pickupLongitude ?? 0,
+    destinationLatitude: destinationLatitude ?? 0,
+    destinationLongitude: destinationLongitude ?? 0,
+    estimatedDistanceKm: distanceKm,
+    driverRatePerKm: ratePerKm,
+    suggestedRatePerKm: null,
+    status: 'accepted',
+    createdAt: startedAt ?? date,
+  );
   TripRecord copyWith({
     String? id,
     String? customerName,
@@ -84,6 +137,14 @@ class TripRecord {
   }) {
     return TripRecord(
       id: id ?? this.id,
+      offlineLocalId: offlineLocalId,
+      pickupLatitude: pickupLatitude,
+      pickupLongitude: pickupLongitude,
+      destinationLatitude: destinationLatitude,
+      destinationLongitude: destinationLongitude,
+      startedAt: startedAt,
+      arrivedAt: arrivedAt,
+      pickedUpAt: pickedUpAt,
       customerName: customerName ?? this.customerName,
       startAddress: startAddress ?? this.startAddress,
       endAddress: endAddress ?? this.endAddress,

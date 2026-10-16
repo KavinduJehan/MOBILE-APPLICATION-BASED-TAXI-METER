@@ -5,6 +5,9 @@ import '../config/app_config.dart';
 import '../models/ride_request.dart';
 
 typedef OnNewRequestCallback = void Function(RideRequest request);
+
+/// [event] is 'trip_ended' or 'trip_cancelled'; [tripId] is the trip it is for.
+typedef OnTripClosedCallback = void Function(String event, String tripId);
 typedef OnConfigUpdatedCallback = void Function(String rateMode, double? ratePerKm);
 
 class DriverSocketService {
@@ -14,6 +17,13 @@ class DriverSocketService {
   io.Socket? _socket;
   String? _driverId;
   OnNewRequestCallback? _onNewRequest;
+  OnTripClosedCallback? _onTripClosed;
+
+  /// Hears about the trip being ended or cancelled from the customer's side.
+  void listenForTripClosed(OnTripClosedCallback onClosed) =>
+      _onTripClosed = onClosed;
+
+  void stopListeningForTripClosed() => _onTripClosed = null;
   final List<OnConfigUpdatedCallback> _configListeners = [];
 
   bool get isConnected => _socket?.connected ?? false;
@@ -63,6 +73,13 @@ class DriverSocketService {
         _socket!.emit('join', _driverId);
       }
     });
+
+    for (final event in const ['trip_ended', 'trip_cancelled']) {
+      _socket!.on(event, (data) {
+        final tripId = data is Map ? data['tripId']?.toString() : null;
+        if (tripId != null) _onTripClosed?.call(event, tripId);
+      });
+    }
 
     _socket!.on('new_request', (data) {
       debugPrint('[Socket] Received new_request event: $data');

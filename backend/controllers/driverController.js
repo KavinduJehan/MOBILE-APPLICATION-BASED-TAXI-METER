@@ -2,6 +2,50 @@ const QRCode = require('qrcode');
 const Driver = require('../models/Driver');
 const Trip = require('../models/Trip');
 const SystemConfig = require('../models/SystemConfig');
+const { resolveEffectiveRate } = require('../services/effectiveRate');
+
+// Replaces each driver's stored rate with the rate a customer is actually
+// charged right now (regulator rate in ADMIN mode, live surge rate in AUTO
+// mode), so the price a customer sees is the price the ride request uses.
+// The stored value is kept as baseRatePerKm.
+const withEffectiveRates = async (drivers, pickup = {}) => {
+  const config = await SystemConfig.findOne().lean();
+  // In AUTO mode the rate depends on the place, not the driver: price each
+  // distinct place once instead of once per driver.
+  const autoCache = new Map();
+
+  return Promise.all(drivers.map(async (driver) => {
+    const hasPickup = Number.isFinite(pickup.lat) && Number.isFinite(pickup.lng);
+    const point = hasPickup
+      ? pickup
+      : { lat: driver.location?.lat ?? undefined, lng: driver.location?.lng ?? undefined };
+    const hasPoint = Number.isFinite(point.lat) && Number.isFinite(point.lng);
+    const key = hasPoint ? `${point.lat},${point.lng}` : `area:${driver.area || ''}`;
+
+    let quote;
+    try {
+      const mode = driver.pricingMode || config?.rateMode || 'ADMIN';
+      if (mode === 'AUTO') {
+        if (!autoCache.has(key)) {
+          autoCache.set(key, resolveEffectiveRate(driver, config, hasPoint ? point : {}));
+        }
+        quote = await autoCache.get(key);
+      } else {
+        quote = await resolveEffectiveRate(driver, config, hasPoint ? point : {});
+      }
+    } catch {
+      return driver; // Pricing unavailable: fall back to the stored rate.
+    }
+
+    if (!Number.isFinite(quote.rate) || quote.rate <= 0) return driver;
+    return {
+      ...driver,
+      baseRatePerKm: driver.ratePerKm,
+      ratePerKm: quote.rate,
+      pricingMode: quote.mode,
+    };
+  }));
+};
 
 // PATCH /api/drivers/profile
 // Lets a driver update their own editable fields (not password, not verification status)
@@ -98,7 +142,7 @@ const getNearbyDrivers = async (req, res) => {
       const drivers = await Driver.find(baseMatch)
         .select('name vehicleNumber vehicleType ratePerKm pricingMode area qrCode isVerified location')
         .lean();
-      return res.json(drivers);
+      return res.json(await withEffectiveRates(drivers));
     }
 
     const drivers = await Driver.aggregate([
@@ -125,7 +169,7 @@ const getNearbyDrivers = async (req, res) => {
       },
     ]);
 
-    return res.json(drivers);
+    return res.json(await withEffectiveRates(drivers, { lat: pickupLat, lng: pickupLng }));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -137,7 +181,8 @@ const getDriverByQR = async (req, res) => {
   try {
     const driver = await Driver.findOne({ qrToken }).select('-password');
     if (!driver) return res.status(404).json({ message: 'Driver not found' });
-    res.json(driver);
+    const [priced] = await withEffectiveRates([driver.toObject()]);
+    res.json(priced);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

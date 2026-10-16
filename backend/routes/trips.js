@@ -1,8 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { protect } = require('../middleware/auth');
+const { getOfflineIdentity, syncOfflineHandshakeTrips } = require('../controllers/offlineTripController');
 const {
   createTrip,
+  markArrived,
   startTrip,
   endTrip,
   cancelTrip,
@@ -14,6 +16,9 @@ const {
 
 router.post('/', protect, createTrip);
 router.post('/sync', protect, syncOfflineTrips);
+router.get('/offline-identity', protect, getOfflineIdentity);
+router.post('/offline-sync', protect, syncOfflineHandshakeTrips);
+router.patch('/:id/arrive', protect, markArrived);
 router.patch('/:id/start', protect, startTrip);
 router.patch('/:id/end', protect, endTrip);
 router.patch('/:id/cancel', protect, cancelTrip);

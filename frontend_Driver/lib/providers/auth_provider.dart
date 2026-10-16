@@ -5,12 +5,14 @@ import '../models/driver_profile.dart';
 import '../services/api_service.dart';
 import '../services/driver_location_service.dart';
 import '../services/offline_database.dart';
+import '../services/sync_service.dart';
 import '../services/session_store.dart';
 import '../services/socket_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   AuthProvider() {
     _locationService = DriverLocationService(api);
+    _syncCoordinator = OfflineSyncCoordinator(api);
     DriverSocketService.instance.addConfigListener(_handleSocketConfigUpdate);
   }
 
@@ -31,6 +33,7 @@ class AuthProvider extends ChangeNotifier {
 
   final ApiService api = ApiService();
   late final DriverLocationService _locationService;
+  late final OfflineSyncCoordinator _syncCoordinator;
 
   bool _bootstrapping = true;
   bool _busy = false;
@@ -60,6 +63,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       _token = await SessionStore.readToken();
       if (_token != null) {
+        await _syncCoordinator.start();
         try {
           _profile = await api.getProfile();
           if (_profile != null) {
@@ -88,6 +92,7 @@ class AuthProvider extends ChangeNotifier {
       final result = await api.login(email: email, password: password);
       _token = result.token;
       await SessionStore.saveToken(result.token);
+      await _syncCoordinator.start();
 
       _profile = result.profile ?? await api.getProfile();
       if (_profile != null) {
@@ -235,6 +240,7 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> logout() async {
     _locationService.stop();
+    await _syncCoordinator.stop();
     await SessionStore.clear();
     _token = null;
     _profile = null;
@@ -279,6 +285,7 @@ class AuthProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _syncCoordinator.stop();
     DriverSocketService.instance.removeConfigListener(_handleSocketConfigUpdate);
     _locationService.stop();
     super.dispose();

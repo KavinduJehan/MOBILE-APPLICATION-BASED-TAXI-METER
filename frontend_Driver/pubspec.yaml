@@ -28,6 +28,8 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
+  shared_preferences: ^2.5.5
+  file_selector: ^1.0.4
   flutter:
     sdk: flutter
 
@@ -45,6 +47,7 @@ dependencies:
   path: ^1.9.0
   path_provider: ^2.1.5
   socket_io_client: ^3.0.2
+  connectivity_plus: ^6.1.4
 
   # QR code scanning (Trip Offer QR from customer offline handoff)
   mobile_scanner: ^7.4.0
@@ -74,6 +77,8 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+  assets:
+    - assets/offline/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

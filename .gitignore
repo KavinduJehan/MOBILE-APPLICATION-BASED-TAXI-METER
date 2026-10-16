@@ -1,8 +1,13 @@
 # JavaScript dependencies
 **/node_modules/
+.tools/offline-nav/
+**/.tools/flutter-temp/
+.map-build/
+scripts/__pycache__/
 
 # Flutter and Dart generated files
 **/.dart_tool/
+**/.flutter-plugins-dependencies
 **/build/
 **/flutter/ephemeral/
 
@@ -21,4 +26,3 @@ atlas-credentials.env
 frontend-Customer/android/app/google-services.json
 frontend-Customer/web/maps_config.js
 frontend/android/.gradle/
-

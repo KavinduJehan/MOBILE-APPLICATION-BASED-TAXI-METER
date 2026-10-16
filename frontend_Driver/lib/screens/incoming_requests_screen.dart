@@ -143,10 +143,20 @@ class _RequestCard extends StatelessWidget {
               if (suggestedRate != null) ...[
                 const SizedBox(height: 10),
                 _MiniInfo(
-                  label: 'Suggested rate',
+                  label: request.awaitingCustomer
+                      ? 'Customer offered'
+                      : 'Customer offers — tap to answer',
                   value: 'Rs. ${suggestedRate.toStringAsFixed(2)}',
                   highlight: highlightSuggested,
                 ),
+                if (request.awaitingCustomer) ...[
+                  const SizedBox(height: 10),
+                  _MiniInfo(
+                    label: 'Your offer — waiting for customer',
+                    value: 'Rs. ${request.counterRatePerKm!.toStringAsFixed(2)}',
+                    highlight: true,
+                  ),
+                ],
               ],
             ],
           ),

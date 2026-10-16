@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../providers/active_trip_provider.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/app_widgets.dart';
 import 'login_screen.dart';
@@ -47,12 +48,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(profile?.name ?? 'Driver profile', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+                  Text(
+                    profile?.name ?? 'Driver profile',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                   const SizedBox(height: 14),
                   InfoRow(label: 'Phone', value: profile?.phone ?? '-'),
                   InfoRow(label: 'Email', value: profile?.email ?? '-'),
-                  InfoRow(label: 'License', value: profile?.licenseNumber ?? '-'),
-                  InfoRow(label: 'Vehicle', value: profile?.vehicleNumber ?? '-'),
+                  InfoRow(
+                    label: 'License',
+                    value: profile?.licenseNumber ?? '-',
+                  ),
+                  InfoRow(
+                    label: 'Vehicle',
+                    value: profile?.vehicleNumber ?? '-',
+                  ),
                   InfoRow(label: 'Area', value: profile?.area ?? '-'),
                 ],
               ),
@@ -62,21 +74,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
               title: 'Edit Profile',
               subtitle: 'Update your name, email, phone, vehicle and area.',
               icon: Icons.manage_accounts_rounded,
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProfileScreen())),
+              onTap: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const ProfileScreen())),
             ),
             const SizedBox(height: 12),
             ActionCard(
               title: 'Update Rate',
               subtitle: 'Jump to the per-km rate editor.',
               icon: Icons.price_change_rounded,
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RateScreen())),
+              onTap: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const RateScreen())),
             ),
             const SizedBox(height: 12),
             ActionCard(
               title: 'Show My QR',
               subtitle: 'Open the QR screen for rider verification.',
               icon: Icons.qr_code_rounded,
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QrScreen())),
+              onTap: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const QrScreen())),
             ),
             const SizedBox(height: 12),
             ActionCard(
@@ -85,6 +103,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               icon: Icons.logout_rounded,
               onTap: () async {
                 await auth.logout();
+                if (context.mounted) context.read<ActiveTripProvider>().clear();
                 if (!context.mounted) return;
                 Navigator.of(context).pushAndRemoveUntil(
                   MaterialPageRoute(builder: (_) => const LoginScreen()),
