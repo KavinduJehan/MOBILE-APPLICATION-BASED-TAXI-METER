@@ -7,6 +7,7 @@ import '../theme.dart';
 import 'main_navigation.dart';
 import 'receipt.dart';
 import 'offline_trips_screen.dart';
+import 'trip_progress_screen.dart';
 
 enum _TripFilter { completed, pending, ongoing, canceled }
 
@@ -53,8 +54,16 @@ class _TripsTabState extends State<TripsTab> {
         child: Column(
           children: [
             const _Header(),
-            TextButton.icon(icon: const Icon(Icons.offline_bolt), label: const Text('Offline Trips & Maps'),
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerOfflineTripsScreen()))),
+            TextButton.icon(
+              icon: const Icon(Icons.offline_bolt),
+              label: const Text('Offline Trips & Maps'),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const CustomerOfflineTripsScreen(),
+                ),
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
               child: _FilterBar(
@@ -137,10 +146,11 @@ class _TripsTabState extends State<TripsTab> {
                     for (final trip in group.trips)
                       _TripCard(
                         trip: trip,
-                        onCancel:
-                            trip.status.toLowerCase() == 'ongoing' ||
-                                trip.status.toLowerCase() == 'pending'
+                        onCancel: trip.status.toLowerCase() == 'pending'
                             ? () => _confirmCancelTrip(context, provider, trip)
+                            : null,
+                        onTrack: trip.status.toLowerCase() == 'ongoing'
+                            ? () => _trackTrip(context, trip)
                             : null,
                       ),
                   ],
@@ -167,6 +177,24 @@ class _TripsTabState extends State<TripsTab> {
       _TripFilter.ongoing => status == 'ongoing',
       _TripFilter.canceled => status == 'cancelled' || status == 'canceled',
     };
+  }
+
+  void _trackTrip(BuildContext context, TripModel trip) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TripProgressScreen(
+          requestId: trip.id,
+          driver:
+              trip.driver?.toJson() ??
+              {'name': trip.driverName, 'vehicleNumber': trip.vehicleNumber},
+          trip: trip,
+          distanceKm: trip.distanceKm,
+          ratePerKm: trip.ratePerKm,
+          totalFare: trip.totalFare,
+        ),
+      ),
+    );
   }
 
   Future<void> _confirmCancelPending(
@@ -486,9 +514,10 @@ class _PendingSearchCard extends StatelessWidget {
 }
 
 class _TripCard extends StatelessWidget {
-  const _TripCard({required this.trip, this.onCancel});
+  const _TripCard({required this.trip, this.onCancel, this.onTrack});
   final TripModel trip;
   final VoidCallback? onCancel;
+  final VoidCallback? onTrack;
 
   @override
   Widget build(BuildContext context) => Card(
@@ -595,18 +624,28 @@ class _TripCard extends StatelessWidget {
               location: trip.dropLocation,
               time: _formatTime(trip.endTime),
             ),
-            if (onCancel != null) ...[
+            if (onTrack != null || onCancel != null) ...[
               const SizedBox(height: 14),
-              OutlinedButton.icon(
-                onPressed: onCancel,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppTheme.dangerRed,
-                  side: const BorderSide(color: AppTheme.dangerRed),
-                  minimumSize: const Size(double.infinity, 46),
+              if (onTrack != null)
+                ElevatedButton.icon(
+                  onPressed: onTrack,
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 46),
+                  ),
+                  icon: const Icon(Icons.map_outlined, size: 19),
+                  label: const Text('TRACK RIDE'),
+                )
+              else
+                OutlinedButton.icon(
+                  onPressed: onCancel,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.dangerRed,
+                    side: const BorderSide(color: AppTheme.dangerRed),
+                    minimumSize: const Size(double.infinity, 46),
+                  ),
+                  icon: const Icon(Icons.close_rounded, size: 19),
+                  label: const Text('CANCEL RIDE'),
                 ),
-                icon: const Icon(Icons.close_rounded, size: 19),
-                label: const Text('CANCEL RIDE'),
-              ),
             ],
           ],
         ),

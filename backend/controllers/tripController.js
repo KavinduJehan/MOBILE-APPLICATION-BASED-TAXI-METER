@@ -3,6 +3,7 @@ const Trip = require('../models/Trip');
 const Receipt = require('../models/Receipt');
 const Driver = require('../models/Driver');
 const RideRequest = require('../models/RideRequest');
+const Customer = require('../models/Customer');
 const SystemConfig = require('../models/SystemConfig');
 const { computeAutoRate } = require('../services/pricingEngine');
 
@@ -220,6 +221,13 @@ const endTrip = async (req, res) => {
       });
     }
 
+    if (req.body?.distanceKm != null && Number(req.body.distanceKm) > 0) {
+      trip.distanceKm = Number(req.body.distanceKm);
+      trip.totalFare = Number(req.body.totalFare) > 0
+        ? Number(req.body.totalFare)
+        : parseFloat((trip.distanceKm * trip.ratePerKm).toFixed(2));
+    }
+
     trip.status = 'completed';
     trip.endTime = new Date();
     await trip.save();
@@ -392,26 +400,46 @@ const syncOfflineTrips = async (req, res) => {
       let surgeBreakdown = item.surgeBreakdown || null;
       const config = await SystemConfig.findOne().lean();
       const effectivePricingMode = config?.rateMode || driver.pricingMode || 'ADMIN';
-      if (effectivePricingMode === 'ADMIN') {
-        ratePerKm = config?.autoBaseRate || driver.ratePerKm || 100;
-        surgeBreakdown = null;
-      } else if (effectivePricingMode === 'AUTO') {
-        const priceResult = await computeAutoRate({
-          lat: driver.location?.coordinates?.[1] ?? null,
-          lng: driver.location?.coordinates?.[0] ?? null,
-        });
-        ratePerKm = priceResult.effectiveRate;
-        surgeBreakdown = priceResult.breakdown;
+      if (!ratePerKm || ratePerKm <= 0) {
+        if (effectivePricingMode === 'ADMIN') {
+          ratePerKm = config?.autoBaseRate || driver.ratePerKm || 100;
+          surgeBreakdown = null;
+        } else if (effectivePricingMode === 'AUTO') {
+          const priceResult = await computeAutoRate({
+            lat: driver.location?.coordinates?.[1] ?? null,
+            lng: driver.location?.coordinates?.[0] ?? null,
+          });
+          ratePerKm = priceResult.effectiveRate;
+          surgeBreakdown = priceResult.breakdown;
+        }
       }
       if (!Number.isFinite(ratePerKm) || ratePerKm <= 0) {
         return res.status(400).json({ message: 'A valid rate is required to sync offline trips' });
       }
-      const totalFare = parseFloat((distanceKm * ratePerKm).toFixed(2));
+      const totalFare = (Number(item.totalFare) > 0)
+        ? Number(item.totalFare)
+        : parseFloat((distanceKm * ratePerKm).toFixed(2));
       const startTime = item.startTime ? new Date(item.startTime) : (item.date ? new Date(item.date) : new Date());
       const endTime = item.endTime ? new Date(item.endTime) : new Date();
 
+      let customerId = null;
+      if (item.customerPhone) {
+        const cleanPhone = String(item.customerPhone).trim();
+        if (cleanPhone) {
+          const matchedCustomer = await Customer.findOne({
+            $or: [
+              { phone: cleanPhone },
+              { phone: cleanPhone.replace(/^0/, '+94') },
+              { phone: cleanPhone.replace(/^\+94/, '0') },
+            ],
+          });
+          if (matchedCustomer) customerId = matchedCustomer._id;
+        }
+      }
+
       const trip = new Trip({
         driver: req.user.id,
+        customer: customerId,
         customerName: item.customerName || 'Offline Passenger',
         startLocation: item.startLocation || item.startAddress || 'Offline Pickup',
         endLocation: item.endLocation || item.endAddress || 'Offline Destination',

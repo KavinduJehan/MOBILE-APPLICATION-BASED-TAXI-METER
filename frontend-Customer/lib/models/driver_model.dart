@@ -38,7 +38,7 @@ class DriverModel {
       area: (json['area'] ?? '').toString(),
       ratePerKm: _readDouble(json['ratePerKm']),
       distanceKm: _nullableDouble(json['distanceKm'] ?? json['distance']),
-      rating: _readDouble(json['rating'], fallback: 4.8),
+      rating: _readDouble(json['rating'], fallback: 0),
       isAvailable: available,
       isVerified: json['isVerified'] as bool? ?? true,
     );

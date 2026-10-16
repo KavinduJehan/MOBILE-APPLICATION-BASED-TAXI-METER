@@ -78,6 +78,9 @@ class _TripProgressScreenState extends State<TripProgressScreen>
     with SingleTickerProviderStateMixin {
   final _repository = const TripRepository();
   GoogleMapController? _mapController;
+  BitmapDescriptor _driverMarkerIcon = BitmapDescriptor.defaultMarkerWithHue(
+    BitmapDescriptor.hueAzure,
+  );
   LatLng? _driverPosition;
 
   // The car marker glides from its last position to the newest one instead
@@ -90,7 +93,6 @@ class _TripProgressScreenState extends State<TripProgressScreen>
     duration: const Duration(milliseconds: 1500),
   )..addListener(_onMoveTick);
 
-  BitmapDescriptor? _carIcon;
   BitmapDescriptor? _youIcon;
   bool _showMyLocation = false;
   LatLng? _lastFitAt;
@@ -151,6 +153,7 @@ class _TripProgressScreenState extends State<TripProgressScreen>
     _pickedUp = widget.trip?.pickedUpAt != null;
     _arrived = _pickedUp || widget.trip?.arrivedAt != null;
     _loadMarkerIcons();
+    _loadDriverMarkerIcon();
     _checkMyLocation();
     _initSocketAndTrip();
     _loadRoadRoute();
@@ -223,17 +226,12 @@ class _TripProgressScreenState extends State<TripProgressScreen>
 
   Future<void> _loadMarkerIcons() async {
     try {
-      final car = await _badgeIcon(
-        Icons.local_taxi_rounded,
-        const Color(0xFF111827),
-      );
       final you = await _badgeIcon(
         Icons.person_rounded,
         const Color(0xFF22C55E),
       );
       if (!mounted) return;
       setState(() {
-        _carIcon = car;
         _youIcon = you;
       });
     } catch (_) {
@@ -505,6 +503,14 @@ class _TripProgressScreenState extends State<TripProgressScreen>
         : '${minutes ~/ 60} hr ${minutes % 60} min';
   }
 
+  Future<void> _loadDriverMarkerIcon() async {
+    final icon = await BitmapDescriptor.asset(
+      const ImageConfiguration(size: Size(48, 48)),
+      'icons/tuktuk.png',
+    );
+    if (mounted) setState(() => _driverMarkerIcon = icon);
+  }
+
   LatLng? _resolveDriverInitial() {
     final loc = widget.driver['location'];
     if (loc is Map) {
@@ -515,7 +521,10 @@ class _TripProgressScreenState extends State<TripProgressScreen>
       }
       final coords = loc['coordinates'];
       if (coords is List && coords.length >= 2) {
-        return LatLng((coords[1] as num).toDouble(), (coords[0] as num).toDouble());
+        return LatLng(
+          (coords[1] as num).toDouble(),
+          (coords[0] as num).toDouble(),
+        );
       }
     }
     return null;
@@ -563,7 +572,8 @@ class _TripProgressScreenState extends State<TripProgressScreen>
   Future<void> _loadRoadRoute() async {
     final pickup = _pickup;
     final dest = _destination;
-    if (pickup.latitude == dest.latitude && pickup.longitude == dest.longitude) {
+    if (pickup.latitude == dest.latitude &&
+        pickup.longitude == dest.longitude) {
       return;
     }
 
@@ -578,7 +588,9 @@ class _TripProgressScreenState extends State<TripProgressScreen>
       final data = response.data is Map
           ? Map<String, dynamic>.from(response.data as Map)
           : <String, dynamic>{};
-      final points = decodeGooglePolyline(data['encodedPolyline']?.toString() ?? '');
+      final points = decodeGooglePolyline(
+        data['encodedPolyline']?.toString() ?? '',
+      );
       if (points.isNotEmpty && mounted) {
         setState(() => _routePoints = points);
         _fitMapBounds();
@@ -638,10 +650,12 @@ class _TripProgressScreenState extends State<TripProgressScreen>
 
   @override
   Widget build(BuildContext context) {
-    final driverName = widget.trip?.driverName ??
+    final driverName =
+        widget.trip?.driverName ??
         (widget.driver['name'] as String?) ??
         'Driver';
-    final vehicleNumber = widget.trip?.vehicleNumber ??
+    final vehicleNumber =
+        widget.trip?.vehicleNumber ??
         (widget.driver['vehicleNumber'] as String?) ??
         '-';
     final distanceKm = widget.trip?.distanceKm ?? widget.distanceKm;
@@ -678,12 +692,8 @@ class _TripProgressScreenState extends State<TripProgressScreen>
         Marker(
           markerId: const MarkerId('driver'),
           position: shownDriver,
-          icon:
-              _carIcon ??
-              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-          anchor: _carIcon == null
-              ? const Offset(0.5, 1)
-              : const Offset(0.5, 0.5),
+          icon: _driverMarkerIcon,
+          anchor: const Offset(0.5, 0.5),
           infoWindow: InfoWindow(title: '$driverName ($vehicleNumber)'),
           zIndexInt: 2,
         ),
@@ -784,21 +794,21 @@ class _TripProgressScreenState extends State<TripProgressScreen>
           Listener(
             onPointerDown: (_) => _userMovedMap = true,
             child: GoogleMap(
-            initialCameraPosition: CameraPosition(
-              target: _driverPosition ?? _pickup,
-              zoom: 13,
-            ),
-            markers: markers,
-            polylines: polylines,
-            // Keeps the route clear of the status pill and the bottom sheet.
-            padding: EdgeInsets.only(top: 56, bottom: sheetHeight),
-            myLocationEnabled: _showMyLocation,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            onMapCreated: (controller) {
-              _mapController = controller;
-              _fitMapBounds();
-            },
+              initialCameraPosition: CameraPosition(
+                target: _driverPosition ?? _pickup,
+                zoom: 13,
+              ),
+              markers: markers,
+              polylines: polylines,
+              // Keeps the route clear of the status pill and the bottom sheet.
+              padding: EdgeInsets.only(top: 56, bottom: sheetHeight),
+              myLocationEnabled: _showMyLocation,
+              myLocationButtonEnabled: false,
+              zoomControlsEnabled: false,
+              onMapCreated: (controller) {
+                _mapController = controller;
+                _fitMapBounds();
+              },
             ),
           ),
 
@@ -809,7 +819,10 @@ class _TripProgressScreenState extends State<TripProgressScreen>
             right: 16,
             child: Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 16),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 9,
+                  horizontal: 16,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.black87,
                   borderRadius: BorderRadius.circular(20),
@@ -852,7 +865,10 @@ class _TripProgressScreenState extends State<TripProgressScreen>
               left: 20,
               right: 20,
               child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 8,
+                  horizontal: 16,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.black87,
                   borderRadius: BorderRadius.circular(20),
@@ -864,7 +880,10 @@ class _TripProgressScreenState extends State<TripProgressScreen>
                     SizedBox(
                       width: 14,
                       height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
                     ),
                     SizedBox(width: 8),
                     Text(
@@ -883,7 +902,9 @@ class _TripProgressScreenState extends State<TripProgressScreen>
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
               decoration: BoxDecoration(
                 color: Theme.of(context).scaffoldBackgroundColor,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(24),
+                ),
                 boxShadow: const [
                   BoxShadow(
                     color: Colors.black26,
@@ -942,10 +963,16 @@ class _TripProgressScreenState extends State<TripProgressScreen>
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF2563EB).withValues(alpha: 0.12),
+                          color: const Color(
+                            0xFF2563EB,
+                          ).withValues(alpha: 0.12),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.local_taxi_rounded, color: Color(0xFF2563EB), size: 28),
+                        child: const Icon(
+                          Icons.local_taxi_rounded,
+                          color: Color(0xFF2563EB),
+                          size: 28,
+                        ),
                       ),
                       const SizedBox(width: 14),
                       Expanded(
@@ -954,29 +981,47 @@ class _TripProgressScreenState extends State<TripProgressScreen>
                           children: [
                             Text(
                               driverName,
-                              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 16,
+                              ),
                             ),
                             Text(
                               vehicleNumber,
-                              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
+                                fontSize: 13,
+                              ),
                             ),
                           ],
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF22C55E).withValues(alpha: 0.15),
+                          color: const Color(
+                            0xFF22C55E,
+                          ).withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            CircleAvatar(radius: 3, backgroundColor: Color(0xFF22C55E)),
+                            CircleAvatar(
+                              radius: 3,
+                              backgroundColor: Color(0xFF22C55E),
+                            ),
                             SizedBox(width: 6),
                             Text(
                               'Live',
-                              style: TextStyle(color: Color(0xFF22C55E), fontSize: 12, fontWeight: FontWeight.w600),
+                              style: TextStyle(
+                                color: Color(0xFF22C55E),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ],
                         ),
@@ -985,7 +1030,10 @@ class _TripProgressScreenState extends State<TripProgressScreen>
                   ),
                   const SizedBox(height: 14),
                   Container(
-                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 10,
+                      horizontal: 14,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.grey.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(12),
@@ -993,15 +1041,30 @@ class _TripProgressScreenState extends State<TripProgressScreen>
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
-                        _metricCol('Distance', '${distanceKm.toStringAsFixed(1)} km'),
-                        _metricCol('Rate', 'Rs. ${ratePerKm.toStringAsFixed(0)} / km'),
-                        _metricCol('Fare', 'Rs. ${totalFare.toStringAsFixed(0)}'),
+                        _metricCol(
+                          'Distance',
+                          '${distanceKm.toStringAsFixed(1)} km',
+                        ),
+                        _metricCol(
+                          'Rate',
+                          'Rs. ${ratePerKm.toStringAsFixed(0)} / km',
+                        ),
+                        _metricCol(
+                          'Fare',
+                          'Rs. ${totalFare.toStringAsFixed(0)}',
+                        ),
                       ],
                     ),
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: 8),
-                    Text(_error!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+                    Text(
+                      _error!,
+                      style: const TextStyle(
+                        color: Colors.redAccent,
+                        fontSize: 12,
+                      ),
+                    ),
                   ],
                   const SizedBox(height: 16),
                   SizedBox(
@@ -1012,7 +1075,9 @@ class _TripProgressScreenState extends State<TripProgressScreen>
                         backgroundColor: Colors.red.shade600,
                         shadowColor: Colors.transparent,
                         elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
                       ),
                       // Before the ride starts there is nothing to charge
                       // for, so the customer cancels rather than ends.
@@ -1025,7 +1090,10 @@ class _TripProgressScreenState extends State<TripProgressScreen>
                           ? const CircularProgressIndicator(color: Colors.white)
                           : Text(
                               _pickedUp ? 'End Trip' : 'Cancel Ride',
-                              style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.white),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
                             ),
                     ),
                   ),
@@ -1041,16 +1109,24 @@ class _TripProgressScreenState extends State<TripProgressScreen>
   Widget _metricCol(String label, String value) {
     return Column(
       children: [
-        Text(label, style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
+        Text(
+          label,
+          style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+        ),
         const SizedBox(height: 2),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+        Text(
+          value,
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+        ),
       ],
     );
   }
 
   void _confirmEndTrip(BuildContext context) {
     if (widget.trip == null || widget.trip!.id.isEmpty) {
-      setState(() => _error = 'Trip details are not available yet. Please try again.');
+      setState(
+        () => _error = 'Trip details are not available yet. Please try again.',
+      );
       return;
     }
 
@@ -1085,7 +1161,9 @@ class _TripProgressScreenState extends State<TripProgressScreen>
 
   void _confirmCancelRide(BuildContext context) {
     if (_tripId == null) {
-      setState(() => _error = 'Trip details are not available yet. Please try again.');
+      setState(
+        () => _error = 'Trip details are not available yet. Please try again.',
+      );
       return;
     }
 
@@ -1134,9 +1212,7 @@ class _TripProgressScreenState extends State<TripProgressScreen>
       _finished = true;
       _statusPoll?.cancel();
       provider.upsertTrip(trip);
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Ride cancelled.')),
-      );
+      messenger.showSnackBar(const SnackBar(content: Text('Ride cancelled.')));
       navigator.popUntil((route) => route.isFirst);
     } catch (_) {
       if (!mounted) return;

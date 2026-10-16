@@ -5,6 +5,9 @@ import 'package:ridex_driver/offline/offline_trip.dart';
 import 'package:provider/provider.dart';
 import '../providers/active_trip_provider.dart';
 import '../providers/auth_provider.dart';
+import '../models/trip_record.dart';
+import '../services/offline_database.dart';
+import 'active_trip_screen.dart';
 import 'offline_trip_screen.dart';
 
 /// Screen where the driver scans a customer's Trip Offer QR code.
@@ -140,7 +143,8 @@ class _ScanTripOfferScreenState extends State<ScanTripOfferScreen> {
                 const OfflineHeader(
                   icon: Icons.handshake_rounded,
                   title: 'Trip offer received',
-                  subtitle: 'Check the details, then accept to start the meter.',
+                  subtitle:
+                      'Check the details, then accept to start the meter.',
                 ),
                 const SizedBox(height: 16),
                 Container(
@@ -322,6 +326,12 @@ class _ScanTripOfferScreenState extends State<ScanTripOfferScreen> {
                     icon: Icons.offline_bolt_rounded,
                   ),
                   const Spacer(),
+                  if (!_processing)
+                    FilledButton.icon(
+                      onPressed: _showManualOfferModal,
+                      icon: const Icon(Icons.edit_note_rounded),
+                      label: const Text('Enter Agreed Rate Manually'),
+                    ),
                   if (_error != null)
                     OfflineNotice(
                       _error!,
@@ -335,6 +345,152 @@ class _ScanTripOfferScreenState extends State<ScanTripOfferScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _startManualTrip({
+    required String customerName,
+    required double agreedRate,
+  }) async {
+    final active = context.read<ActiveTripProvider>();
+    final profile = context.read<AuthProvider>().profile;
+    if (profile == null ||
+        active.onlineTrip != null ||
+        active.offlineTrip != null) {
+      setState(
+        () => _error = 'Finish your current ride before starting a meter.',
+      );
+      return;
+    }
+    final id = 'offline-${DateTime.now().microsecondsSinceEpoch}';
+    final trip = TripRecord(
+      id: id,
+      customerName: customerName,
+      startAddress: 'Street Pickup',
+      endAddress: 'Destination not set',
+      distanceKm: 0,
+      ratePerKm: agreedRate,
+      fare: 0,
+      status: 'in_progress',
+      date: DateTime.now(),
+    );
+    await OfflineDatabase.instance.insertOfflineTrip(
+      owner: profile.id,
+      localId: id,
+      customerName: customerName,
+      startAddress: trip.startAddress,
+      endAddress: trip.endAddress,
+      distanceKm: 0,
+      ratePerKm: agreedRate,
+      fare: 0,
+      receiptNumber:
+          'REC-OFFLINE-${DateTime.now().millisecondsSinceEpoch.toRadixString(36).toUpperCase()}',
+      status: 'in_progress',
+      date: trip.date,
+    );
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => ActiveTripScreen(trip: trip)),
+    );
+  }
+
+  void _showManualOfferModal() {
+    final nameController = TextEditingController(text: 'Passenger');
+    final rateController = TextEditingController(text: '100');
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0E1422),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (bottomSheetContext) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 24,
+            right: 24,
+            top: 24,
+            bottom: MediaQuery.of(bottomSheetContext).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Manual Street Meter',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Start live digital taxi meter with negotiated or standard rate.',
+                style: TextStyle(color: Colors.white60, fontSize: 13),
+              ),
+              const SizedBox(height: 18),
+              TextField(
+                controller: nameController,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'Passenger Name (Optional)',
+                  labelStyle: const TextStyle(color: Colors.white60),
+                  filled: true,
+                  fillColor: const Color(0xFF161F33),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  prefixIcon: const Icon(Icons.person, color: Colors.white60),
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: rateController,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'Agreed Rate per km (Rs.)',
+                  labelStyle: const TextStyle(color: Colors.white60),
+                  filled: true,
+                  fillColor: const Color(0xFF161F33),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  prefixIcon: const Icon(Icons.payments, color: Colors.white60),
+                ),
+              ),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF22C55E),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                icon: const Icon(Icons.speed_rounded),
+                label: const Text(
+                  'Start Meter',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                onPressed: () {
+                  final name = nameController.text.trim();
+                  final rate =
+                      double.tryParse(rateController.text.trim()) ?? 100.0;
+                  Navigator.pop(bottomSheetContext);
+                  _startManualTrip(
+                    customerName: name.isNotEmpty ? name : 'Passenger',
+                    agreedRate: rate > 0 ? rate : 100.0,
+                  );
+                },
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

@@ -60,11 +60,47 @@ class SyncService {
         final end = (offset + 100 < unsynced.length)
             ? offset + 100
             : unsynced.length;
-        final response = await api.syncOfflineHandshakeTrips(
-          unsynced.sublist(offset, end),
-        );
-        final idMap =
-            (response['idMap'] as Map?)?.cast<String, dynamic>() ?? {};
+        final batch = unsynced.sublist(offset, end);
+        final handshake = batch.where((trip) => trip['version'] == 1).toList();
+        final meter = batch
+            .where(
+              (trip) =>
+                  trip['version'] != 1 &&
+                  trip['localId'].toString().startsWith('offline-'),
+            )
+            .toList();
+        final online = batch
+            .where(
+              (trip) =>
+                  trip['version'] != 1 &&
+                  !trip['localId'].toString().startsWith('offline-'),
+            )
+            .toList();
+        final idMap = <String, dynamic>{};
+        // Finish the existing server trip when an online ride ended offline.
+        // Sending it to /sync would create a second trip instead.
+        for (final trip in online) {
+          final id = trip['localId'].toString();
+          final result = await api.endTrip(
+            id,
+            distanceKm: (trip['distanceKm'] as num?)?.toDouble(),
+            totalFare: (trip['totalFare'] as num?)?.toDouble(),
+          );
+          await _db.cacheServerTrip(result.trip);
+          idMap[id] = result.trip.id;
+        }
+        if (handshake.isNotEmpty) {
+          final response = await api.syncOfflineHandshakeTrips(handshake);
+          idMap.addAll(
+            (response['idMap'] as Map?)?.cast<String, dynamic>() ?? {},
+          );
+        }
+        if (meter.isNotEmpty) {
+          final response = await api.syncOfflineTrips(meter);
+          idMap.addAll(
+            (response['idMap'] as Map?)?.cast<String, dynamic>() ?? {},
+          );
+        }
         syncedCount += idMap.length;
         if (idMap.isNotEmpty) {
           await _db.markTripsSynced(idMap);

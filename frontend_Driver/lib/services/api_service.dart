@@ -65,11 +65,7 @@ class ApiService {
       'POST',
       '/auth/reset-password',
       auth: false,
-      data: {
-        'email': email,
-        'code': code,
-        'newPassword': newPassword,
-      },
+      data: {'email': email, 'code': code, 'newPassword': newPassword},
     );
     return _asMap(response.data);
   }
@@ -165,7 +161,11 @@ class ApiService {
 
   /// Fetches the real-time auto-calculated rate with surge breakdown.
   /// Returns a map containing: effectiveRate, baseRate, multiplier, breakdown.
-  Future<Map<String, dynamic>> getAutoRate({String? area, double? lat, double? lng}) async {
+  Future<Map<String, dynamic>> getAutoRate({
+    String? area,
+    double? lat,
+    double? lng,
+  }) async {
     final query = <String, dynamic>{};
     if (lat != null && lng != null) {
       query['lat'] = lat;
@@ -248,10 +248,7 @@ class ApiService {
 
   /// Current state of a ride request, with its trip once it is accepted.
   Future<Map<String, dynamic>> getRequestStatus(String requestId) async {
-    final response = await _request(
-      'GET',
-      '/ride-requests/$requestId/status',
-    );
+    final response = await _request('GET', '/ride-requests/$requestId/status');
     return _asMap(response.data);
   }
 
@@ -276,15 +273,27 @@ class ApiService {
     return TripRecord.fromJson(tripMap);
   }
 
-  /// Current status of a trip: pending, ongoing, completed or cancelled.
+  /// Current status of a trip, used when resuming navigation.
   Future<String> getTripStatus(String tripId) async {
     final response = await _request('GET', '/trips/$tripId');
     final data = _asMap(response.data);
     return _readString(_readMap(data, ['trip']) ?? data, ['status']);
   }
 
-  Future<TripCompletionResult> endTrip(String tripId) async {
-    final response = await _request('PATCH', '/trips/$tripId/end');
+  Future<TripCompletionResult> endTrip(
+    String tripId, {
+    double? distanceKm,
+    double? totalFare,
+  }) async {
+    final Map<String, dynamic> body = {};
+    if (distanceKm != null && distanceKm > 0) body['distanceKm'] = distanceKm;
+    if (totalFare != null && totalFare > 0) body['totalFare'] = totalFare;
+
+    final response = await _request(
+      'PATCH',
+      '/trips/$tripId/end',
+      data: body.isNotEmpty ? body : null,
+    );
     final data = _asMap(response.data);
     final tripMap = _readMap(data, ['trip']) ?? data;
     return TripCompletionResult(
@@ -307,7 +316,9 @@ class ApiService {
     return IncomeSummary.fromJson(_asMap(response.data));
   }
 
-  Future<Map<String, dynamic>> syncOfflineTrips(List<Map<String, dynamic>> trips) async {
+  Future<Map<String, dynamic>> syncOfflineTrips(
+    List<Map<String, dynamic>> trips,
+  ) async {
     final response = await _request(
       'POST',
       '/trips/sync',
@@ -316,8 +327,14 @@ class ApiService {
     return _asMap(response.data);
   }
 
-  Future<Map<String, dynamic>> syncOfflineHandshakeTrips(List<Map<String, dynamic>> trips) async {
-    final response = await _request('POST', '/trips/offline-sync', data: {'trips': trips});
+  Future<Map<String, dynamic>> syncOfflineHandshakeTrips(
+    List<Map<String, dynamic>> trips,
+  ) async {
+    final response = await _request(
+      'POST',
+      '/trips/offline-sync',
+      data: {'trips': trips},
+    );
     return _asMap(response.data);
   }
 
