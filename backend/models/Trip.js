@@ -18,6 +18,11 @@ const tripSchema = new mongoose.Schema(
     // Null for trips created under ADMIN or DRIVER modes.
     surgeBreakdown: { type: mongoose.Schema.Types.Mixed, default: null },
     startTime: { type: Date, required: true },
+    // Set when the driver reaches the pickup point and waits for the customer.
+    arrivedAt: { type: Date, default: null },
+    // Set when the driver starts the ride with the customer on board; until
+    // then the driver is still on the way to the pickup point.
+    pickedUpAt: { type: Date, default: null },
     endTime: { type: Date },
     status: {
       type: String,
@@ -25,9 +30,14 @@ const tripSchema = new mongoose.Schema(
       default: 'pending',
     },
     syncedToCloud: { type: Boolean, default: false },
+    offlineLocalId: { type: String },
   },
   { timestamps: true }
 );
+
+tripSchema.index({ driver: 1, offlineLocalId: 1 }, {
+  unique: true, partialFilterExpression: { offlineLocalId: { $type: 'string' } },
+});
 
 tripSchema.index(
   { customer: 1 },

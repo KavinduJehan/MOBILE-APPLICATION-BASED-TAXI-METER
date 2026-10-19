@@ -21,13 +21,33 @@ const rideRequestSchema = new mongoose.Schema(
     // Distance calculated on device using Haversine × 1.25 road factor
     estimatedDistanceKm: { type: Number, required: true },
 
-    // Driver's rate at the time the request was made
+    // The rate the customer was quoted when the request was made. This is the
+    // rate charged unless a negotiation agrees a lower one.
     driverRatePerKm: { type: Number, required: true },
+
+    // AUTO mode: the surge breakdown behind the quoted rate (null otherwise)
+    surgeBreakdown: { type: mongoose.Schema.Types.Mixed, default: null },
 
     // Customer's negotiated rate — null means no negotiation (accept driver's rate)
     suggestedRatePerKm: { type: Number, default: null },
 
-    // Agreed rate — set when driver accepts (either driverRatePerKm or suggestedRatePerKm)
+    // Driver's counter-offer to the customer's suggested rate (between the two rates)
+    counterRatePerKm: { type: Number, default: null },
+
+    // Where the fare negotiation stands while the request is pending:
+    //   none             – no negotiation, driver's rate applies
+    //   customer_offered – customer suggested a lower rate, waiting for the driver
+    //   driver_countered – driver sent a counter-offer, waiting for the customer
+    //   agreed           – one side accepted the other's offer
+    //   declined         – the negotiation ended without agreement
+    negotiationStatus: {
+      type: String,
+      enum: ['none', 'customer_offered', 'driver_countered', 'agreed', 'declined'],
+      default: 'none',
+    },
+
+    // Agreed rate — set when the ride is accepted (driver's rate, the customer's
+    // suggested rate, or the driver's counter-offer the customer agreed to)
     agreedRatePerKm: { type: Number, default: null },
 
     status: {

@@ -6,6 +6,7 @@ import '../providers/trip_provider.dart';
 import '../theme.dart';
 import 'main_navigation.dart';
 import 'receipt.dart';
+import 'offline_trips_screen.dart';
 import 'trip_progress_screen.dart';
 
 enum _TripFilter { completed, pending, ongoing, canceled }
@@ -53,6 +54,16 @@ class _TripsTabState extends State<TripsTab> {
         child: Column(
           children: [
             const _Header(),
+            TextButton.icon(
+              icon: const Icon(Icons.offline_bolt),
+              label: const Text('Offline Trips & Maps'),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const CustomerOfflineTripsScreen(),
+                ),
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
               child: _FilterBar(
@@ -136,11 +147,11 @@ class _TripsTabState extends State<TripsTab> {
                       _TripCard(
                         trip: trip,
                         onCancel: trip.status.toLowerCase() == 'pending'
-                          ? () => _confirmCancelTrip(context, provider, trip)
-                          : null,
+                            ? () => _confirmCancelTrip(context, provider, trip)
+                            : null,
                         onTrack: trip.status.toLowerCase() == 'ongoing'
-                          ? () => _trackTrip(context, trip)
-                          : null,
+                            ? () => _trackTrip(context, trip)
+                            : null,
                       ),
                   ],
                   if (provider.loadingMore)
@@ -174,10 +185,9 @@ class _TripsTabState extends State<TripsTab> {
       MaterialPageRoute(
         builder: (_) => TripProgressScreen(
           requestId: trip.id,
-          driver: trip.driver?.toJson() ?? {
-            'name': trip.driverName,
-            'vehicleNumber': trip.vehicleNumber,
-          },
+          driver:
+              trip.driver?.toJson() ??
+              {'name': trip.driverName, 'vehicleNumber': trip.vehicleNumber},
           trip: trip,
           distanceKm: trip.distanceKm,
           ratePerKm: trip.ratePerKm,

@@ -83,6 +83,12 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
   String _dest = 'Galle';
   bool _loading = false;
   String? _error;
+
+  /// The customer's own per-km offer; null means the listed rate applies.
+  late double? _offerRate = widget.suggestedRatePerKm;
+
+  /// The admin can switch negotiation off system-wide.
+  bool _negotiationEnabled = true;
   List<LatLng> _routePoints = const [];
   bool _loadingRoute = false;
   String? _routeError;
@@ -113,12 +119,46 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
       if (matchedCity.isNotEmpty) _dest = matchedCity.first;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadRoadRoute());
+    _loadNegotiationSetting();
   }
 
-  double get _rate =>
-      widget.suggestedRatePerKm ??
-      (widget.driver['ratePerKm'] as num?)?.toDouble() ??
-      0.0;
+  Future<void> _loadNegotiationSetting() async {
+    try {
+      final resp = await ApiService.getPublicConfig();
+      final enabled = (resp.data as Map?)?['negotiationEnabled'];
+      if (!mounted || enabled is! bool) return;
+      setState(() {
+        _negotiationEnabled = enabled;
+        if (!enabled) _offerRate = null;
+      });
+    } catch (_) {
+      // Keep the default: the server still ignores offers when it is off.
+    }
+  }
+
+  double get _listedRate =>
+      (widget.driver['ratePerKm'] as num?)?.toDouble() ?? 0.0;
+
+  double get _rate => _offerRate ?? _listedRate;
+
+  Future<void> _negotiateFare() async {
+    final result = await showModalBottomSheet<double>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _NegotiateFareSheet(
+        listedRate: _listedRate,
+        distanceKm: _distanceKm,
+        initialOffer: _offerRate,
+      ),
+    );
+    if (result == null || !mounted) return;
+    // A non-positive result means "remove my offer".
+    setState(() => _offerRate = result > 0 ? result : null);
+  }
 
   double get _driverRating {
     final rawRating = widget.driver['rating'] ??
@@ -268,12 +308,25 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
         'destLng': destLng,
         'destAddress': destAddress,
         'estimatedDistanceKm': double.parse(_distanceKm.toStringAsFixed(2)),
-        if (widget.suggestedRatePerKm != null)
-          'suggestedRatePerKm': widget.suggestedRatePerKm,
+        if (_offerRate != null) 'suggestedRatePerKm': _offerRate,
       });
 
       final requestId = resp.data['_id'] as String;
+      // The server's quote is what will be charged: carry it forward rather
+      // than the rate this screen was opened with.
+      final quotedRate =
+          (resp.data['driverRatePerKm'] as num?)?.toDouble() ?? _listedRate;
+      final sentOffer = (resp.data['suggestedRatePerKm'] as num?)?.toDouble();
       if (!mounted) return;
+      if (_offerRate != null && sentOffer == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Your offer was not applied. The request was sent at the current rate of Rs. ${quotedRate.toStringAsFixed(0)} / km.',
+            ),
+          ),
+        );
+      }
       await context.read<TripProvider>().startDriverSearch(
         pickupAddress: pickupAddress,
         pickupLat: pickupLat,
@@ -290,7 +343,7 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
             requestId: requestId,
             driver: widget.driver,
             distanceKm: _distanceKm,
-            ratePerKm: _rate,
+            ratePerKm: sentOffer ?? quotedRate,
             pickupLat: pickupLat,
             pickupLng: pickupLng,
             destLat: destLat,
@@ -411,6 +464,11 @@ class _RideRequestScreenState extends State<RideRequestScreen> {
                 error: _error,
                 loading: _loading,
                 onSendRequest: _sendRequest,
+                canNegotiate: _negotiationEnabled && _listedRate > 0,
+                hasOffer: _offerRate != null,
+                listedFare:
+                    'Rs. ${(dist * _listedRate).toStringAsFixed(0)}',
+                onNegotiate: _negotiateFare,
                 onShareTrip: () {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -511,6 +569,10 @@ class _RideArrivalPanel extends StatelessWidget {
     required this.onSendRequest,
     required this.onShareTrip,
     required this.onCallDriver,
+    required this.canNegotiate,
+    required this.hasOffer,
+    required this.listedFare,
+    required this.onNegotiate,
     this.error,
   });
 
@@ -528,11 +590,19 @@ class _RideArrivalPanel extends StatelessWidget {
   final VoidCallback onSendRequest;
   final VoidCallback onShareTrip;
   final VoidCallback onCallDriver;
+  final bool canNegotiate;
+  final bool hasOffer;
+  final String listedFare;
+  final VoidCallback onNegotiate;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      // Keeps the panel usable on short screens now that it holds more rows.
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.78,
+      ),
       decoration: BoxDecoration(
         color: AppTheme.surface,
         borderRadius: BorderRadius.circular(20),
@@ -545,7 +615,7 @@ class _RideArrivalPanel extends StatelessWidget {
           ),
         ],
       ),
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -652,13 +722,71 @@ class _RideArrivalPanel extends StatelessWidget {
                   child: _MiniMetric(label: 'Distance', value: distance),
                 ),
                 Expanded(
-                  child: _MiniMetric(label: 'Rate', value: rate),
+                  child: _MiniMetric(
+                    label: hasOffer ? 'Your offer' : 'Rate',
+                    value: rate,
+                  ),
                 ),
                 Expanded(
                   child: _MiniMetric(label: 'Fare', value: fare),
                 ),
               ],
             ),
+            if (canNegotiate) ...[
+              const SizedBox(height: 12),
+              InkWell(
+                onTap: loading ? null : onNegotiate,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.warningOrange.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppTheme.warningOrange.withValues(alpha: 0.55),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.handshake_outlined,
+                        color: AppTheme.warningOrange,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              hasOffer
+                                  ? 'Your offer will be sent to the driver'
+                                  : 'Negotiate fare',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              hasOffer
+                                  ? 'Listed fare $listedFare · tap to change'
+                                  : 'Ask the driver for a lower rate',
+                              style: const TextStyle(
+                                color: AppTheme.mutedText,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(
+                        Icons.chevron_right,
+                        color: AppTheme.mutedText,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
@@ -713,10 +841,148 @@ class _RideArrivalPanel extends StatelessWidget {
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text('Send ride request'),
+                  : Text(
+                      hasOffer
+                          ? 'Send request with my offer'
+                          : 'Send ride request',
+                    ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Lets the customer propose a per-km rate below the listed one. Pops with the
+/// offer, or with 0 when the customer removes an existing offer.
+class _NegotiateFareSheet extends StatefulWidget {
+  const _NegotiateFareSheet({
+    required this.listedRate,
+    required this.distanceKm,
+    this.initialOffer,
+  });
+
+  final double listedRate;
+  final double distanceKm;
+  final double? initialOffer;
+
+  @override
+  State<_NegotiateFareSheet> createState() => _NegotiateFareSheetState();
+}
+
+class _NegotiateFareSheetState extends State<_NegotiateFareSheet> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(
+      text: widget.initialOffer == null ? '' : _format(widget.initialOffer!),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  static String _format(double value) => value == value.roundToDouble()
+      ? value.toStringAsFixed(0)
+      : value.toStringAsFixed(2);
+
+  double? get _value => double.tryParse(_controller.text.trim());
+
+  String? get _error {
+    if (_controller.text.trim().isEmpty) return null;
+    final value = _value;
+    if (value == null || value <= 0) return 'Enter a valid rate';
+    if (value >= widget.listedRate) {
+      return 'Must be lower than Rs. ${_format(widget.listedRate)} / km';
+    }
+    return null;
+  }
+
+  void _usePercentOff(int percent) {
+    final rate = (widget.listedRate * (100 - percent) / 100).floorToDouble();
+    _controller.text = _format(rate);
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final value = _value;
+    final error = _error;
+    final valid = value != null && error == null && value > 0;
+    final listedFare = widget.distanceKm * widget.listedRate;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        20,
+        20,
+        20 + MediaQuery.viewInsetsOf(context).bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Negotiate fare',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Listed rate Rs. ${_format(widget.listedRate)} / km · fare Rs. ${listedFare.toStringAsFixed(0)}',
+            style: const TextStyle(color: AppTheme.mutedText, fontSize: 13),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            onChanged: (_) => setState(() {}),
+            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+            decoration: InputDecoration(
+              labelText: 'Your offer per km',
+              prefixText: 'Rs. ',
+              suffixText: '/ km',
+              errorText: error,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final percent in const [5, 10, 15])
+                ActionChip(
+                  label: Text('$percent% off'),
+                  onPressed: () => _usePercentOff(percent),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            valid
+                ? 'Fare at your offer: Rs. ${(widget.distanceKm * value).toStringAsFixed(0)} '
+                      '(Rs. ${(listedFare - widget.distanceKm * value).toStringAsFixed(0)} less)'
+                : 'The driver can accept your offer, decline, or send their own offer.',
+            style: const TextStyle(color: AppTheme.mutedText, fontSize: 13),
+          ),
+          const SizedBox(height: 18),
+          ElevatedButton(
+            onPressed: valid ? () => Navigator.pop(context, value) : null,
+            child: const Text('Use this offer'),
+          ),
+          if (widget.initialOffer != null) ...[
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => Navigator.pop(context, 0.0),
+              child: const Text('Remove my offer'),
+            ),
+          ],
+        ],
       ),
     );
   }

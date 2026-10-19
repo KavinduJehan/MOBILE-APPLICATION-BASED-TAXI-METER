@@ -296,43 +296,89 @@ class _RateScreenState extends State<RateScreen> {
           ),
         ),
         const SizedBox(height: 10),
-        _signalRow('🚗', 'Demand vs supply',
+        _signalRow(Icons.groups_rounded, const Color(0xFF60A5FA), 'Demand vs supply',
             '${d("availableDrivers").toInt()} drivers  ·  ${d("activeRequests").toInt()} requests',
             d('demandSupplyFactor')),
-        _signalRow('🕐', 'Time of day', _timeLabel(),
+        _signalRow(Icons.schedule_rounded, const Color(0xFFA78BFA), 'Time of day', _timeLabel(),
             d('timeFactor')),
-        _signalRow('🌦', 'Weather', s('weatherCondition'),
+        _signalRow(_weatherIcon(s('weatherCondition')), const Color(0xFF38BDF8), 'Weather', s('weatherCondition'),
             d('weatherFactor')),
-        _signalRow('📍', 'Area tier', data['area']?.toString() ?? '-',
+        _signalRow(Icons.location_on_rounded, const Color(0xFFF87171), 'Area tier', data['area']?.toString() ?? '-',
             d('areaFactor')),
       ],
     );
   }
 
-  Widget _signalRow(String icon, String label, String detail, double factor) {
+  IconData _weatherIcon(String condition) {
+    final c = condition.toLowerCase();
+    if (c.contains('rain') || c.contains('drizzle') || c.contains('shower')) {
+      return Icons.water_drop_rounded;
+    }
+    if (c.contains('storm') || c.contains('thunder')) return Icons.thunderstorm_rounded;
+    if (c.contains('cloud') || c.contains('overcast') || c.contains('fog')) {
+      return Icons.cloud_rounded;
+    }
+    if (c.contains('clear') || c.contains('sun')) return Icons.wb_sunny_rounded;
+    return Icons.wb_cloudy_rounded;
+  }
+
+  Widget _signalRow(
+    IconData icon,
+    Color color,
+    String label,
+    String detail,
+    double factor,
+  ) {
     final isHigh = factor >= 1.3;
-    final color  = isHigh ? Colors.orangeAccent : Colors.white70;
+    const warn = Color(0xFFF59E0B);
+    final pill = isHigh ? warn : Colors.white70;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          Text(icon, style: const TextStyle(fontSize: 18)),
-          const SizedBox(width: 10),
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, size: 20, color: color),
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: const TextStyle(color: Colors.white, fontSize: 13)),
-                Text(detail, style: TextStyle(color: color, fontSize: 11)),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  detail,
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                ),
               ],
             ),
           ),
-          Text(
-            '${factor.toStringAsFixed(2)}x',
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: pill.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              '${factor.toStringAsFixed(2)}x',
+              style: TextStyle(
+                color: pill,
+                fontWeight: FontWeight.w800,
+                fontSize: 13,
+              ),
             ),
           ),
         ],
